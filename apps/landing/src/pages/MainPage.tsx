@@ -45,20 +45,18 @@ const MainPage: React.FC = () => {
               GDPR-Native Database Platform
             </div>
             <h1 className="text-brand mb-6 text-5xl font-bold md:text-6xl">
-              The Database that <span className="md:block">Protects by Design</span>
+              The Database That <span className="md:block">Can't Be Breached</span>
             </h1>
             <p className="mx-auto mb-8 max-w-3xl text-xl text-gray-600">
-              Stop worrying about data compliance. Gardbase is built from the ground up to be
-              GDPR-compliant, breach-proof, and developer-friendly. Focus on building your product,
-              not managing regulations.
+              Traditional databases store everything. When breached, they expose everything. Gardbase flips the script—storing only encrypted data, makes catastrophic data breaches <strong>architecturally impossible</strong>.
             </p>
             <div className="flex flex-col justify-center gap-4 sm:flex-row">
               <button className="bg-brand hover:bg-brand/90 flex items-center justify-center rounded-lg px-8 py-4 text-lg font-semibold text-white transition-colors">
-                Start Building Today
+                See How It Works
                 <LuArrowRight className="ml-2 h-5 w-5" />
               </button>
               <button className="text-brand rounded-lg border border-gray-300 px-8 py-4 text-lg font-semibold transition-colors hover:bg-gray-50">
-                View Documentation
+                Try Live Demo
               </button>
             </div>
           </div>
