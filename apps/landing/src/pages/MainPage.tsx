@@ -76,7 +76,7 @@ const MainPage: React.FC = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-b from-slate-50 to-white py-12 sm:py-16 lg:py-20">
+      <section className="relative bg-gradient-to-b from-slate-50 to-white py-22 sm:py-16 lg:py-25">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="text-brand mb-4 inline-flex items-center rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium sm:mb-6 sm:px-4 sm:py-2 sm:text-sm">
@@ -103,9 +103,9 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* Problem Statement */}
-      <section className="bg-white py-12 sm:py-16 lg:py-20">
+      <section className="bg-white py-12 sm:py-16 lg:py-25 mb-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-12 text-center sm:mb-16">
+          <div className="mb-20 text-center sm:mb-16">
             <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
               GDPR Compliance Shouldn't Be This Hard
             </h2>
@@ -154,7 +154,7 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* Solution */}
-      <section id="features" className="bg-slate-50 py-12 sm:py-16 lg:py-20">
+      <section id="features" className="bg-slate-50 py-12 sm:py-16 lg:py-30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center sm:mb-16">
             <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
@@ -263,7 +263,7 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="bg-white py-12 sm:py-16 lg:py-20">
+      <section id="how-it-works" className="bg-white py-12 sm:py-16 lg:py-25 mb-25">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center sm:mb-16">
             <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
