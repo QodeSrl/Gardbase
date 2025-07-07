@@ -11,9 +11,9 @@ const MainPage: React.FC = () => {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center">
-              <div className="flex items-center space-x-2">
-                <img src={Logo} alt="Gardbase Logo" className="h-8" />
-              </div>
+              <a href="/#">
+                <img draggable={false} src={Logo} alt="Gardbase Logo" className="h-8" />
+              </a>
             </div>
             <nav className="hidden space-x-8 md:flex">
               <a href="#features" className="hover:text-brand text-gray-600 transition-colors">
@@ -406,12 +406,13 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* Footer */}
+      {/* All links will be subject to change here */}
       <footer className="bg-brand py-12 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-8 md:grid-cols-4">
             <div>
               <div className="mb-4 flex items-center space-x-2">
-                <img src={LogoWhite} alt="Gardbase Logo" className="h-8" />
+                <img draggable={false} src={LogoWhite} alt="Gardbase Logo" className="h-8" />
               </div>
               <p className="text-gray-400">The GDPR-native database that protects by design.</p>
             </div>
@@ -420,12 +421,12 @@ const MainPage: React.FC = () => {
               <h3 className="mb-4 font-semibold">Product</h3>
               <ul className="space-y-2 text-gray-400">
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="#features" className="transition-colors hover:text-white">
                     Features
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="#pricing" className="transition-colors hover:text-white">
                     Pricing
                   </a>
                 </li>
@@ -446,7 +447,7 @@ const MainPage: React.FC = () => {
               <h3 className="mb-4 font-semibold">Company</h3>
               <ul className="space-y-2 text-gray-400">
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="https://qodesrl.com/" className="transition-colors hover:text-white">
                     About
                   </a>
                 </li>
@@ -461,7 +462,7 @@ const MainPage: React.FC = () => {
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="transition-colors hover:text-white">
+                  <a href="https://qodesrl.com/" className="transition-colors hover:text-white">
                     Contact
                   </a>
                 </li>
