@@ -1,0 +1,33 @@
+{
+    "name": "gardbase",
+    "version": "0.0.1",
+    "type": "module",
+    "packageManager": "pnpm@10.12.4",
+    "engines": {
+        "node": ">=20.14.0",
+        "pnpm": ">=10.12.4"
+    },
+    "scripts": {
+        "dev": "bazel run //apps/landing:dev",
+        "build": "bazel run //apps/landing:build",
+        "preview": "bazel run //apps/landing:preview",
+        "lint": "bazel run //apps/landing:lint",
+        "format": "bazel run //apps/landing:format",
+        "test": "bazel test //...",
+        "build-all": "bazel build //..."
+    },
+    "devDependencies": {
+        "@bazel/bazelisk": "^1.19.0",
+        "@types/node": "^20.11.0",
+        "typescript": "^5.3.3"
+    },
+    "dependencies": {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+    },
+    "pnpm": {
+        "onlyBuiltDependencies": [
+            "esbuild"
+        ]
+    }
+}
