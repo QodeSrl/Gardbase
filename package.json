@@ -2,19 +2,16 @@
     "name": "gardbase",
     "version": "0.0.1",
     "type": "module",
-    "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@10.13.1",
     "engines": {
-        "node": ">=20.14.0",
-        "pnpm": ">=10.12.4"
+    "node": ">=22.14.0",
+    "pnpm": ">=10.13.1"
     },
     "scripts": {
-        "dev": "bazel run //apps/landing:dev",
-        "build": "bazel run //apps/landing:build",
-        "preview": "bazel run //apps/landing:preview",
-        "lint": "bazel run //apps/landing:lint",
-        "format": "bazel run //apps/landing:format",
-        "test": "bazel test //...",
-        "build-all": "bazel build //..."
+    "dev": "pnpm --filter @gardbase/landing dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
     },
     "devDependencies": {
         "@bazel/bazelisk": "^1.19.0",

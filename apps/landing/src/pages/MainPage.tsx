@@ -1,5 +1,13 @@
 import React, { useState } from "react";
-import { LuShield, LuDatabase, LuLock, LuArrowRight, LuCircleCheck, LuMenu, LuX } from "react-icons/lu";
+import {
+  LuShield,
+  LuDatabase,
+  LuLock,
+  LuArrowRight,
+  LuCircleCheck,
+  LuMenu,
+  LuX,
+} from "react-icons/lu";
 import Logo from "../assets/logo.svg";
 import LogoWhite from "../assets/logo-white.svg";
 
@@ -17,23 +25,34 @@ const MainPage: React.FC = () => {
                 <img draggable={false} src={Logo} alt="Gardbase Logo" className="h-6 sm:h-8" />
               </a>
             </div>
-            
+
             {/* Desktop Navigation */}
             <nav className="hidden space-x-4 md:flex lg:space-x-8">
-              <a href="#features" className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base">
+              <a
+                href="#features"
+                className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
+              >
                 Features
               </a>
-              <a href="#how-it-works" className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base">
+              <a
+                href="#how-it-works"
+                className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
+              >
                 How it Works
               </a>
-              <a href="#pricing" className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base">
+              <a
+                href="#pricing"
+                className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
+              >
                 Pricing
               </a>
             </nav>
-            
+
             {/* Desktop Actions */}
             <div className="hidden items-center space-x-4 md:flex">
-              <button className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base">Sign In</button>
+              <button className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base">
+                Sign In
+              </button>
               <button className="bg-brand hover:bg-brand/90 rounded-lg px-3 py-1.5 text-sm text-white transition-colors lg:px-4 lg:py-2 lg:text-base">
                 Get Started
               </button>
@@ -42,7 +61,7 @@ const MainPage: React.FC = () => {
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 md:hidden"
+              className="focus:ring-brand inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 md:hidden"
             >
               {mobileMenuOpen ? <LuX className="h-6 w-6" /> : <LuMenu className="h-6 w-6" />}
             </button>
@@ -53,20 +72,29 @@ const MainPage: React.FC = () => {
         {mobileMenuOpen && (
           <div className="border-t border-gray-100 md:hidden">
             <div className="space-y-1 px-4 pb-3 pt-2">
-              <a href="#features" className="block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-brand">
+              <a
+                href="#features"
+                className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+              >
                 Features
               </a>
-              <a href="#how-it-works" className="block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-brand">
+              <a
+                href="#how-it-works"
+                className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+              >
                 How it Works
               </a>
-              <a href="#pricing" className="block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-brand">
+              <a
+                href="#pricing"
+                className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+              >
                 Pricing
               </a>
               <div className="border-t border-gray-100 pt-4">
-                <button className="block w-full rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-brand text-left">
+                <button className="hover:text-brand block w-full rounded-md px-3 py-2 text-left text-base font-medium text-gray-600 hover:bg-gray-50">
                   Sign In
                 </button>
-                <button className="mt-2 block w-full bg-brand hover:bg-brand/90 rounded-lg px-3 py-2 text-base font-medium text-white transition-colors">
+                <button className="bg-brand hover:bg-brand/90 mt-2 block w-full rounded-lg px-3 py-2 text-base font-medium text-white transition-colors">
                   Get Started
                 </button>
               </div>
@@ -76,7 +104,7 @@ const MainPage: React.FC = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-b from-slate-50 to-white py-22 sm:py-16 lg:py-25">
+      <section className="py-22 lg:py-25 relative bg-gradient-to-b from-slate-50 to-white sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="text-brand mb-4 inline-flex items-center rounded-full bg-blue-50 px-3 py-1.5 text-xs font-medium sm:mb-6 sm:px-4 sm:py-2 sm:text-sm">
@@ -87,7 +115,9 @@ const MainPage: React.FC = () => {
               The Database That <span className="block sm:inline md:block">Can't Be Breached</span>
             </h1>
             <p className="mx-auto mb-6 max-w-3xl text-base text-gray-600 sm:mb-8 sm:text-lg md:text-xl">
-              Traditional databases store everything. When breached, they expose everything. Gardbase flips the script—storing only encrypted data, makes catastrophic data breaches <strong>architecturally impossible</strong>.
+              Traditional databases store everything. When breached, they expose everything.
+              Gardbase flips the script—storing only encrypted data, makes catastrophic data
+              breaches <strong>architecturally impossible</strong>.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center sm:gap-4">
               <button className="bg-brand hover:bg-brand/90 flex items-center justify-center rounded-lg px-6 py-3 text-base font-semibold text-white transition-colors sm:px-8 sm:py-4 sm:text-lg">
@@ -103,7 +133,7 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* Problem Statement */}
-      <section className="bg-white py-12 sm:py-16 lg:py-25 mb-20">
+      <section className="lg:py-25 mb-20 bg-white py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-20 text-center sm:mb-16">
             <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
@@ -118,7 +148,7 @@ const MainPage: React.FC = () => {
 
           <div className="grid gap-6 sm:gap-8 md:grid-cols-3">
             <div className="rounded-2xl bg-red-50 p-6 sm:p-8">
-              <div className="mb-2 text-xs font-medium tracking-wider text-red-500 uppercase group-hover:text-red-400 sm:text-sm">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-red-500 group-hover:text-red-400 sm:text-sm">
                 Financial Impact
               </div>
               <h3 className="text-brand mb-2 text-lg font-semibold sm:text-xl">€5.88B in Fines</h3>
@@ -129,7 +159,7 @@ const MainPage: React.FC = () => {
             </div>
 
             <div className="rounded-2xl bg-orange-50 p-6 sm:p-8">
-              <div className="mb-2 text-xs font-medium tracking-wider text-orange-500 uppercase group-hover:text-orange-400 sm:text-sm">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-orange-500 group-hover:text-orange-400 sm:text-sm">
                 Business Cost
               </div>
               <h3 className="text-brand mb-2 text-lg font-semibold sm:text-xl">8% Profit Drop</h3>
@@ -140,7 +170,7 @@ const MainPage: React.FC = () => {
             </div>
 
             <div className="rounded-2xl bg-yellow-50 p-6 sm:p-8">
-              <div className="mb-2 text-xs font-medium tracking-wider text-amber-500 uppercase group-hover:text-amber-400 sm:text-sm">
+              <div className="mb-2 text-xs font-medium uppercase tracking-wider text-amber-500 group-hover:text-amber-400 sm:text-sm">
                 Technical Burden
               </div>
               <h3 className="text-brand mb-2 text-lg font-semibold sm:text-xl">Complex Tools</h3>
@@ -154,7 +184,7 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* Solution */}
-      <section id="features" className="bg-slate-50 py-12 sm:py-16 lg:py-30">
+      <section id="features" className="lg:py-30 bg-slate-50 py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center sm:mb-16">
             <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
@@ -218,7 +248,7 @@ const MainPage: React.FC = () => {
 
             {/* TODO: this section will be modified when the actual SDK(s) is (are) ready */}
             <div className="rounded-2xl bg-white p-4 shadow-lg sm:p-6 lg:p-8">
-              <div className="rounded-lg bg-gray-800 p-4 font-mono text-xs text-green-400 sm:p-6 sm:text-sm overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg bg-gray-800 p-4 font-mono text-xs text-green-400 sm:p-6 sm:text-sm">
                 <div className="mb-2">
                   <span className="text-gray-500">// Simple integration</span>
                 </div>
@@ -263,7 +293,7 @@ const MainPage: React.FC = () => {
       </section>
 
       {/* How It Works */}
-      <section id="how-it-works" className="bg-white py-12 sm:py-16 lg:py-25 mb-25">
+      <section id="how-it-works" className="lg:py-25 mb-25 bg-white py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-12 text-center sm:mb-16">
             <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
@@ -367,7 +397,9 @@ const MainPage: React.FC = () => {
                 </span>
               </div>
               <h3 className="text-brand mb-2 text-xl font-bold sm:text-2xl">Growth</h3>
-              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">For growing businesses and teams</p>
+              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">
+                For growing businesses and teams
+              </p>
               <div className="text-brand mb-4 text-3xl font-bold sm:mb-6 sm:text-4xl">
                 €349+<span className="text-lg font-normal text-gray-600 sm:text-xl">/month</span>
               </div>
@@ -393,7 +425,9 @@ const MainPage: React.FC = () => {
 
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
               <h3 className="text-brand mb-2 text-xl font-bold sm:text-2xl">Scale</h3>
-              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">For large organizations with custom needs</p>
+              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">
+                For large organizations with custom needs
+              </p>
               <div className="text-brand mb-4 text-3xl font-bold sm:mb-6 sm:text-4xl">Custom</div>
               <ul className="mb-6 space-y-2 sm:mb-8 sm:space-y-3">
                 <li className="flex items-center">
@@ -451,7 +485,9 @@ const MainPage: React.FC = () => {
               <div className="mb-4 flex items-center space-x-2">
                 <img draggable={false} src={LogoWhite} alt="Gardbase Logo" className="h-6 sm:h-8" />
               </div>
-              <p className="text-sm text-gray-400 sm:text-base">The GDPR-native database that protects by design.</p>
+              <p className="text-sm text-gray-400 sm:text-base">
+                The GDPR-native database that protects by design.
+              </p>
             </div>
 
             <div>
