@@ -1,10 +1,10 @@
 packages:
-    - apps/*
-    - packages/*
+  - apps/*
+  - packages/*
 
 ignoredBuiltDependencies:
-    - '@swc/core'
-    - '@tailwindcss/oxide'
+  - "@swc/core"
+  - "@tailwindcss/oxide"
 
 onlyBuiltDependencies:
-    - esbuild
+  - esbuild
