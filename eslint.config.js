@@ -6,7 +6,14 @@ import path from "path";
 
 export default [
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/public/**", "**/vite.config.ts"],
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/public/**",
+      "**/vite.config.ts",
+      "**/vite.config.*.timestamp*",
+      "**/vitest.config.*.timestamp*",
+    ],
   },
 
   // Base JS rules (must be wrapped in an array)
