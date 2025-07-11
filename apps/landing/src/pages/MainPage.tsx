@@ -60,10 +60,10 @@ const MainPage: React.FC = () => {
 
             {/* Mobile menu button */}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => setMobileMenuOpen(prev => !prev)}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
-              className="focus:ring-brand inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 md:hidden"
+              className="focus:ring-brand inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 md:hidden"
             >
               {mobileMenuOpen ? <LuX className="h-6 w-6" /> : <LuMenu className="h-6 w-6" />}
             </button>
@@ -77,18 +77,21 @@ const MainPage: React.FC = () => {
               <a
                 href="#features"
                 className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+                onClick={() => setMobileMenuOpen(false)}
               >
                 Features
               </a>
               <a
                 href="#how-it-works"
                 className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+                onClick={() => setMobileMenuOpen(false)}
               >
                 How it Works
               </a>
               <a
                 href="#pricing"
                 className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+                onClick={() => setMobileMenuOpen(false)}
               >
                 Pricing
               </a>
