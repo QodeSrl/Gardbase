@@ -15,6 +15,7 @@ export default defineConfig({
     port: 3000,
   },
   build: {
-    outDir: "../../dist/apps/landing"
+    outDir: "../../dist/apps/landing",
+    emptyOutDir: true
   },
 });
