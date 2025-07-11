@@ -1,0 +1,12 @@
+{
+  "name": "@gardbase/landing",
+  "sourceRoot": "apps/landing/src",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "options": {
+        "outputPath": "../../dist/apps/landing"
+      }
+    }
+  }
+}

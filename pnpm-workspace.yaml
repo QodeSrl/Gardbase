@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+ignoredBuiltDependencies:
+  - "@swc/core"
+  - "@tailwindcss/oxide"
+
+onlyBuiltDependencies:
+  - esbuild
