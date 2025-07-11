@@ -2,7 +2,7 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "targetDefaults": {
     "build": {
-      "outputs": ["{projectRoot}/apps/landing/dist"],
+      "outputs": ["{projectRoot}/dist"],
       "cache": true
     },
     "lint": {
