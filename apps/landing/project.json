@@ -6,7 +6,9 @@
     "build": {
       "options": {
         "outputPath": "../../dist/apps/landing"
-      }
+      },
+      "inputs": ["default", "{workspaceRoot}/apps/landing/**/*"],
+      "outputs": ["{workspaceRoot}/dist/apps/landing"]
     }
   }
 }
