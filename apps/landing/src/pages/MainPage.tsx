@@ -11,6 +11,91 @@ import {
 import Logo from "../assets/logo.svg";
 import LogoWhite from "../assets/logo-white.svg";
 
+const navLinks = [
+  { name: "Features", href: "#features" },
+  { name: "How it Works", href: "#how-it-works" },
+  { name: "Pricing", href: "#pricing" },
+];
+
+const howItWorksParagraphs = [
+  {
+    title: "Client-Side Encryption",
+    text: "Your data is encrypted on your servers before it ever reaches Gardbase. Even if our infrastructure is compromised, your data remains useless ciphertext to attackers.",
+    icon: <LuLock className="h-6 w-6 text-white sm:h-8 sm:w-8" />,
+  },
+  {
+    title: "Automated Compliance",
+    text: "All GDPR requirements are handled automatically—audit logs, data retention, portability, and deletion rights—without manual configuration or oversight.",
+    icon: <LuDatabase className="h-6 w-6 text-white sm:h-8 sm:w-8" />,
+  },
+  {
+    title: "Seamless Integration",
+    text: "Deploy through developer-friendly SDKs with simple, predictable pricing that includes all compliance features in your existing stack.",
+    icon: <LuShield className="h-6 w-6 text-white sm:h-8 sm:w-8" />,
+  },
+];
+
+const pricingPlans = [
+  {
+    name: "Startup",
+    description: "Perfect for early-stage startups and small projects",
+    price: "€79+",
+    features: [
+      "Up to 20GB storage",
+      "25M API Calls/month",
+      "Full GDPR compliance",
+      "Email support",
+    ],
+  },
+  {
+    name: "Growth",
+    description: "For growing businesses and teams",
+    price: "€349+",
+    features: [
+      "Up to 100GB storage",
+      "150M API Calls/month",
+      "Full GDPR compliance",
+      "Priority support",
+    ],
+  },
+  {
+    name: "Scale",
+    description: "For large organizations with custom needs",
+    price: "Custom",
+    features: ["Custom storage", "Custom API Calls limit", "Dedicated support", "SLA guarantees"],
+  },
+];
+
+const footerCols = [
+  {
+    name: "Product",
+    links: [
+      { name: "Features", href: "#features" },
+      { name: "Pricing", href: "#pricing" },
+      { name: "Documentation", href: "#" },
+      { name: "API Reference", href: "#" },
+    ],
+  },
+  {
+    name: "Company",
+    links: [
+      { name: "About", href: "https://qodesrl.com/" },
+      { name: "Blog", href: "#" },
+      { name: "Careers", href: "#" },
+      { name: "Contact", href: "https://qodesrl.com/" },
+    ],
+  },
+  {
+    name: "Legal",
+    links: [
+      { name: "Privacy Policy", href: "#" },
+      { name: "Terms of Service", href: "#" },
+      { name: "Security", href: "#" },
+      { name: "Compliance", href: "#" },
+    ],
+  },
+];
+
 const MainPage: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -28,24 +113,15 @@ const MainPage: React.FC = () => {
 
             {/* Desktop Navigation */}
             <nav className="hidden space-x-4 md:flex lg:space-x-8">
-              <a
-                href="#features"
-                className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
-              >
-                Features
-              </a>
-              <a
-                href="#how-it-works"
-                className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
-              >
-                How it Works
-              </a>
-              <a
-                href="#pricing"
-                className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
-              >
-                Pricing
-              </a>
+              {navLinks.map(link => (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="hover:text-brand text-sm text-gray-600 transition-colors lg:text-base"
+                >
+                  {link.name}
+                </a>
+              ))}
             </nav>
 
             {/* Desktop Actions */}
@@ -74,27 +150,16 @@ const MainPage: React.FC = () => {
         {mobileMenuOpen && (
           <div className="border-t border-gray-100 md:hidden">
             <div className="space-y-1 px-4 pb-3 pt-2">
-              <a
-                href="#features"
-                className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Features
-              </a>
-              <a
-                href="#how-it-works"
-                className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                How it Works
-              </a>
-              <a
-                href="#pricing"
-                className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Pricing
-              </a>
+              {navLinks.map(link => (
+                <a
+                  key={link.name}
+                  href={link.href}
+                  className="hover:text-brand block rounded-md px-3 py-2 text-base font-medium text-gray-600 hover:bg-gray-50"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.name}
+                </a>
+              ))}
               <div className="border-t border-gray-100 pt-4">
                 <button className="hover:text-brand block w-full rounded-md px-3 py-2 text-left text-base font-medium text-gray-600 hover:bg-gray-50">
                   Sign In
@@ -311,44 +376,17 @@ const MainPage: React.FC = () => {
 
           {/* These details will eventually be subject to change */}
           <div className="grid gap-8 md:grid-cols-3">
-            <div className="text-center">
-              <div className="bg-brand mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl sm:mb-6 sm:h-16 sm:w-16">
-                <LuLock className="h-6 w-6 text-white sm:h-8 sm:w-8" />
+            {howItWorksParagraphs.map((item, i) => (
+              <div key={i} className="text-center">
+                <div className="bg-brand mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl sm:mb-6 sm:h-16 sm:w-16">
+                  {item.icon}
+                </div>
+                <h3 className="text-brand mb-3 text-lg font-semibold tracking-tight sm:mb-4 sm:text-xl">
+                  {item.title}
+                </h3>
+                <p className="text-sm text-gray-600 sm:text-base">{item.text}</p>
               </div>
-              <h3 className="text-brand mb-3 text-lg font-semibold tracking-tight sm:mb-4 sm:text-xl">
-                1. Client-Side Encryption
-              </h3>
-              <p className="text-sm text-gray-600 sm:text-base">
-                Your data is encrypted on your servers before it ever reaches Gardbase. Even if our
-                infrastructure is compromised, your data remains useless ciphertext to attackers.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="bg-brand mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl sm:mb-6 sm:h-16 sm:w-16">
-                <LuDatabase className="h-6 w-6 text-white sm:h-8 sm:w-8" />
-              </div>
-              <h3 className="text-brand mb-3 text-lg font-semibold tracking-tight sm:mb-4 sm:text-xl">
-                2. Automated Compliance
-              </h3>
-              <p className="text-sm text-gray-600 sm:text-base">
-                All GDPR requirements are handled automatically—audit logs, data retention,
-                portability, and deletion rights—without manual configuration or oversight.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="bg-brand mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl sm:mb-6 sm:h-16 sm:w-16">
-                <LuShield className="h-6 w-6 text-white sm:h-8 sm:w-8" />
-              </div>
-              <h3 className="text-brand mb-3 text-lg font-semibold tracking-tight sm:mb-4 sm:text-xl">
-                3. Seamless Integration
-              </h3>
-              <p className="text-sm text-gray-600 sm:text-base">
-                Deploy through developer-friendly SDKs with simple, predictable pricing that
-                includes all compliance features in your existing stack.
-              </p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -367,95 +405,43 @@ const MainPage: React.FC = () => {
           </div>
 
           <div className="grid gap-6 sm:gap-8 md:grid-cols-3">
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-              <h3 className="text-brand mb-2 text-xl font-bold sm:text-2xl">Startup</h3>
-              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">
-                Perfect for early-stage Startups and small projects
-              </p>
-              <div className="text-brand mb-4 text-3xl font-bold sm:mb-6 sm:text-4xl">
-                €79+<span className="text-lg font-normal text-gray-600 sm:text-xl">/month</span>
+            {pricingPlans.map((plan, index) => (
+              <div
+                key={index}
+                className={`relative rounded-2xl border ${
+                  index === 1 ? "border-brand bg-white shadow-lg" : "border-gray-200 bg-white"
+                } p-6 sm:p-8`}
+              >
+                {index === 1 && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 transform sm:-top-4">
+                    <span className="bg-brand rounded-full px-3 py-1 text-xs font-medium text-white sm:px-4 sm:py-2 sm:text-sm">
+                      Most Popular
+                    </span>
+                  </div>
+                )}
+                <h3 className="text-brand mb-2 text-xl font-bold sm:text-2xl">{plan.name}</h3>
+                <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">
+                  {plan.description}
+                </p>
+                <div className="text-brand mb-4 text-3xl font-bold sm:mb-6 sm:text-4xl">
+                  {plan.price}
+                  <span className="text-lg font-normal text-gray-600 sm:text-xl">/month</span>
+                </div>
+                <ul className="mb-6 space-y-2 sm:mb-8 sm:space-y-3">
+                  {plan.features.map((feature, featureIndex) => (
+                    <li key={featureIndex} className="flex items-center">
+                      <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
+                      <span className="text-sm text-gray-600 sm:text-base">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                {plan.name === "Scale" && (
+                  <button className="bg-brand hover:bg-brand/90 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-colors sm:py-3 sm:text-base">
+                    Contact Sales
+                  </button>
+                )}
               </div>
-              <ul className="mb-6 space-y-2 sm:mb-8 sm:space-y-3">
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Up to 20GB storage</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">25M API Calls/month</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Full GDPR compliance</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Email support</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="border-brand relative rounded-2xl border-2 bg-white p-6 shadow-lg sm:p-8">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 transform sm:-top-4">
-                <span className="bg-brand rounded-full px-3 py-1 text-xs font-medium text-white sm:px-4 sm:py-2 sm:text-sm">
-                  Most Popular
-                </span>
-              </div>
-              <h3 className="text-brand mb-2 text-xl font-bold sm:text-2xl">Growth</h3>
-              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">
-                For growing businesses and teams
-              </p>
-              <div className="text-brand mb-4 text-3xl font-bold sm:mb-6 sm:text-4xl">
-                €349+<span className="text-lg font-normal text-gray-600 sm:text-xl">/month</span>
-              </div>
-              <ul className="mb-6 space-y-2 sm:mb-8 sm:space-y-3">
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Up to 100GB storage</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">150M API Calls/month</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Full GDPR compliance</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Priority support</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-              <h3 className="text-brand mb-2 text-xl font-bold sm:text-2xl">Scale</h3>
-              <p className="mb-4 text-sm text-gray-600 sm:mb-6 sm:text-base">
-                For large organizations with custom needs
-              </p>
-              <div className="text-brand mb-4 text-3xl font-bold sm:mb-6 sm:text-4xl">Custom</div>
-              <ul className="mb-6 space-y-2 sm:mb-8 sm:space-y-3">
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Custom storage</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Custom API Calls limit</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">Dedicated support</span>
-                </li>
-                <li className="flex items-center">
-                  <LuCircleCheck className="mr-2 h-4 w-4 flex-shrink-0 text-green-500 sm:mr-3 sm:h-5 sm:w-5" />
-                  <span className="text-sm text-gray-600 sm:text-base">SLA guarantees</span>
-                </li>
-              </ul>
-              <button className="bg-brand hover:bg-brand/90 w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-colors sm:py-3 sm:text-base">
-                Contact Sales
-              </button>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -495,83 +481,20 @@ const MainPage: React.FC = () => {
               </p>
             </div>
 
-            <div>
-              <h3 className="mb-3 text-sm font-semibold sm:mb-4 sm:text-base">Product</h3>
-              <ul className="space-y-2 text-xs text-gray-400 sm:text-sm">
-                <li>
-                  <a href="#features" className="transition-colors hover:text-white">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#pricing" className="transition-colors hover:text-white">
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Documentation
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    API Reference
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="mb-3 text-sm font-semibold sm:mb-4 sm:text-base">Company</h3>
-              <ul className="space-y-2 text-xs text-gray-400 sm:text-sm">
-                <li>
-                  <a href="https://qodesrl.com/" className="transition-colors hover:text-white">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Careers
-                  </a>
-                </li>
-                <li>
-                  <a href="https://qodesrl.com/" className="transition-colors hover:text-white">
-                    Contact
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="mb-3 text-sm font-semibold sm:mb-4 sm:text-base">Legal</h3>
-              <ul className="space-y-2 text-xs text-gray-400 sm:text-sm">
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Privacy Policy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Security
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="transition-colors hover:text-white">
-                    Compliance
-                  </a>
-                </li>
-              </ul>
-            </div>
+            {footerCols.map((col, index) => (
+              <div key={index}>
+                <h3 className="mb-3 text-sm font-semibold sm:mb-4 sm:text-base">{col.name}</h3>
+                <ul className="space-y-2 text-xs text-gray-400 sm:text-sm">
+                  {col.links.map((link, linkIndex) => (
+                    <li key={linkIndex}>
+                      <a href={link.href} className="transition-colors hover:text-white">
+                        {link.name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
 
           <div className="mt-8 border-t border-gray-800 pt-6 text-center text-xs text-gray-400 sm:pt-8 sm:text-sm">
