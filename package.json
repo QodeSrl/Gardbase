@@ -8,8 +8,11 @@
     "pnpm": ">=10.13.1"
   },
   "scripts": {
-    "dev": "nx dev @gardbase/landing",
+    "dev:landing": "nx dev @gardbase/landing",
+    "dev:api": "nx serve @gardbase/api",
+    "dev:all": "nx run-many -t=serve --all",
     "build": "nx run-many -t=build --all",
+    "build:api": "nx build @gardbase/api",
     "lint": "nx run-many -t=lint --all",
     "format": "nx format:write"
   },

@@ -1,0 +1,57 @@
+{
+  "name": "@gardbase/api",
+  "sourceRoot": "apps/api",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go build -o ../../dist/apps/api/main ./cmd/server",
+        "cwd": "apps/api"
+      },
+      "outputs": ["{workspaceRoot}/dist/apps/api"]
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go run ./cmd/server",
+        "cwd": "apps/api"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "air",
+        "cwd": "apps/api"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go test ./...",
+        "cwd": "apps/api"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "golangci-lint run",
+        "cwd": "apps/api"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "gofmt -w .",
+        "cwd": "apps/api"
+      }
+    },
+    "tidy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go mod tidy",
+        "cwd": "apps/api"
+      }
+    }
+  }
+}
