@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/QodeSrl/gardbase-api/internal/handlers"
+	"github.com/QodeSrl/gardbase-api/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -46,6 +47,11 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 	}
 
 	router := gin.New()
+
+	router.Use(middleware.GinZapLogger(logger))
+	router.Use(middleware.GinZapRecovery(logger, true))
+	router.Use(middleware.CorsMiddleware())
+	router.Use(middleware.RateLimitMiddleware())
 
 	return &Server{
 		router: router,
