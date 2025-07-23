@@ -51,7 +51,7 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 	router.Use(middleware.GinZapLogger(logger))
 	router.Use(middleware.GinZapRecovery(logger, true))
 	router.Use(middleware.CorsMiddleware())
-	router.Use(middleware.RateLimitMiddleware())
+	router.Use(middleware.RateLimitMiddleware(logger))
 
 	return &Server{
 		router: router,
