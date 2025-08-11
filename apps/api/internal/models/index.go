@@ -18,6 +18,7 @@ func NewIndex(indexName string, tenantId string, indexToken string, objectId str
 	return &Index{
 		PK:        fmt.Sprintf("IDX#%s#TENANT#%s", indexName, tenantId),
 		SK:        fmt.Sprintf("TOKEN#%s#OBJ#%s", indexToken, objectId),
+		S3Key:     s3Key,
 		ObjectID:  objectId,
 		CreatedAt: time.Now().UTC(),
 	}
