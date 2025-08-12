@@ -25,6 +25,13 @@ func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable stri
 	}
 }
 
+/* 
+   CreateObjectWithIndexes stores the given object in DynamoDB and creates associated index entries.
+   It first marshals the object and index data into DynamoDB attribute maps.
+   If the total number of items to write (object + indexes) is 25 or fewer, it performs a single transactional write.
+   Otherwise, it writes the object separately and batches the index writes in groups of 25 using BatchWriteItem.
+   Returns an error if any DynamoDB operation fails.
+*/
 func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.Object, indexes map[string]string) error {
 	objMap, err := attributevalue.MarshalMap(obj)
 	if err != nil {
