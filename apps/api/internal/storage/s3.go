@@ -27,13 +27,13 @@ func NewS3Client(ctx context.Context, bucket string, cfg aws.Config) *S3Client {
 /*
    PresignPutObjectUrl generates a presigned URL for uploading an object to S3. 
 */
-func (s *S3Client) PresignPutObjectUrl(ctx context.Context, key string, lifetimeSecs int64) (string, error) {
+func (s *S3Client) PresignPutObjectUrl(ctx context.Context, key string, lifetime time.Duration) (string, error) {
 	request, err := s.presigner.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.Bucket),
 		Key: aws.String(key),
 		ContentType: aws.String("application/json"),
 	}, func (opts *s3.PresignOptions) {
-		opts.Expires = time.Duration(lifetimeSecs * int64(time.Second))
+		opts.Expires = lifetime
 	})
 	if err != nil {
 		return "", err

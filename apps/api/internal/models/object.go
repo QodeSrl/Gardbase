@@ -25,6 +25,12 @@ const (
 	StatusDeleted = "deleted"
 )
 
+const (
+	SensitivityLow    = "low"
+	SensitivityMedium = "medium"
+	SensitivityHigh   = "high"
+)
+
 func NewObject(tenantId string, objectId string, s3Key string, encryptedDek string) *Object {
 	return &Object{
 		PK: fmt.Sprintf("TENANT#%s", tenantId),
