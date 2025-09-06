@@ -25,6 +25,13 @@ func NewCreateObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoCl
 	}
 }
 
+/* 
+   CreateObject handles the creation of a new object. It expects a JSON payload with tenant ID, encrypted DEK, optional sensitivity, and indexes.
+   It generates a unique object ID and S3 key, sets the object's status to pending, and calculates a TTL.
+   It then generates a presigned URL for uploading the object to S3.
+   The object metadata and indexes are stored in DynamoDB using the CreateObjectWithIndexes method.
+   Finally, it responds with the object ID, S3 key, upload URL, and expiration time.
+*/
 func (h *CreateObjectHandler) CreateObject(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req models.CreateObjectRequest
@@ -64,12 +71,6 @@ func (h *CreateObjectHandler) CreateObject(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, resp)
-}
-
-func FinalizeObject(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"message": "Not implemented yet",
-	})
 }
 
 func generateS3Key(tenantId string, objectId string, version int32) string {
