@@ -39,11 +39,12 @@ func (h *CreateObjectHandler) CreateObject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{ "error": err.Error() })
 		return
 	}
+tenantId := c.GetString("tenantId")
 
 	objectId := uuid.NewString()
-	s3Key := generateS3Key(req.TenantID, objectId, 1)
+	s3Key := generateS3Key(tenantId, objectId, 1)
 
-	obj := models.NewObject(req.TenantID, objectId, s3Key, req.EncryptedDEK)
+	obj := models.NewObject(tenantId, objectId, s3Key, req.EncryptedDEK)
 	if req.Sensitivity != "" {
 		obj.Sensitivity = req.Sensitivity
 	} else {
