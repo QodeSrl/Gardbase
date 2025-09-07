@@ -11,14 +11,14 @@ import (
 	"github.com/google/uuid"
 )
 
-type CreateObjectHandler struct {
+type ObjectHandler struct {
 	S3Client *storage.S3Client
 	Dynamo *storage.DynamoClient
 	PresignTTL time.Duration
 }
 
-func NewCreateObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoClient) *CreateObjectHandler {
-	return &CreateObjectHandler{
+func NewObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoClient) *ObjectHandler {
+	return &ObjectHandler{
 		S3Client: s3Client,
 		Dynamo: dynamo,
 		PresignTTL: 15 * time.Minute,
@@ -32,14 +32,14 @@ func NewCreateObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoCl
    The object metadata and indexes are stored in DynamoDB using the CreateObjectWithIndexes method.
    Finally, it responds with the object ID, S3 key, upload URL, and expiration time.
 */
-func (h *CreateObjectHandler) CreateObject(c *gin.Context) {
+func (h *ObjectHandler) CreateObject(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req models.CreateObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{ "error": err.Error() })
 		return
 	}
-tenantId := c.GetString("tenantId")
+	tenantId := c.GetString("tenantId")
 
 	objectId := uuid.NewString()
 	s3Key := generateS3Key(tenantId, objectId, 1)
@@ -74,12 +74,36 @@ tenantId := c.GetString("tenantId")
 	c.JSON(http.StatusCreated, resp)
 }
 
-func generateS3Key(tenantId string, objectId string, version int32) string {
-	return "tenant-" + tenantId + "/objects/" + objectId + "/v" + fmt.Sprintf("%d", version)
+/*
+   GetObject is handles the retrieval of an object through its ID.
+*/
+func (h *ObjectHandler) GetObject(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+	id := c.Param("id")
+
+	obj, err := h.Dynamo.GetObject(ctx, tenantId, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{ "error": "Failed to get object from DynamoDB: " + err.Error() })
+		return
+	}
+	if obj == nil {
+		c.JSON(http.StatusNotFound, gin.H{ "error": "Object not found" })
+		return
+	}
+
+	resp := models.GetObjectResponse{
+		ObjectID: id,
+		S3Key: obj.S3Key,
+		EncryptedDEK: obj.EncryptedDEK,
+		CreatedAt: obj.CreatedAt,
+		Version: obj.Version,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
-func GetObject(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"message": "Not implemented yet",
-	})
+// Helper function to generate S3 key 
+func generateS3Key(tenantId string, objectId string, version int32) string {
+	return "tenant-" + tenantId + "/objects/" + objectId + "/v" + fmt.Sprintf("%d", version)
 }

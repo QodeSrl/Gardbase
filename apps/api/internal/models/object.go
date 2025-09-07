@@ -44,7 +44,6 @@ func NewObject(tenantId string, objectId string, s3Key string, encryptedDek stri
 }
 
 type CreateObjectRequest struct {
-	TenantID 	string `json:"tenant_id" binding:"required"`
 	EncryptedDEK string `json:"encrypted_dek" binding:"required"`
 	Indexes map[string]string `json:"indexes,omitempty"` 
 	Sensitivity string `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
@@ -55,4 +54,12 @@ type CreateObjectResponse struct {
 	S3Key    string `json:"s3_key"`
 	UploadURL string `json:"upload_url"`
 	ExpiresIn int64 `json:"expires_in_seconds"`
+}
+
+type GetObjectResponse struct {
+	ObjectID string `json:"object_id"`
+	S3Key string `json:"s3_key"`
+	EncryptedDEK string `json:"encrypted_dek"`
+	CreatedAt time.Time `json:"created_at"`
+	Version int32 `json:"version"`
 }

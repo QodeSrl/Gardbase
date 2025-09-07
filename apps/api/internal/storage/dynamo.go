@@ -110,14 +110,44 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.
 	return nil
 }
 
-// extract tenant from PK of format "TENANT#<tenant_id>"
+/*
+   GetObject retrieves an object by tenant ID and object ID from DynamoDB.
+*/
+func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, objectId string) (*models.Object, error) {
+	pk := fmt.Sprintf("TENANT#%s", tenantId)
+	sk := fmt.Sprintf("OBJ#%s", objectId)
+
+	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &d.ObjectsTable,
+		Key: map[string]ddbtypes.AttributeValue{
+			"pk": &ddbtypes.AttributeValueMemberS{ Value: pk },
+			"sk": &ddbtypes.AttributeValueMemberS{ Value: sk },
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	if out.Item == nil {
+		return nil, nil
+	}
+
+	var obj models.Object
+	if err := attributevalue.UnmarshalMap(out.Item, &obj); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
+}
+
+// Helper function to extract tenant from PK of format "TENANT#<tenant_id>"
 func extractTenantFromPK(pk string) string {
 	var tenantId string
 	fmt.Sscanf(pk, "TENANT#%s", &tenantId)
 	return tenantId
 }
 
-// extract object ID from SK of format "OBJ#<object_id>"
+// Helper function to extract object ID from SK of format "OBJ#<object_id>"
 func extractObjectIdFromSK(sk string) string {
 	var objectId string
 	fmt.Sscanf(sk, "OBJ#%s", &objectId)
