@@ -10,6 +10,8 @@ import (
 
 	"github.com/QodeSrl/gardbase-api/internal/handlers"
 	"github.com/QodeSrl/gardbase-api/internal/middleware"
+	"github.com/QodeSrl/gardbase-api/internal/storage"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -62,6 +64,22 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 
 func (s *Server) setupRoutes() {
 	s.router.GET("/health", handlers.HealthCheckHandler)
+
+	api := s.router.Group("/api")
+
+	ctx := context.Background()
+	s3Client, dynamoClient, err := initStorage(ctx)
+	if err != nil {
+		s.logger.Fatal("Failed to initialize storage clients", zap.Error(err))
+	}
+	
+	objectHandler := handlers.NewObjectHandler(s3Client, dynamoClient)
+	objects := api.Group("/objects")
+	objects.Use(middleware.TenantMiddleware())
+	{
+		objects.GET("/:id", objectHandler.Get)
+		objects.POST("", objectHandler.Create)
+	}
 }
 
 func (s *Server) start() {
@@ -98,6 +116,22 @@ func (s *Server) start() {
 	s.logger.Info("Server exited")
 }
 
+func initStorage(ctx context.Context) (*storage.S3Client, *storage.DynamoClient, error) {
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	bucket := getEnvOrPanic("S3_BUCKET")
+	objectsTable := getEnvOrPanic("DYNAMO_OBJECTS_TABLE")
+	indexesTable := getEnvOrPanic("DYNAMO_INDEXES_TABLE")
+
+	s3Client := storage.NewS3Client(ctx, bucket, cfg)
+	dynamoClient := storage.NewDynamoClient(ctx, objectsTable, indexesTable, cfg)
+
+	return s3Client, dynamoClient, nil
+} 
+
 func loadConfig() *Config {
 	config := &Config{
 		Port:        getEnv("PORT", "8080"),
@@ -112,4 +146,10 @@ func getEnv(key string, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+func getEnvOrPanic(key string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	panic("environment variable " + key + " is required")
 }

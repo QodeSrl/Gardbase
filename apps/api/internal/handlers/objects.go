@@ -26,13 +26,13 @@ func NewObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoClient) 
 }
 
 /* 
-   CreateObject handles the creation of a new object. It expects a JSON payload with tenant ID, encrypted DEK, optional sensitivity, and indexes.
+   The Create method handles the creation of a new object. It expects a JSON payload with tenant ID, encrypted DEK, optional sensitivity, and indexes.
    It generates a unique object ID and S3 key, sets the object's status to pending, and calculates a TTL.
    It then generates a presigned URL for uploading the object to S3.
    The object metadata and indexes are stored in DynamoDB using the CreateObjectWithIndexes method.
    Finally, it responds with the object ID, S3 key, upload URL, and expiration time.
 */
-func (h *ObjectHandler) CreateObject(c *gin.Context) {
+func (h *ObjectHandler) Create(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req models.CreateObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -75,9 +75,9 @@ func (h *ObjectHandler) CreateObject(c *gin.Context) {
 }
 
 /*
-   GetObject is handles the retrieval of an object through its ID.
+   The Get method handles the retrieval of an object through its ID.
 */
-func (h *ObjectHandler) GetObject(c *gin.Context) {
+func (h *ObjectHandler) Get(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantId := c.GetString("tenantId")
 	id := c.Param("id")
