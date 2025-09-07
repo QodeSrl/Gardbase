@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/QodeSrl/gardbase-api/internal/handlers"
-	"github.com/QodeSrl/gardbase-api/internal/middleware"
-	"github.com/QodeSrl/gardbase-api/internal/storage"
+	"github.com/QodeSrl/gardbase/apps/api/internal/handlers"
+	"github.com/QodeSrl/gardbase/apps/api/internal/middleware"
+	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"

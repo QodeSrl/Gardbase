@@ -1,4 +1,4 @@
-module github.com/QodeSrl/gardbase-lambda-upload-processor
+module github.com/QodeSrl/gardbase/apps/lambdas/upload-processor
 
 go 1.24.4
 

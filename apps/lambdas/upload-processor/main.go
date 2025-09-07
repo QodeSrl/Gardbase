@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	processor "github.com/QodeSrl/gardbase-lambda-upload-processor/internal"
+	processor "github.com/QodeSrl/gardbase/apps/lambdas/upload-processor/internal"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )

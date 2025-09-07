@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -38,7 +39,7 @@ func UpdateStatus(ctx context.Context, bucket string, key string) error {
 			"#status": "status",
 		},
 		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
-			":ready": &ddbTypes.AttributeValueMemberS{Value: "ready"},
+			":ready": &ddbTypes.AttributeValueMemberS{Value: models.StatusReady},
 		},
 	})
 	return err

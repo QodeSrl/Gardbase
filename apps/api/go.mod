@@ -1,4 +1,4 @@
-module github.com/QodeSrl/gardbase-api
+module github.com/QodeSrl/gardbase/apps/api
 
 go 1.24.4
 

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/QodeSrl/gardbase-api/internal/models"
-	"github.com/QodeSrl/gardbase-api/internal/storage"
+	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
+	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -34,7 +34,7 @@ func NewObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoClient) 
 */
 func (h *ObjectHandler) Create(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req models.CreateObjectRequest
+	var req CreateObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{ "error": err.Error() })
 		return
@@ -64,7 +64,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		return
 	}
 
-	resp := models.CreateObjectResponse{
+	resp := CreateObjectResponse{
 		ObjectID: objectId,
 		S3Key: s3Key,
 		UploadURL: uploadUrl,
@@ -92,7 +92,7 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		return
 	}
 
-	resp := models.GetObjectResponse{
+	resp := GetObjectResponse{
 		ObjectID: id,
 		S3Key: obj.S3Key,
 		EncryptedDEK: obj.EncryptedDEK,
@@ -106,4 +106,25 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 // Helper function to generate S3 key 
 func generateS3Key(tenantId string, objectId string, version int32) string {
 	return "tenant-" + tenantId + "/objects/" + objectId + "/v" + fmt.Sprintf("%d", version)
+}
+
+type CreateObjectRequest struct {
+	EncryptedDEK string            `json:"encrypted_dek" binding:"required"`
+	Indexes      map[string]string `json:"indexes,omitempty"`
+	Sensitivity  string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
+}
+
+type CreateObjectResponse struct {
+	ObjectID  string `json:"object_id"`
+	S3Key     string `json:"s3_key"`
+	UploadURL string `json:"upload_url"`
+	ExpiresIn int64  `json:"expires_in_seconds"`
+}
+
+type GetObjectResponse struct {
+	ObjectID     string    `json:"object_id"`
+	S3Key        string    `json:"s3_key"`
+	EncryptedDEK string    `json:"encrypted_dek"`
+	CreatedAt    time.Time `json:"created_at"`
+	Version      int32     `json:"version"`
 }
