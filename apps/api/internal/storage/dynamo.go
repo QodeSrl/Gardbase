@@ -140,6 +140,45 @@ func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, objectId 
 	return &obj, nil
 }
 
+func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId string, objectsIds []string) (map[string]string, error) {
+	if len(objectsIds) == 0 {
+		return map[string]string{}, nil
+	}
+	keys := make([]map[string]ddbtypes.AttributeValue, 0, len(objectsIds))
+	for _, objectId := range objectsIds {
+		pk := fmt.Sprintf("TENANT#%s", tenantId)
+		sk := fmt.Sprintf("OBJ#%s", objectId)
+		keys = append(keys, map[string]ddbtypes.AttributeValue{
+			"pk": &ddbtypes.AttributeValueMemberS{ Value: pk },
+			"sk": &ddbtypes.AttributeValueMemberS{ Value: sk },
+		})
+	}
+
+	out, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+		RequestItems: map[string]ddbtypes.KeysAndAttributes{
+			d.ObjectsTable: {
+				Keys: keys,
+				ProjectionExpression: aws.String("sk, encrypted_dek"),
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(objectsIds))
+	if out.Responses == nil || out.Responses[d.ObjectsTable] == nil {
+		return result, nil
+	}
+	for _, item := range out.Responses[d.ObjectsTable] {
+		var obj models.Object
+		if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
+			return nil, err
+		}
+		result[extractObjectIdFromSK(obj.SK)] = obj.EncryptedDEK
+	}
+	return result, nil
+}
+
 // Helper function to extract tenant from PK of format "TENANT#<tenant_id>"
 func extractTenantFromPK(pk string) string {
 	var tenantId string
