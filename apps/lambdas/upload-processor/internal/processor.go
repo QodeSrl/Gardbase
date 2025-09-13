@@ -21,7 +21,7 @@ func init() {
 		panic("unable to load SDK config, " + err.Error())
 	}
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	tableName = os.Getenv("OBJECTS_TABLE_NAME")
+	tableName = os.Getenv("DYNAMO_OBJECTS_TABLE")
 }
 
 func UpdateStatus(ctx context.Context, bucket string, key string) error {
