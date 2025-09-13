@@ -1,5 +1,7 @@
-resource "aws_iam_role" "lambda_exec" {
-    name = "lambda-exec-${var.environment}"
+resource "aws_iam_role" "lambda_role" {
+    count = 1
+    name = "lambda-role-${var.environment}"
+
     assume_role_policy = jsonencode({
         Version = "2012-10-17"
         Statement = [
@@ -14,16 +16,44 @@ resource "aws_iam_role" "lambda_exec" {
     })
 }
 
-// todo: add policies for logging, s3 access, and dynamodb access for upload-processor
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+    count = 1
+    role = aws_iam_role.lambda_role[0].name
+    policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_policy" "upload-processor-policy" {
+    name = "upload-processor-policy-${var.environment}"
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Action = [
+                    "dynamodb:UpdateItem",
+                ]
+                Effect = "Allow"
+                Resource = aws_dynamodb_table.objects.arn
+            }
+        ]
+    })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_upload_processor_policy" {
+    role = aws_iam_role.lambda_role[0].name
+    policy_arn = aws_iam_policy.upload-processor-policy.arn
+}
 
 resource "aws_lambda_function" "upload-processor" {
     function_name = "upload-processor-${var.environment}"
-    // todo: setup nx build+package+deploy to create this zip file and upload to s3
-    s3_bucket = aws_s3_bucket.uploads.bucket
-    s3_key = "lambda-builds/upload-processor.zip"
+    filename = "../dist/apps/lambdas/upload-processor.zip"
     handler = "main"
     runtime = "go1.x"
-    role = aws_iam_role.lambda_exec.arn
+    role = aws_iam_role.lambda_role[0].arn
+    environment {
+        variables = {
+          "DYNAMO_OBJECTS_TABLE" = aws_dynamodb_table.objects.name
+        }
+    }
 }
 
 resource "aws_s3_bucket_notification" "uploads-notification" {
