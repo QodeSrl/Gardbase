@@ -11,6 +11,26 @@
       },
       "outputs": ["{workspaceRoot}/dist/apps/api"]
     },
+    "docker-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker build -t gardbase-api:latest -f Dockerfile.Api ."
+      }
+    },
+    "docker-tag": {
+      "executor": "nx:run-commands",
+      "options": {
+        "envFile": ".env",
+        "command": "docker tag gardbase-api:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/gardbase-api:latest"
+      }
+    },
+    "docker-push": {
+      "executor": "nx:run-commands",
+      "options": {
+        "envFile": ".env",
+        "command": "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/gardbase-api:latest"
+      }
+    },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
