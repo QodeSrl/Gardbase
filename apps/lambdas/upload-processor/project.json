@@ -1,0 +1,66 @@
+{
+  "name": "@gardbase/lambdas/upload-processor",
+  "sourceRoot": "apps/lambdas/upload-processor",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cross-env GOOS=linux GOARCH=amd64 go build -o ../../../dist/apps/lambdas/upload-processor/main .",
+        "cwd": "apps/lambdas/upload-processor"
+      },
+      "outputs": ["{workspaceRoot}/dist/apps/lambdas/upload-processor"]
+    },
+    "package": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cross-zip main upload-processor.zip",
+        "cwd": "dist/apps/lambdas/upload-processor"
+      },
+      "dependsOn": ["build"],
+      "outputs": ["{workspaceRoot}/dist/apps/lambdas/upload-processor/upload-processor.zip"]
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "aws s3 cp dist/apps/lambdas/upload-processor/upload-processor.zip s3://${S3_BUCKET_NAME}/upload-processor.zip",
+        "envFile": ".env"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go run ./cmd/upload-processor",
+        "cwd": "apps/lambdas/upload-processor"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go test ./...",
+        "cwd": "apps/lambdas/upload-processor"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "golangci-lint run",
+        "cwd": "apps/lambdas/upload-processor"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "gofmt -w .",
+        "cwd": "apps/lambdas/upload-processor"
+      }
+    },
+    "tidy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "go mod tidy",
+        "cwd": "apps/lambdas/upload-processor"
+      }
+    }
+  }
+}
