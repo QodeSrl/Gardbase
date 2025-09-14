@@ -15,10 +15,10 @@ dist-ssr
 .env*
 
 # Terraform
-infrastructure/.terraform/
-infrastructure/*.tfstate
-infrastructure/*.tfstate.*
-infrastructure/terraform.tfvars
+infrastructure/*/.terraform/
+infrastructure/*/*.tfstate
+infrastructure/*/*.tfstate.*
+infrastructure/*/terraform.tfvars
 
 # Editor directories and files
 .vscode/*

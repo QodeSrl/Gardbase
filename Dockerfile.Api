@@ -1,0 +1,26 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /root
+
+COPY apps/api/go.mod apps/api/go.sum ./apps/api/
+COPY pkg/models/go.mod ./pkg/models/
+
+WORKDIR /root/apps/api
+RUN go mod download
+
+WORKDIR /root
+COPY apps/api ./apps/api
+COPY pkg/models ./pkg/models
+
+WORKDIR /root/apps/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/server/main.go
+
+FROM alpine:latest
+
+WORKDIR /app
+
+COPY --from=builder /root/apps/api/api .
+
+EXPOSE 8080 80 
+
+CMD ["./api"]
