@@ -12,3 +12,12 @@ output "dynamodb_tables" {
     index   = aws_dynamodb_table.indexes.name
   }
 }
+
+output "ec2_instance_public_ip" {
+  value = aws_instance.api.public_ip
+}
+
+output "private_key_pem" {
+  value     = tls_private_key.api_key.private_key_pem
+  sensitive = true
+}

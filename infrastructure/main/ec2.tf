@@ -4,13 +4,16 @@ data "aws_vpc" "default" {
 }
 
 // get all subnets in the default VPC
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
 // security group for the API server
 resource "aws_security_group" "api_sg" {
-  name        = "api-sg-${var.environment}"
+  name        = "${var.project_name}-api-sg-${var.environment}"
   description = "Allow HTTP and SSH"
   vpc_id      = data.aws_vpc.default.id
 
@@ -40,7 +43,7 @@ resource "aws_security_group" "api_sg" {
 
 // IAM role for the EC2 instance
 resource "aws_iam_role" "api_role" {
-  name = "api-role-${var.environment}"
+  name = "${var.project_name}-api-role-${var.environment}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -57,7 +60,7 @@ resource "aws_iam_role" "api_role" {
 
 // attach policies to the role
 resource "aws_iam_role_policy" "api_policy" {
-  name = "api-policy-${var.environment}"
+  name = "${var.project_name}-api-policy-${var.environment}"
   role = aws_iam_role.api_role.id
 
   policy = jsonencode({
@@ -75,6 +78,11 @@ resource "aws_iam_role_policy" "api_policy" {
           aws_dynamodb_table.objects.arn,
           aws_dynamodb_table.indexes.arn
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = ["ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = "*"
       }
     ]
   })
@@ -82,7 +90,7 @@ resource "aws_iam_role_policy" "api_policy" {
 
 // IAM instance profile for the EC2 instance
 resource "aws_iam_instance_profile" "api_instance_profile" {
-  name = "api-instance-profile-${var.environment}"
+  name = "${var.project_name}-api-instance-profile-${var.environment}"
   role = aws_iam_role.api_role.name
 }
 
@@ -95,29 +103,49 @@ data "aws_ami" "ubuntu_arm64" {
     name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-*"]
   }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "tls_private_key" "api_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+resource "aws_key_pair" "api_key" {
+  key_name   = "${var.project_name}-api-dev-key"
+  public_key = tls_private_key.api_key.public_key_openssh
 }
 
 resource "aws_instance" "api" {
+
   ami           = data.aws_ami.ubuntu_arm64.id
   instance_type = var.instance_type
 
-  subnet_id              = element(data.aws_subnets_ids.default.ids, 0)
+  subnet_id              = element(data.aws_subnets.default.ids, 0) // use the first subnet
   vpc_security_group_ids = [aws_security_group.api_sg.id]
-
   associate_public_ip_address = true // ensure the instance gets a public IP
   iam_instance_profile        = aws_iam_instance_profile.api_instance_profile.name
+  key_name = aws_key_pair.api_key.key_name
+
+  monitoring = true
 
   user_data = <<-EOF
                 #!/bin/bash
                 set -e
+                exec > >(tee /var/log/user-data.log) 2>&1
                 apt update -y
-                apt install -y docker.io
-                systemctl start docker
+                apt install -y docker.io awscli
                 systemctl enable docker
+                systemctl start docker
                 # login to ECR
-                aws ecr get-login --no-include-email --region ${var.region}
+                aws ecr get-login-password --region ${var.region} \
+                | docker login --username AWS --password-stdin ${data.terraform_remote_state.bootstrap.outputs.ecr_repository_url}
                 # pull and run the container
-                docker run -d -p 80:80 \
+                docker run -d --restart unless-stopped -p 80:80 \
                 -e S3_BUCKET="${aws_s3_bucket.uploads.bucket}" \
                 -e DYNAMO_OBJECTS_TABLE="${aws_dynamodb_table.objects.name}" \
                 -e DYNAMO_INDEXES_TABLE="${aws_dynamodb_table.indexes.name}" \
@@ -125,10 +153,15 @@ resource "aws_instance" "api" {
                 -e ENVIRONMENT="${var.environment}" \
                 -e PORT="80" \
                 ${data.terraform_remote_state.bootstrap.outputs.ecr_repository_url}:latest
+                echo "Setup complete"
                 EOF
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = {
-    Name        = "api-${var.environment}"
+    Name        = "${var.project_name}-api-${var.environment}"
     Environment = var.environment
     Project     = var.project_name
   }
