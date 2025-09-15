@@ -14,21 +14,31 @@
     "docker-build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker build -t gardbase-api:latest -f Dockerfile.Api ."
+        "command": "docker buildx build --platform linux/arm64 -t gardbase-api:latest -f Dockerfile.Api ."
       }
     },
     "docker-tag": {
       "executor": "nx:run-commands",
       "options": {
-        "envFile": ".env",
-        "command": "docker tag gardbase-api:latest ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/gardbase-api:latest"
+        "command": "docker tag gardbase-api:latest {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com/gardbase-api:latest"
+      }
+    },
+    "docker-login": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "aws ecr get-login-password --region {args.aws_region} | docker login --username AWS --password-stdin {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com"
       }
     },
     "docker-push": {
       "executor": "nx:run-commands",
       "options": {
-        "envFile": ".env",
-        "command": "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/gardbase-api:latest"
+        "command": "docker push {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com/gardbase-api:latest"
+      }
+    },
+    "build-and-push": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nx run @gardbase/api:docker-build && nx run @gardbase/api:docker-tag --aws_account_id={args.aws_account_id} --aws_region={args.aws_region} && nx run @gardbase/api:docker-login --aws_account_id={args.aws_account_id} --aws_region={args.aws_region} && nx run @gardbase/api:docker-push --aws_account_id={args.aws_account_id} --aws_region={args.aws_region}"
       }
     },
     "serve": {
