@@ -1,5 +1,5 @@
 resource "aws_dynamodb_table" "objects" {
-  name           = "objects"
+  name           = "${var.project_name}-objects-${var.environment}"
   billing_mode   = "PROVISIONED"
   read_capacity  = var.environment == "production" ? 5 : 1
   write_capacity = var.environment == "production" ? 5 : 1
@@ -27,7 +27,7 @@ resource "aws_dynamodb_table" "objects" {
 }
 
 resource "aws_dynamodb_table" "indexes" {
-  name           = "indexes"
+  name           = "${var.project_name}-indexes-${var.environment}"
   billing_mode   = "PROVISIONED"
   read_capacity  = var.environment == "production" ? 5 : 1
   write_capacity = var.environment == "production" ? 5 : 1

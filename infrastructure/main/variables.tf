@@ -13,7 +13,7 @@ variable "project_name" {
 variable "region" {
   description = "The cloud region to deploy resources in"
   type        = string
-  default     = "eu-north-1"
+  default     = "eu-central-1"
 }
 
 variable "instance_type" {
