@@ -80,8 +80,8 @@ resource "aws_iam_role_policy" "api_policy" {
         ]
       },
       {
-        Effect = "Allow"
-        Action = ["ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
         Resource = "*"
       }
     ]
@@ -125,11 +125,11 @@ resource "aws_instance" "api" {
   ami           = data.aws_ami.ubuntu_arm64.id
   instance_type = var.instance_type
 
-  subnet_id              = element(data.aws_subnets.default.ids, 0) // use the first subnet
-  vpc_security_group_ids = [aws_security_group.api_sg.id]
+  subnet_id                   = element(data.aws_subnets.default.ids, 0) // use the first subnet
+  vpc_security_group_ids      = [aws_security_group.api_sg.id]
   associate_public_ip_address = true // ensure the instance gets a public IP
   iam_instance_profile        = aws_iam_instance_profile.api_instance_profile.name
-  key_name = aws_key_pair.api_key.key_name
+  key_name                    = aws_key_pair.api_key.key_name
 
   monitoring = true
 

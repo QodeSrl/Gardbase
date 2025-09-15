@@ -13,11 +13,11 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "lambdas_bucket" {
-    bucket = "${var.project_name}-lambdas-bucket-${var.environment}"
-    force_destroy = var.environment == "dev" ? true : false
+  bucket        = "${var.project_name}-lambdas-bucket-${var.environment}"
+  force_destroy = var.environment == "dev" ? true : false
 }
 
 resource "aws_ecr_repository" "api" {
-    name = "${var.project_name}-api"
-    force_delete = var.environment == "dev" ? true : false
+  name         = "${var.project_name}-api"
+  force_delete = var.environment == "dev" ? true : false
 }
