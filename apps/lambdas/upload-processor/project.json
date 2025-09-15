@@ -20,11 +20,16 @@
       "dependsOn": ["build"],
       "outputs": ["{workspaceRoot}/dist/apps/lambdas/upload-processor/upload-processor.zip"]
     },
-    "deploy": {
+    "push": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "aws s3 cp dist/apps/lambdas/upload-processor/upload-processor.zip s3://${S3_BUCKET_NAME}/upload-processor.zip",
-        "envFile": ".env"
+        "command": "aws s3 cp dist/apps/lambdas/upload-processor/upload-processor.zip s3://{args.bucket}/upload-processor.zip"
+      }
+    },
+    "build-and-push": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nx run @gardbase/lambdas/upload-processor:build && nx run @gardbase/lambdas/upload-processor:package && nx run @gardbase/lambdas/upload-processor:push --bucket={args.bucket}"
       }
     },
     "serve": {
