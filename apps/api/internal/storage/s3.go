@@ -15,8 +15,14 @@ type S3Client struct {
 	presigner *s3.PresignClient
 }
 
-func NewS3Client(ctx context.Context, bucket string, cfg aws.Config) *S3Client {
-	client := s3.NewFromConfig(cfg)
+func NewS3Client(ctx context.Context, bucket string, cfg aws.Config, useLocalstack bool, localstackUrl string) *S3Client {
+	// add localstack endpoint resolver if needed
+	client := s3.NewFromConfig(cfg, func (o *s3.Options) {
+		o.UsePathStyle = true
+		if useLocalstack {
+			o.BaseEndpoint = aws.String(localstackUrl)
+		}
+	})
 	return &S3Client{
 		client: client,
 		Bucket: bucket,

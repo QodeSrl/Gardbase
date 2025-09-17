@@ -17,9 +17,13 @@ type DynamoClient struct {
 	IndexesTable string
 }
 
-func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, cfg aws.Config) *DynamoClient {
+func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
 	return &DynamoClient{
-		Client: dynamodb.NewFromConfig(cfg),
+		Client: dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+			if useLocalstack {
+				o.BaseEndpoint = aws.String(localstackUrl)
+			}
+		}),
 		ObjectsTable: objectsTable,
 		IndexesTable: indexesTable,
 	}
