@@ -30,6 +30,13 @@ func NewS3Client(ctx context.Context, bucket string, cfg aws.Config, useLocalsta
 	}
 }
 
+func (s *S3Client) TestConnnectivity(ctx context.Context) error {
+	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(s.Bucket),
+	})
+	return err
+}
+
 /*
    PresignPutObjectUrl generates a presigned URL for uploading an object to S3. 
 */

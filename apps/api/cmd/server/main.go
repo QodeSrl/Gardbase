@@ -82,7 +82,7 @@ func (s *Server) setupRoutes() {
 	api := s.router.Group("/api")
 
 	ctx := context.Background()
-	s3Client, dynamoClient, err := initStorage(ctx)
+	s3Client, dynamoClient, err := initStorage(ctx, s.logger)
 	if err != nil {
 		s.logger.Fatal("Failed to initialize storage clients", zap.Error(err))
 	}
@@ -130,7 +130,7 @@ func (s *Server) start() {
 	s.logger.Info("Server exited")
 }
 
-func initStorage(ctx context.Context) (*storage.S3Client, *storage.DynamoClient, error) {
+func initStorage(ctx context.Context, logger *zap.Logger) (*storage.S3Client, *storage.DynamoClient, error) {
 	awsConfig := loadAWSConfig()
 	
 	cfg, err := loadAWSSDKConfig(ctx, awsConfig)
@@ -140,6 +140,10 @@ func initStorage(ctx context.Context) (*storage.S3Client, *storage.DynamoClient,
 
 	s3Client := storage.NewS3Client(ctx, awsConfig.S3Bucket, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
+
+	if err := testAWSConnectivity(ctx, s3Client, dynamoClient, logger); err != nil {
+		return nil, nil, err
+	}
 
 	return s3Client, dynamoClient, nil
 } 
@@ -182,6 +186,20 @@ func loadAWSSDKConfig(ctx context.Context, awsConfig *AWSConfig) (aws.Config, er
 		return aws.Config{}, err
 	}
 	return cfg, nil
+}
+
+func testAWSConnectivity(ctx context.Context, s3Client *storage.S3Client, dynamoClient *storage.DynamoClient, logger *zap.Logger) error {
+	testCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if err := s3Client.TestConnnectivity(testCtx); err != nil {
+		logger.Error("S3 connectivity test failed", zap.Error(err))
+	}
+	if err := dynamoClient.TestConnnectivity(testCtx); err != nil {
+		logger.Error("DynamoDB connectivity test failed", zap.Error(err))
+	}
+
+	return nil
 }
 
 func getEnv(key string, defaultValue string) string {

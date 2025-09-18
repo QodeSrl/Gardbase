@@ -29,6 +29,13 @@ func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable stri
 	}
 }
 
+func (d *DynamoClient) TestConnnectivity(ctx context.Context) error {
+	_, err := d.Client.DescribeTable(ctx, &dynamodb.DescribeTableInput{
+		TableName: aws.String(d.ObjectsTable),
+	})
+	return err
+}
+
 /* 
    CreateObjectWithIndexes stores the given object in DynamoDB and creates associated index entries.
    It first marshals the object and index data into DynamoDB attribute maps.
