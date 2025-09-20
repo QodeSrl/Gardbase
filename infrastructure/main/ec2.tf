@@ -150,6 +150,10 @@ resource "aws_instance" "api" {
                 -e DYNAMO_OBJECTS_TABLE="${aws_dynamodb_table.objects.name}" \
                 -e DYNAMO_INDEXES_TABLE="${aws_dynamodb_table.indexes.name}" \
                 -e AWS_REGION="${var.region}" \
+                -e AWS_MAX_RETRIES="3" \
+                -e AWS_REQUEST_TIMEOUT="10" \
+                -e USE_LOCALSTACK="false" \
+                -e LOCALSTACK_URL="" \
                 -e ENVIRONMENT="${var.environment}" \
                 -e PORT="80" \
                 ${data.terraform_remote_state.bootstrap.outputs.ecr_repository_url}:latest
