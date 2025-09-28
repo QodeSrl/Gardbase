@@ -6,6 +6,12 @@ terraform {
       version = "~> 6.0"
     }
   }
+  backend "s3" {
+    bucket = "gardbase-terraform-state"
+    key    = "bootstrap/terraform.tfstate"
+    region = "eu-central-1"
+    encrypt = true
+  }
 }
 
 provider "aws" {

@@ -10,12 +10,20 @@ terraform {
       version = "~> 4.0"
     }
   }
+  backend "s3" {
+    bucket = "gardbase-terraform-state"
+    key    = "main/terraform.tfstate"
+    region = "eu-central-1"
+    encrypt = true
+  }
 }
 
 data "terraform_remote_state" "bootstrap" {
-  backend = "local"
+  backend = "s3"
   config = {
-    path = "../bootstrap/terraform.tfstate"
+    bucket = "gardbase-terraform-state"
+    key    = "bootstrap/terraform.tfstate"
+    region = "eu-central-1"
   }
 }
 
