@@ -9,24 +9,9 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"errors"
 	"fmt"
 )
-
-const (
-	AESKeySize = 32 // 256-bit AES key size
-	GMCNonceSize = 12 // GCM standard nonce size
-)
-
-func generateRandomBytes(size int) ([]byte, error) {
-	b := make([]byte, size)
-	_, err := rand.Read(b)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
 
 // TODO: implement KMS integration
 func EncryptObjectProbabilistic(masterKey, pt []byte) (cipherText []byte, encryptedDEK []byte, err error) {
