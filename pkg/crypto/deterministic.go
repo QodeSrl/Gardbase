@@ -52,6 +52,30 @@ func EncryptObjectDeterministic(masterKey, pt []byte, context string) (cipherTex
 	return ct, encryptedDEK, nil
 }
 
+func DecryptObjectDeterministic(masterKey, ct, encryptedDEK []byte, context string) (plainText []byte, err error) {
+	if (len(masterKey) != AESKeySize) {
+		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
+	}
+	if context == "" {
+		return nil, fmt.Errorf("context must not be empty for deterministic decryption")
+	}
+
+	// decrypt DEK with master key using context-derived nonce
+	dekContext := fmt.Sprintf("%s:%s", context, "dek")
+	dek, err := aesGCMDecryptDeterministic(masterKey, encryptedDEK, dekContext, contextDEKEncryption)
+	if err != nil {
+		return nil, err
+	}
+
+	// decrypt ct with DEK using context-derived nonce
+	pt, err := aesGCMDecryptDeterministic(dek, ct, context, contextDataEncryption)
+	if err != nil {
+		return nil, err
+	}
+
+	return pt, nil
+}
+
 func aesGCMEncryptDeterministic	(key, pt []byte, context string, contextType string) ([]byte, error) {
 	if len(key) != AESKeySize {
 		return nil, fmt.Errorf("invalid key size: %d", len(key))
@@ -71,4 +95,25 @@ func aesGCMEncryptDeterministic	(key, pt []byte, context string, contextType str
 	ct := gcm.Seal(nil, nonce, pt, []byte(context))
 
 	return ct, nil
+}
+
+func aesGCMDecryptDeterministic(key, ct []byte, context string, contextType string) ([]byte, error) {
+	if len(key) != AESKeySize {
+		return nil, fmt.Errorf("invalid key size: %d", len(key))
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonce := deriveNonceHMAC(key, context, contextType, gcm.NonceSize())
+	pt, err := gcm.Open(nil, nonce, ct, []byte(context))
+	if err != nil {
+		return nil, err
+	}
+	return pt, nil
 }
