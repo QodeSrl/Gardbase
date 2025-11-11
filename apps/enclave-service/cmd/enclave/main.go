@@ -3,20 +3,27 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 )
 
-type Request struct {
-	Type string `json:"type"`
-	Payload string `json:"payload"`
+type HealthResponse struct {
+	Status string `json:"status"`
+	Timestamp time.Time `json:"timestamp"`
+	Uptime string `json:"uptime"`
 }
 
+var startTime time.Time
+
 func main() {
+	startTime = time.Now()
 	log.Println("Starting enclave service...")
 
 	listener, err := net.Listen("tcp", ":8000")
@@ -62,7 +69,7 @@ func handleConnection(conn net.Conn) {
 		// for each request, reset deadline
 		conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
 
-		var req Request
+		var req utils.Request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
 			log.Printf("Failed to unmarshal request: %v", err)
 			// send error response
@@ -86,5 +93,14 @@ func handleConnection(conn net.Conn) {
 }
 
 func handleHealth(encoder *json.Encoder) {
-	// send success response
-}
+	uptime := time.Since(startTime).String()
+	res := utils.Response{
+		Success: true,
+		Data: HealthResponse{
+			Status: "healthy",
+			Timestamp: time.Now(),
+			Uptime: uptime,
+		},
+		Message: "Service is healthy",
+	}
+	}
