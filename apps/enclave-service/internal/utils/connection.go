@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"log"
 )
 
 type Request struct {
@@ -14,4 +15,21 @@ type Response struct {
 	Message string `json:"message,omitempty"`
 	Data    any    `json:"data,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+
+func SendResponse(encoder *json.Encoder, res Response) {
+	// encode the response as JSON and send it
+	if err := encoder.Encode(res); err != nil {
+		log.Printf("Failed to send response: %v", err)
+	}
+}
+
+func SendError(encoder *json.Encoder, errMsg string) {
+	response := Response{
+		Success: false,
+		Error:   errMsg,
+	}
+	if err := encoder.Encode(response); err != nil {
+		log.Printf("Failed to send error response: %v", err)
+	}
 }

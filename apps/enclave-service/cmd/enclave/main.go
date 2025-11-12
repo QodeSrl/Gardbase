@@ -72,7 +72,7 @@ func handleConnection(conn net.Conn) {
 		var req utils.Request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
 			log.Printf("Failed to unmarshal request: %v", err)
-			// send error response
+			utils.SendError(encoder, fmt.Sprintf("Invalid JSON: %v", err))
 			continue
 		}
 
@@ -83,7 +83,7 @@ func handleConnection(conn net.Conn) {
 			handleHealth(encoder)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
-			// send error response
+			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))
 		}
 	}
 
@@ -103,4 +103,5 @@ func handleHealth(encoder *json.Encoder) {
 		},
 		Message: "Service is healthy",
 	}
-	}
+	utils.SendResponse(encoder, res)
+}
