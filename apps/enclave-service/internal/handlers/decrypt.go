@@ -16,14 +16,14 @@ import (
 type DecryptRequest struct {
 	Ciphertext string `json:"ciphertext"` // Base64-encoded (encrypted dek)
 	Nonce      string `json:"nonce,omitempty"`
-	TenantID   string `json:"tenant_id,omitempty"`
-	ObjectID   string `json:"object_id,omitempty"`
+	KeyID 	   string `json:"key_id,omitempty"`
 }
 
 type DecryptResponse struct {
 	Plaintext string `json:"plaintext"` // Base64-encoded
 }
 
+// TODO: Encrypt response with client's ephemeral public key
 func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client) {
 	var req DecryptRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -67,6 +67,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	ctx := context.Background()
 	input := &kms.DecryptInput{
 		CiphertextBlob: ciphertext,
+		KeyId: &req.KeyID,
 	}
 
 	if attestationDoc != nil {

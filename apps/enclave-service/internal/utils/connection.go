@@ -8,6 +8,7 @@ import (
 type Request struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload,omitempty"`
+	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
 }
 
 type Response struct {
