@@ -9,9 +9,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/handlers"
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -43,7 +45,9 @@ func main() {
 		log.Fatalf("Failed to initiate NSM session: %v", err)
 	}
 
-	listener, err := vsock.Listen(8080, nil)
+	port := getEnvUint32("ENCLAVE_PORT", 8080)
+
+	listener, err := vsock.Listen(port, nil)
 	if err != nil {
 		log.Fatalf("Failed to start listener: %v", err)
 	}
@@ -123,6 +127,10 @@ func handleConnection(conn net.Conn) {
 		switch req.Type {
 		case "health":
 			handleHealth(encoder)
+		case "attestation":
+			handlers.HandleAttestation(encoder, req.Payload, nsmSession)
+		case "decrypt":
+			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
 			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))
@@ -151,6 +159,15 @@ func handleHealth(encoder *json.Encoder) {
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvUint32(key string, defaultValue uint32) uint32 {
+	if valueStr := os.Getenv(key); valueStr != "" {
+		if uintVal, err := strconv.ParseUint(valueStr, 10, 32); err == nil {
+			return uint32(uintVal)
+		}
 	}
 	return defaultValue
 }
