@@ -53,6 +53,8 @@ func main() {
 	server := NewServer(config, logger)
 
 	server.setupRoutes()
+	
+	server.setupEnclaveProxy()
 
 	server.start()
 }
@@ -94,6 +96,16 @@ func (s *Server) setupRoutes() {
 		objects.GET("/:id", objectHandler.Get)
 		objects.POST("", objectHandler.Create)
 	}
+}
+
+func (s *Server) setupEnclaveProxy() {
+	proxy := &handlers.VsockProxy{
+		EnclaveCID: getEnvUint32("ENCLAVE_CID", 16),
+		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
+	}
+	s.router.GET("/enclave/health", proxy.HandleHealth)
+	s.router.GET("/enclave/attestation", proxy.HandleAttestation)
+	s.router.POST("/enclave/decrypt", proxy.HandleDecrypt)
 }
 
 func (s *Server) start() {
@@ -226,6 +238,14 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		if boolValue, err := strconv.ParseBool(value); err == nil {
 			return boolValue
+		}
+	}
+	return defaultValue
+}
+func getEnvUint32(key string, defaultValue uint32) uint32 {
+	if value := os.Getenv(key); value != "" {
+		if uintVal, err := strconv.ParseUint(value, 10, 32); err == nil {
+			return uint32(uintVal)
 		}
 	}
 	return defaultValue
