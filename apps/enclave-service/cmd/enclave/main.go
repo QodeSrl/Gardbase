@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/hf/nsm"
+	"github.com/mdlayher/vsock"
 )
 
 type HealthResponse struct {
@@ -42,7 +43,7 @@ func main() {
 		log.Fatalf("Failed to initiate NSM session: %v", err)
 	}
 
-	listener, err := net.Listen("tcp", ":8000")
+	listener, err := vsock.Listen(8080, nil)
 	if err != nil {
 		log.Fatalf("Failed to start listener: %v", err)
 	}
