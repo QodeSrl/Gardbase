@@ -1,6 +1,4 @@
 // Order-Preserving and Range-Query Encryption using AES-GCM.
-// Master key: 32 bytes symmetric key used to encrypt tenant's DEKs.
-// DEK: Data Encryption Key, randomly generated 32 bytes symmetric key used to encrypt data.
 //
 // CRITICAL SECURITY WARNING
 // Order-preserving encryption (OPE) leaks order, approximate values, distribution, and frequency information.
@@ -20,34 +18,28 @@ import (
 // TODO: Replace with a more secure OPE scheme
 //
 // ct format: encrypted value (8 bytes)
-// encrypted DEK format: nonce(12) || gcmct
-
-func EncryptObjectLinearOPE(masterKey []byte, plaintext uint64) (cipherText []byte, encryptedDEK []byte, err error) {
-	if len(masterKey) != AESKeySize {
-		return nil, nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
-	}
-
-	// Generate a random DEK
-	dek, err := generateRandomBytes(AESKeySize)
-	if err != nil {
-		return nil, nil, err
+func EncryptObjectLinearOPE(dek []byte, plaintext uint64) (cipherText []byte, err error) {
+	if len(dek) != AESKeySize {
+		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
 	}
 
 	// Encrypt plaintext with DEK using linear OPE
-	ct, err := linearOPEEncrypt(dek, plaintext)
-	if err != nil {
-		return nil, nil, err
-	}
 
-	// Encrypt DEK with master key using standard AES-GCM
-	encryptedDEK, err = aesGMCEncrypt(masterKey, dek)
-	if err != nil {
-		return nil, nil, err
-	}
+	// Derive slope and intercept from key
+	a, b := deriveLinearParams(dek)
 
-	return ct, encryptedDEK, nil
+	// Perform linear transformation
+	// This preserves order: if pt1 < pt2, then ct1 < ct2
+	ciphertext := (a * plaintext) + b
+
+	// Encode as bytes
+	ct := make([]byte, 8)
+	binary.BigEndian.PutUint64(ct, ciphertext)
+
+	return ct, nil
 }
 
+// TODO: implement KMS and Nitro Enclaves integration
 // DecryptObjectLinearOPE decrypts data encrypted with EncryptObjectLinearOPE.
 func DecryptObjectLinearOPE(masterKey, ct, encryptedDEK []byte) (plainText uint64, err error) {
 	if len(masterKey) != AESKeySize {
@@ -67,26 +59,6 @@ func DecryptObjectLinearOPE(masterKey, ct, encryptedDEK []byte) (plainText uint6
 	}
 
 	return pt, nil
-}
-
-// linearOPEEncrypt performs simple linear transformation: ct = (a * pt + b) mod 2^64
-func linearOPEEncrypt(key []byte, plaintext uint64) ([]byte, error) {
-	if len(key) != AESKeySize {
-		return nil, fmt.Errorf("invalid key size: %d", len(key))
-	}
-
-	// Derive slope and intercept from key
-	a, b := deriveLinearParams(key)
-
-	// Perform linear transformation
-	// This preserves order: if pt1 < pt2, then ct1 < ct2
-	ciphertext := (a * plaintext) + b
-
-	// Encode as bytes
-	ct := make([]byte, 8)
-	binary.BigEndian.PutUint64(ct, ciphertext)
-
-	return ct, nil
 }
 
 // linearOPEDecrypt performs inverse linear transformation: pt = (ct - b) / a

@@ -1,8 +1,5 @@
 // Probabilistic encryption using AES-GCM.
-// Master key: 32 bytes symmetric key used to encrypt tenant's DEKs.
-// DEK: Data Encryption Key, randomly generate 32 bytes symmetric key used to encrypt data.
 // ct format: nonce(12) || gcmct
-// encrypted DEK format: nonce(12) || gcmct
 
 package crypto
 
@@ -13,55 +10,13 @@ import (
 	"fmt"
 )
 
-// TODO: implement KMS integration
-func EncryptObjectProbabilistic(masterKey, pt []byte) (cipherText []byte, encryptedDEK []byte, err error) {
-	if (len(masterKey) != AESKeySize) {
-		return nil, nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
-	}
-
-	// generate a random DEK
-	dek, err := generateRandomBytes(AESKeySize)
-	if err != nil {
-		return nil, nil, err
+func EncryptObjectProbabilistic(dek []byte, pt []byte) (cipherText []byte, err error) {
+	if (len(dek) != AESKeySize) {
+		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
 	}
 
 	// encrypt pt with DEK
-	ct, err := aesGMCEncrypt(dek, pt)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// encrypt DEK with master key
-	encryptedDEK, err = aesGMCEncrypt(masterKey, dek)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return ct, encryptedDEK, nil
-}
-
-func DecryptObjectProbabilistic(masterKey, ct, encryptedDEK []byte) (plainText []byte, err error) {
-	if (len(masterKey) != AESKeySize) {
-		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
-	}
-	// decrypt DEK with master key
-	dek, err := aesGCMDecrypt(masterKey, encryptedDEK)
-	if err != nil {
-		return nil, err
-	}
-	// decrypt ct with DEK
-	pt, err := aesGCMDecrypt(dek, ct)
-	if err != nil {
-		return nil, err
-	}
-	return pt, nil
-}
-
-func aesGMCEncrypt(key, pt []byte) ([]byte, error) {
-	if len(key) != AESKeySize {
-		return nil, fmt.Errorf("invalid key size: %d", len(key))
-	}
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(dek)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +33,26 @@ func aesGMCEncrypt(key, pt []byte) ([]byte, error) {
 	out := make([]byte, 0, len(nonce)+len(ct))
 	out = append(out, nonce...)
 	out = append(out, ct...)
-	return out, nil
+
+	return ct, nil
+}
+
+// TODO: implement KMS and Nitro Enclaves integration
+func DecryptObjectProbabilistic(masterKey, ct, encryptedDEK []byte) (plainText []byte, err error) {
+	if (len(masterKey) != AESKeySize) {
+		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
+	}
+	// decrypt DEK with master key
+	dek, err := aesGCMDecrypt(masterKey, encryptedDEK)
+	if err != nil {
+		return nil, err
+	}
+	// decrypt ct with DEK
+	pt, err := aesGCMDecrypt(dek, ct)
+	if err != nil {
+		return nil, err
+	}
+	return pt, nil
 }
 
 func aesGCMDecrypt(key, input []byte) ([]byte, error) {
