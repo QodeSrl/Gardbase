@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -11,6 +14,7 @@ import (
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
+	"golang.org/x/crypto/nacl/box"
 )
 
 type DecryptRequest struct {
@@ -20,11 +24,21 @@ type DecryptRequest struct {
 }
 
 type DecryptResponse struct {
-	Plaintext string `json:"plaintext"` // Base64-encoded
+	EnclavePubKey string `json:"enclave_public_key"` // Base64-encoded (x25519 pub key)
+	Ciphertext    string `json:"ciphertext"`         // Base64-encoded 
+	Nonce         string `json:"nonce"`              // Base64-encoded
+	RequestNonce  string `json:"request_nonce,omitempty"`
 }
 
-// TODO: Encrypt response with client's ephemeral public key
-func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client) {
+func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, clientEphemeralPublicKey string, pubKeyBytes []byte, privKey *rsa.PrivateKey) {
+	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(clientEphemeralPublicKey);
+	if err != nil || len(clientPubKeyBytes) != 32 {
+		utils.SendError(encoder, "Invalid client ephemeral key")
+		return
+	}
+	var clientPubKey [32]byte
+	copy(clientPubKey[:], clientPubKeyBytes)
+
 	var req DecryptRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
@@ -44,7 +58,9 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 
 	var attestationDoc []byte
 	if nsmSession != nil {
-		attestationReq := request.Attestation{}
+		attestationReq := request.Attestation{
+			PublicKey: pubKeyBytes,
+		}
 		if req.Nonce != "" {
 			nonce, err := base64.StdEncoding.DecodeString(req.Nonce)
 			if err != nil {
@@ -83,11 +99,46 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		return
 	}
 
+	if len(output.CiphertextForRecipient) == 0 {
+    	utils.SendError(encoder, "KMS did not return ciphertext for recipient")
+    	return
+	}
+
+	decryptedOutput, err := rsa.DecryptOAEP(
+		sha256.New(),
+		nsmSession,
+		privKey,
+		output.CiphertextForRecipient,
+		nil,
+	)
+	if err != nil {
+		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
+		return
+	}
+
+	var enclavePubKey, enclavePrivKey *[32]byte
+	enclavePubKey, enclavePrivKey, err = box.GenerateKey(rand.Reader)
+	if err != nil {
+		utils.SendError(encoder, fmt.Sprintf("Failed to generate enclave key pair: %v", err))
+		return
+	}
+
+	nonce := new([24]byte)
+	if _, err := rand.Read(nonce[:]); err != nil {
+		utils.SendError(encoder, "Failed to generate nonce")
+		return
+	}
+
+	ciphertextBox := box.Seal(nonce[:], decryptedOutput, nonce, &clientPubKey, enclavePrivKey)
+
 	resp := utils.Response{
 		Success: true,
 		Message: "Decryption successful",
 		Data: DecryptResponse{
-			Plaintext: base64.StdEncoding.EncodeToString(output.Plaintext),
+			EnclavePubKey: base64.StdEncoding.EncodeToString(enclavePubKey[:]),
+			Ciphertext:    base64.StdEncoding.EncodeToString(ciphertextBox),
+			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
+			RequestNonce:  req.Nonce,
 		},
 	}
 

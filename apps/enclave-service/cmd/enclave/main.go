@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -31,6 +33,8 @@ var (
 	startTime time.Time
 	kmsClient *kms.Client
 	nsmSession *nsm.Session
+	nsmPrivateKey *rsa.PrivateKey
+	nsmPublicKeyBytes []byte
 )
 
 func main() {
@@ -97,7 +101,14 @@ func initiateNSM() error {
 	if err != nil {
 		return fmt.Errorf("failed to open NSM session: %v", err)
 	}
+	defer session.Close()
 	nsmSession = session
+	key, err := rsa.GenerateKey(session, 2048)
+	if err != nil {
+		return fmt.Errorf("failed to generate RSA key: %v", err)
+	}
+	nsmPrivateKey = key
+	nsmPublicKeyBytes = x509.MarshalPKCS1PublicKey(&key.PublicKey)
 	log.Println("NSM session initiated")
 	return nil
 }
@@ -130,7 +141,7 @@ func handleConnection(conn net.Conn) {
 		case "attestation":
 			handlers.HandleAttestation(encoder, req.Payload, nsmSession)
 		case "decrypt":
-			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient)
+			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, req.ClientEphemeralPublicKey, nsmPublicKeyBytes, nsmPrivateKey)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
 			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))
