@@ -11,21 +11,26 @@ import (
 )
 
 type VsockProxy struct {
+	// Enclave context ID
 	EnclaveCID  uint32
+	// Enclave listening port
 	EnclavePort uint32
 }
 
 type EnclaveRequest struct {
-	Type    string  `json:"type"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
+	// "health", "attestation", "decrypt", etc.
+	Type                     string          `json:"type,omitempty"`
+	// Request-specific payload 
+	Payload                  json.RawMessage `json:"payload"`
+	// Client's ephemeral public key 
+	ClientEphemeralPublicKey string          `json:"client_ephemeral_public_key"`
 }
 
 type EnclaveResponse struct {
-	Success bool   `json:"success"`
+	Success bool   `json:"success,omitempty"`
 	Message string `json:"message,omitempty"`
 	Data    any    `json:"data,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Error   string `json:"error"`
 }
 
 func (p *VsockProxy) HandleHealth(c *gin.Context) {
@@ -57,8 +62,11 @@ func (p *VsockProxy) HandleAttestation(c *gin.Context) {
 }
 
 type DecryptRequest struct {
-	Ciphertext string `json:"ciphertext"` // Base64-encoded (encrypted dek)
+	// Encrypted DEK, Base64-encoded
+	Ciphertext string `json:"ciphertext,omitempty"`
+	// Request nonce, Base64-encoded
 	Nonce      string `json:"nonce,omitempty"`
+	// KMS Key ID
 	KeyID 	   string `json:"key_id,omitempty"`
 }
 
@@ -77,6 +85,7 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal decrypt request: %v", err)})
 		return
 	}
+	// build enclave request
 	req := EnclaveRequest{
 		Type: "decrypt",
 		Payload: json.RawMessage(payloadBytes),
@@ -91,11 +100,12 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 }
 
 func (p *VsockProxy) sendToEnclave(req EnclaveRequest, timeout time.Duration) ([]byte, error) {
-	payload, err := json.Marshal(req)
+	jsonReq, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
 
+	// connect to enclave via vsock
 	conn, err := vsock.Dial(p.EnclaveCID, p.EnclavePort, nil)
 	if err != nil {
 		return nil, err
@@ -104,11 +114,13 @@ func (p *VsockProxy) sendToEnclave(req EnclaveRequest, timeout time.Duration) ([
 
 	conn.SetDeadline(time.Now().Add(timeout))
 
-	_, err = conn.Write(append(payload, '\n'))
+	// send request
+	_, err = conn.Write(append(jsonReq, '\n'))
 	if err != nil {
 		return nil, err
 	}
 
+	// read response through scanner 
 	scanner := bufio.NewScanner(conn)
 	if scanner.Scan() {
 		return scanner.Bytes(), nil

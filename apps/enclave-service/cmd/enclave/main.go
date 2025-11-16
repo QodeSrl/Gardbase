@@ -97,18 +97,23 @@ func initializeAWS() error {
 }
 
 func initiateNSM() error {
+	// open NSM session
 	session, err := nsm.OpenDefaultSession()
 	if err != nil {
 		return fmt.Errorf("failed to open NSM session: %v", err)
 	}
 	defer session.Close()
 	nsmSession = session
+
+	// generate RSA key pair for NSM session
 	key, err := rsa.GenerateKey(session, 2048)
 	if err != nil {
 		return fmt.Errorf("failed to generate RSA key: %v", err)
 	}
 	nsmPrivateKey = key
+	// marshal public key for later use
 	nsmPublicKeyBytes = x509.MarshalPKCS1PublicKey(&key.PublicKey)
+
 	log.Println("NSM session initiated")
 	return nil
 }

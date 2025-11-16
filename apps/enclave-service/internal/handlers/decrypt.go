@@ -18,15 +18,22 @@ import (
 )
 
 type DecryptRequest struct {
-	Ciphertext string `json:"ciphertext"` // Base64-encoded (encrypted dek)
+	// Encrypted DEK, Base64-encoded
+	Ciphertext string `json:"ciphertext,omitempty"`
+	// Request nonce, Base64-encoded
 	Nonce      string `json:"nonce,omitempty"`
+	// KMS Key ID
 	KeyID 	   string `json:"key_id,omitempty"`
 }
 
 type DecryptResponse struct {
-	EnclavePubKey string `json:"enclave_public_key"` // Base64-encoded (x25519 pub key)
-	Ciphertext    string `json:"ciphertext"`         // Base64-encoded 
-	Nonce         string `json:"nonce"`              // Base64-encoded
+	// x25519 public key of the enclave, Base64-encoded
+	EnclavePubKey string `json:"enclave_public_key,omitempty"`
+	// Unwrapped DEK, encrypted with NaCl box, Base64-encoded
+	Ciphertext    string `json:"ciphertext,omitempty"`
+	// Nonce used for NaCl box encryption, Base64-encoded
+	Nonce         string `json:"nonce,omitempty"`
+	// Request nonce, Base64-encoded
 	RequestNonce  string `json:"request_nonce,omitempty"`
 }
 
@@ -45,17 +52,13 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		return
 	}
 
-	if req.Ciphertext == "" {
-		utils.SendError(encoder, "Ciphertext is required")
-		return
-	}
-
 	ciphertext, err := base64.StdEncoding.DecodeString(req.Ciphertext);
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid ciphertext encoding: %v", err))
 		return
 	}
 
+	// generate attestation document for KMS, based on NSM public key and (request's) nonce
 	var attestationDoc []byte
 	if nsmSession != nil {
 		attestationReq := request.Attestation{
@@ -86,6 +89,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		KeyId: &req.KeyID,
 	}
 
+	// include attestation document if available
 	if attestationDoc != nil {
 		input.Recipient = &kmsTypes.RecipientInfo{
 			AttestationDocument: attestationDoc,
@@ -98,38 +102,33 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		utils.SendError(encoder, fmt.Sprintf("KMS decrypt failed: %v", err))
 		return
 	}
-
 	if len(output.CiphertextForRecipient) == 0 {
     	utils.SendError(encoder, "KMS did not return ciphertext for recipient")
     	return
 	}
 
-	decryptedOutput, err := rsa.DecryptOAEP(
-		sha256.New(),
-		nsmSession,
-		privKey,
-		output.CiphertextForRecipient,
-		nil,
-	)
+	// decrypt the ciphertext for recipient using NSM private key
+	decryptedOutput, err := rsa.DecryptOAEP(sha256.New(), nsmSession, privKey, output.CiphertextForRecipient, nil)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
 		return
 	}
 
-	var enclavePubKey, enclavePrivKey *[32]byte
-	enclavePubKey, enclavePrivKey, err = box.GenerateKey(rand.Reader)
+	// encrypt the decrypted DEK using NaCl box with client's ephemeral public key
+	enclavePubKey, enclavePrivKey, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to generate enclave key pair: %v", err))
 		return
 	}
-
-	nonce := new([24]byte)
+	var nonce [24]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		utils.SendError(encoder, "Failed to generate nonce")
 		return
 	}
+	ciphertextBox := box.Seal(nonce[:], decryptedOutput, &nonce, &clientPubKey, enclavePrivKey)
 
-	ciphertextBox := box.Seal(nonce[:], decryptedOutput, nonce, &clientPubKey, enclavePrivKey)
+	// On the client side, the DEK can be decrypted using:
+	// box.Open(nil, ciphertextBox, &nonce, &enclavePubKey, clientPrivKey)
 
 	resp := utils.Response{
 		Success: true,
