@@ -56,15 +56,30 @@ func (p *VsockProxy) HandleAttestation(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
+type DecryptRequest struct {
+	Ciphertext string `json:"ciphertext"` // Base64-encoded (encrypted dek)
+	Nonce      string `json:"nonce,omitempty"`
+	KeyID 	   string `json:"key_id,omitempty"`
+}
+
 func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
-	reqBody, err := c.GetRawData()
+	var decryptReq  DecryptRequest
+	if err := c.BindJSON(&decryptReq); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid decrypt request: %v", err)})
+		return
+	}
+	if decryptReq.Ciphertext == "" {
+		c.JSON(400, gin.H{"error": "Ciphertext is required"})
+		return
+	}
+	payloadBytes, err := json.Marshal(decryptReq)
 	if err != nil {
-		c.JSON(400, gin.H{"error": "failed to read request body"})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal decrypt request: %v", err)})
 		return
 	}
 	req := EnclaveRequest{
 		Type: "decrypt",
-		Payload: json.RawMessage(reqBody),
+		Payload: json.RawMessage(payloadBytes),
 		ClientEphemeralPublicKey: c.GetHeader("X-Client-Ephemeral-Public-Key"),
 	}
 	res, err := p.sendToEnclave(req, 15*time.Second)
