@@ -35,6 +35,8 @@ type DecryptResponse struct {
 	Nonce         string `json:"nonce,omitempty"`
 	// Request nonce, Base64-encoded
 	RequestNonce  string `json:"request_nonce,omitempty"`
+	// Attestation used for KMS decryption, Base64-encoded
+	Attestation string `json:"attestation,omitempty"`
 }
 
 func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, clientEphemeralPublicKey string, pubKeyBytes []byte, privKey *rsa.PrivateKey) {
@@ -108,7 +110,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	}
 
 	// decrypt the ciphertext for recipient using NSM private key
-	decryptedOutput, err := rsa.DecryptOAEP(sha256.New(), nsmSession, privKey, output.CiphertextForRecipient, nil)
+	decryptedOutput, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privKey, output.CiphertextForRecipient, nil)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
 		return
@@ -138,6 +140,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 			Ciphertext:    base64.StdEncoding.EncodeToString(ciphertextBox),
 			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
 			RequestNonce:  req.Nonce,
+			Attestation: base64.StdEncoding.EncodeToString(attestationDoc),
 		},
 	}
 

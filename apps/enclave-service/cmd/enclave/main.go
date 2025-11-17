@@ -143,8 +143,6 @@ func handleConnection(conn net.Conn) {
 		switch req.Type {
 		case "health":
 			handleHealth(encoder)
-		case "attestation":
-			handlers.HandleAttestation(encoder, req.Payload, nsmSession)
 		case "decrypt":
 			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, req.ClientEphemeralPublicKey, nsmPublicKeyBytes, nsmPrivateKey)
 		default:

@@ -47,20 +47,6 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
-func (p *VsockProxy) HandleAttestation(c *gin.Context) {
-	req := EnclaveRequest{
-		Type: "attestation",
-		Payload: nil,
-		ClientEphemeralPublicKey: c.GetHeader("X-Client-Ephemeral-Public-Key"),
-	}
-	res, err := p.sendToEnclave(req, 10*time.Second)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	c.Data(200, "application/json", res)
-}
-
 type DecryptRequest struct {
 	// Encrypted DEK, Base64-encoded
 	Ciphertext string `json:"ciphertext,omitempty"`
