@@ -50,6 +50,8 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 type DecryptRequest struct {
 	// Encrypted DEK, Base64-encoded
 	Ciphertext string `json:"ciphertext,omitempty"`
+	// Client's ephemeral public key
+	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
 	// Request nonce, Base64-encoded
 	Nonce      string `json:"nonce,omitempty"`
 	// KMS Key ID
@@ -62,10 +64,6 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid decrypt request: %v", err)})
 		return
 	}
-	if decryptReq.Ciphertext == "" {
-		c.JSON(400, gin.H{"error": "Ciphertext is required"})
-		return
-	}
 	payloadBytes, err := json.Marshal(decryptReq)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal decrypt request: %v", err)})
@@ -75,7 +73,7 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	req := EnclaveRequest{
 		Type: "decrypt",
 		Payload: json.RawMessage(payloadBytes),
-		ClientEphemeralPublicKey: c.GetHeader("X-Client-Ephemeral-Public-Key"),
+		ClientEphemeralPublicKey: decryptReq.ClientEphemeralPublicKey,
 	}
 	res, err := p.sendToEnclave(req, 15*time.Second)
 	if err != nil {

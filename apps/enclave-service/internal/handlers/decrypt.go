@@ -20,6 +20,8 @@ import (
 type DecryptRequest struct {
 	// Encrypted DEK, Base64-encoded
 	Ciphertext string `json:"ciphertext,omitempty"`
+	// Client's ephemeral public key
+	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
 	// Request nonce, Base64-encoded
 	Nonce      string `json:"nonce,omitempty"`
 	// KMS Key ID
@@ -36,23 +38,24 @@ type DecryptResponse struct {
 	// Request nonce, Base64-encoded
 	RequestNonce  string `json:"request_nonce,omitempty"`
 	// Attestation used for KMS decryption, Base64-encoded
-	Attestation string `json:"attestation,omitempty"`
+	Attestation string `json:"attestation,omitempty"` // TODO: implement client-side verification of attestation
 }
 
-func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, clientEphemeralPublicKey string, pubKeyBytes []byte, privKey *rsa.PrivateKey) {
-	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(clientEphemeralPublicKey);
+// TODO: this is expensive in a case of high request rates; consider implementing a session model 
+func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, pubKeyBytes []byte, privKey *rsa.PrivateKey) {
+	var req DecryptRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
+		return
+	}
+
+	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey);
 	if err != nil || len(clientPubKeyBytes) != 32 {
 		utils.SendError(encoder, "Invalid client ephemeral key")
 		return
 	}
 	var clientPubKey [32]byte
 	copy(clientPubKey[:], clientPubKeyBytes)
-
-	var req DecryptRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
-		return
-	}
 
 	ciphertext, err := base64.StdEncoding.DecodeString(req.Ciphertext);
 	if err != nil {

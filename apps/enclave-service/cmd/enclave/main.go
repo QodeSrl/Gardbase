@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,9 +33,22 @@ type HealthResponse struct {
 var (
 	startTime time.Time
 	kmsClient *kms.Client
+)
+
+var (
 	nsmSession *nsm.Session
 	nsmPrivateKey *rsa.PrivateKey
 	nsmPublicKeyBytes []byte
+)
+
+type sessionEntry struct {
+	key []byte // session AEAD key, 32 bytes
+	expiresAt time.Time
+}
+
+var (
+	sessions = make(map[string]*sessionEntry)
+	sessionsMu sync.Mutex
 )
 
 func main() {
@@ -144,7 +158,7 @@ func handleConnection(conn net.Conn) {
 		case "health":
 			handleHealth(encoder)
 		case "decrypt":
-			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, req.ClientEphemeralPublicKey, nsmPublicKeyBytes, nsmPrivateKey)
+			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, nsmPublicKeyBytes, nsmPrivateKey)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
 			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))
