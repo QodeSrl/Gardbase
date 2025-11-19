@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/gin-gonic/gin"
 	"github.com/mdlayher/vsock"
 )
@@ -17,22 +18,8 @@ type VsockProxy struct {
 	EnclavePort uint32
 }
 
-type EnclaveRequest struct {
-	// "health", "attestation", "decrypt", etc.
-	Type                     string          `json:"type,omitempty"`
-	// Request-specific payload 
-	Payload                  json.RawMessage `json:"payload"`
-}
-
-type EnclaveResponse struct {
-	Success bool   `json:"success,omitempty"`
-	Message string `json:"message,omitempty"`
-	Data    any    `json:"data,omitempty"`
-	Error   string `json:"error"`
-}
-
 func (p *VsockProxy) HandleHealth(c *gin.Context) {
-	req := EnclaveRequest{
+	req := enclaveproto.Request{
 		Type: "health",
 		Payload: nil,
 	}
@@ -44,15 +31,8 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
-type SessionInitRequest struct {
-	// Client's ephemeral public key
-	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
-	// Session nonce, Base64-encoded
-	Nonce 				     string `json:"nonce"`
-}
-
 func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
-	var initReq SessionInitRequest;
+	var initReq enclaveproto.SessionInitRequest;
 	if err := c.BindJSON(&initReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
 		return
@@ -62,7 +42,7 @@ func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session init request: %v", err)})
 		return
 	}
-	req := EnclaveRequest{
+	req := enclaveproto.Request{
 		Type: "session_init",
 		Payload: json.RawMessage(payloadBytes),
 	}
@@ -74,21 +54,8 @@ func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
-type SessionUnwrapRequest struct {
-	// Session ID, Base64-encoded
-	SessionId string `json:"session_id,omitempty"`
-	// KMS Key ID
-	KeyId string `json:"key_id,omitempty"`
-	Items     []struct {
-		// Object ID
-		ObjectId string `json:"object_id"`
-		// Encrypted DEK, Base64-encoded
-		Ciphertext string `json:"ciphertext"`
-	} `json:"items"`
-}
-
 func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
-	var unwrapReq SessionUnwrapRequest;
+	var unwrapReq enclaveproto.SessionUnwrapRequest;
 	if err := c.BindJSON(&unwrapReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
 		return
@@ -98,7 +65,7 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
 		return
 	}
-	req := EnclaveRequest{
+	req := enclaveproto.Request{
 		Type: "session_unwrap",
 		Payload: json.RawMessage(payloadBytes),
 	}
@@ -110,19 +77,8 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
-type DecryptRequest struct {
-	// Encrypted DEK, Base64-encoded
-	Ciphertext string `json:"ciphertext,omitempty"`
-	// Client's ephemeral public key
-	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
-	// Request nonce, Base64-encoded
-	Nonce      string `json:"nonce,omitempty"`
-	// KMS Key ID
-	KeyID 	   string `json:"key_id,omitempty"`
-}
-
 func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
-	var decryptReq  DecryptRequest
+	var decryptReq enclaveproto.DecryptRequest
 	if err := c.BindJSON(&decryptReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid decrypt request: %v", err)})
 		return
@@ -133,7 +89,7 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 		return
 	}
 	// build enclave request
-	req := EnclaveRequest{
+	req := enclaveproto.Request{
 		Type: "decrypt",
 		Payload: json.RawMessage(payloadBytes),
 	}
@@ -145,7 +101,7 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
-func (p *VsockProxy) sendToEnclave(req EnclaveRequest, timeout time.Duration) ([]byte, error) {
+func (p *VsockProxy) sendToEnclave(req enclaveproto.Request, timeout time.Duration) ([]byte, error) {
 	jsonReq, err := json.Marshal(req)
 	if err != nil {
 		return nil, err

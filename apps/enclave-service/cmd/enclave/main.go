@@ -17,6 +17,7 @@ import (
 
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/handlers"
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/hf/nsm"
@@ -128,7 +129,7 @@ func handleConnection(conn net.Conn) {
 		// for each request, reset deadline
 		conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
 
-		var req utils.Request
+		var req enclaveproto.Request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
 			log.Printf("Failed to unmarshal request: %v", err)
 			utils.SendError(encoder, fmt.Sprintf("Invalid JSON: %v", err))

@@ -9,31 +9,16 @@ import (
 
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/session"
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 	"golang.org/x/crypto/curve25519"
 )
 
-type SessionInitRequest struct {
-	// Client's ephemeral public key
-	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
-	// Session nonce, Base64-encoded
-	Nonce 				     string `json:"nonce"`
-}
 
-type SessionInitResponse struct {
-	// Session ID, Base64-encoded
-	SessionId string `json:"session_id,omitempty"`
-	// Enclave's ephemeral public key, Base64-encoded
-	EnclaveEphemeralPublicKey string `json:"enclave_ephemeral_public_key,omitempty"`
-	// Attestation document, Base64-encoded
-	Attestation string `json:"attestation,omitempty"`
-	// Session expiration time, RFC3339 format
-	ExpiresAt string `json:"expires_at,omitempty"`
-}
 
 func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session) {
-	var req SessionInitRequest
+	var req enclaveproto.SessionInitRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
 		return
@@ -102,7 +87,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 		}
 	}
 
-	res := SessionInitResponse{
+	res := enclaveproto.SessionInitResponse{
 		SessionId: sidB64,
 		EnclaveEphemeralPublicKey: base64.StdEncoding.EncodeToString(ephPub[:]),
 		ExpiresAt: expiresAt.Format(time.RFC3339),
@@ -110,5 +95,5 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	if len(attestationDoc) > 0 {
 		res.Attestation = base64.StdEncoding.EncodeToString(attestationDoc)
 	}
-	utils.SendResponse(encoder, utils.Response{ Success: true, Data: res })
+	utils.SendResponse(encoder, enclaveproto.Response{ Success: true, Data: res })
 }

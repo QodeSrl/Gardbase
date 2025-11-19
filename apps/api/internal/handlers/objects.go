@@ -15,8 +15,6 @@ type ObjectHandler struct {
 	S3Client *storage.S3Client
 	Dynamo *storage.DynamoClient
 	PresignTTL time.Duration
-	EnclaveEndpoint string
-	EnclavePublicKey string
 }
 
 func NewObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoClient) *ObjectHandler {
@@ -100,9 +98,6 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		EncryptedDEK: obj.EncryptedDEK,
 		CreatedAt: obj.CreatedAt,
 		Version: obj.Version,
-
-		EnclaveEndpoint: h.EnclaveEndpoint,
-		EnclavePublicKey: h.EnclavePublicKey,
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -132,7 +127,4 @@ type GetObjectResponse struct {
 	EncryptedDEK string    `json:"encrypted_dek"`
 	CreatedAt    time.Time `json:"created_at"`
 	Version      int32     `json:"version"`
-
-	EnclaveEndpoint string `json:"enclave_endpoint"`
-	EnclavePublicKey string `json:"enclave_public_key,omitempty"`
 }

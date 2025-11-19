@@ -3,21 +3,11 @@ package utils
 import (
 	"encoding/json"
 	"log"
+
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 )
 
-type Request struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-}
-
-type Response struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	Data    any    `json:"data,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
-
-func SendResponse(encoder *json.Encoder, res Response) {
+func SendResponse(encoder *json.Encoder, res enclaveproto.Response) {
 	// encode the response as JSON and send it
 	if err := encoder.Encode(res); err != nil {
 		log.Printf("Failed to send response: %v", err)
@@ -25,7 +15,7 @@ func SendResponse(encoder *json.Encoder, res Response) {
 }
 
 func SendError(encoder *json.Encoder, errMsg string) {
-	response := Response{
+	response := enclaveproto.Response{
 		Success: false,
 		Error:   errMsg,
 	}

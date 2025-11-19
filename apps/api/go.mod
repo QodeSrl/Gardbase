@@ -3,6 +3,7 @@ module github.com/QodeSrl/gardbase/apps/api
 go 1.24.4
 
 require (
+	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.0-00010101000000-000000000000
 	github.com/QodeSrl/gardbase/pkg/models v0.0.0
 	github.com/aws/aws-sdk-go-v2 v1.38.0
 	github.com/aws/aws-sdk-go-v2/config v1.30.3
@@ -11,7 +12,13 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.86.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
+	github.com/mdlayher/vsock v1.2.1
 	go.uber.org/zap v1.27.0
+)
+
+require (
+	github.com/mdlayher/socket v0.4.1 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 )
 
 require (
@@ -62,3 +69,5 @@ require (
 )
 
 replace github.com/QodeSrl/gardbase/pkg/models => ../../pkg/models
+
+replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../../pkg/enclaveproto

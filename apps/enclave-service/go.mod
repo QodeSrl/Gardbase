@@ -3,10 +3,12 @@ module github.com/QodeSrl/gardbase/apps/enclave-service
 go 1.24.4
 
 require (
+	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.0
 	github.com/aws/aws-sdk-go-v2/config v1.31.20
 	github.com/aws/aws-sdk-go-v2/service/kms v1.48.2
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9
 	github.com/mdlayher/vsock v1.2.1
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 )
 
 require (
@@ -29,3 +31,5 @@ require (
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 )
+
+replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../../pkg/enclaveproto

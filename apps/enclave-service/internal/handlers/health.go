@@ -5,19 +5,14 @@ import (
 	"time"
 
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 )
-
-type HealthResponse struct {
-	Status    string    `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-	Uptime    string    `json:"uptime"`
-}
 
 func HandleHealth(encoder *json.Encoder, startTime time.Time) {
 	uptime := time.Since(startTime).String()
-	res := utils.Response{
+	res := enclaveproto.Response{
 		Success: true,
-		Data: HealthResponse{
+		Data: enclaveproto.HealthResponse{
 			Status:    "healthy",
 			Timestamp: time.Now(),
 			Uptime:    uptime,

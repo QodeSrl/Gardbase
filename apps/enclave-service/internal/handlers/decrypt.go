@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
@@ -17,32 +19,8 @@ import (
 	"golang.org/x/crypto/nacl/box"
 )
 
-type DecryptRequest struct {
-	// Encrypted DEK, Base64-encoded
-	Ciphertext string `json:"ciphertext,omitempty"`
-	// Client's ephemeral public key
-	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
-	// Request nonce, Base64-encoded
-	Nonce      string `json:"nonce,omitempty"`
-	// KMS Key ID
-	KeyID 	   string `json:"key_id,omitempty"`
-}
-
-type DecryptResponse struct {
-	// x25519 public key of the enclave, Base64-encoded
-	EnclavePubKey string `json:"enclave_public_key,omitempty"`
-	// Unwrapped DEK, encrypted with NaCl box, Base64-encoded
-	Ciphertext    string `json:"ciphertext,omitempty"`
-	// Nonce used for NaCl box encryption, Base64-encoded
-	Nonce         string `json:"nonce,omitempty"`
-	// Request nonce, Base64-encoded
-	RequestNonce  string `json:"request_nonce,omitempty"`
-	// Attestation used for KMS decryption, Base64-encoded
-	Attestation string `json:"attestation,omitempty"` // TODO: implement client-side verification of attestation
-}
-
 func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, pubKeyBytes []byte, nsmPrivKey *rsa.PrivateKey) {
-	var req DecryptRequest
+	var req enclaveproto.DecryptRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
 		return
@@ -134,10 +112,10 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	// On the client side, the DEK can be decrypted using:
 	// box.Open(nil, ciphertextBox, &nonce, &enclavePubKey, clientPrivKey)
 
-	resp := utils.Response{
+	resp := enclaveproto.Response{
 		Success: true,
 		Message: "Decryption successful",
-		Data: DecryptResponse{
+		Data: enclaveproto.DecryptResponse{
 			EnclavePubKey: base64.StdEncoding.EncodeToString(enclavePubKey[:]),
 			Ciphertext:    base64.StdEncoding.EncodeToString(ciphertextBox),
 			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
