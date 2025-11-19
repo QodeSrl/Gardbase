@@ -47,6 +47,37 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
+type SessionInitRequest struct {
+	// Client's ephemeral public key
+	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key,omitempty"`
+	// Session nonce, Base64-encoded
+	Nonce 				     string `json:"nonce"`
+}
+
+func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
+	var initReq SessionInitRequest;
+	if err := c.BindJSON(&initReq); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
+		return
+	}
+	payloadBytes, err := json.Marshal(initReq); 
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session init request: %v", err)})
+		return
+	}
+	req := EnclaveRequest{
+		Type: "session_init",
+		Payload: json.RawMessage(payloadBytes),
+		ClientEphemeralPublicKey: initReq.ClientEphemeralPublicKey,
+	}
+	res, err := p.sendToEnclave(req, 10*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.Data(200, "application/json", res)
+}
+
 type DecryptRequest struct {
 	// Encrypted DEK, Base64-encoded
 	Ciphertext string `json:"ciphertext,omitempty"`
