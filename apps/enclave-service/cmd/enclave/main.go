@@ -142,6 +142,8 @@ func handleConnection(conn net.Conn) {
 			handlers.HandleHealth(encoder, startTime)
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
+		case "session_unwrap":
+			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, kmsClient)
 		case "decrypt":
 			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, nsmPublicKeyBytes, nsmPrivateKey)
 		default:

@@ -22,7 +22,7 @@ type EnclaveRequest struct {
 	Type                     string          `json:"type,omitempty"`
 	// Request-specific payload 
 	Payload                  json.RawMessage `json:"payload"`
-	}
+}
 
 type EnclaveResponse struct {
 	Success bool   `json:"success,omitempty"`
@@ -35,7 +35,7 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 	req := EnclaveRequest{
 		Type: "health",
 		Payload: nil,
-			}
+	}
 	res, err := p.sendToEnclave(req, 5*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -65,8 +65,44 @@ func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
 	req := EnclaveRequest{
 		Type: "session_init",
 		Payload: json.RawMessage(payloadBytes),
-			}
+	}
 	res, err := p.sendToEnclave(req, 10*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.Data(200, "application/json", res)
+}
+
+type SessionUnwrapRequest struct {
+	// Session ID, Base64-encoded
+	SessionId string `json:"session_id,omitempty"`
+	// KMS Key ID
+	KeyId string `json:"key_id,omitempty"`
+	Items     []struct {
+		// Object ID
+		ObjectId string `json:"object_id"`
+		// Encrypted DEK, Base64-encoded
+		Ciphertext string `json:"ciphertext"`
+	} `json:"items"`
+}
+
+func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
+	var unwrapReq SessionUnwrapRequest;
+	if err := c.BindJSON(&unwrapReq); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
+		return
+	}
+	payloadBytes, err := json.Marshal(unwrapReq);
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
+		return
+	}
+	req := EnclaveRequest{
+		Type: "session_unwrap",
+		Payload: json.RawMessage(payloadBytes),
+	}
+	res, err := p.sendToEnclave(req, 30*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
