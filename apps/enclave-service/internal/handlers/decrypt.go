@@ -41,8 +41,7 @@ type DecryptResponse struct {
 	Attestation string `json:"attestation,omitempty"` // TODO: implement client-side verification of attestation
 }
 
-// TODO: this is expensive in a case of high request rates; consider implementing a session model 
-func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, pubKeyBytes []byte, privKey *rsa.PrivateKey) {
+func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, pubKeyBytes []byte, nsmPrivKey *rsa.PrivateKey) {
 	var req DecryptRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
@@ -113,7 +112,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	}
 
 	// decrypt the ciphertext for recipient using NSM private key
-	decryptedOutput, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privKey, output.CiphertextForRecipient, nil)
+	decryptedOutput, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, nsmPrivKey, output.CiphertextForRecipient, nil)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
 		return

@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"time"
 
@@ -39,16 +38,6 @@ var (
 	nsmSession *nsm.Session
 	nsmPrivateKey *rsa.PrivateKey
 	nsmPublicKeyBytes []byte
-)
-
-type sessionEntry struct {
-	key []byte // session AEAD key, 32 bytes
-	expiresAt time.Time
-}
-
-var (
-	sessions = make(map[string]*sessionEntry)
-	sessionsMu sync.Mutex
 )
 
 func main() {
@@ -81,6 +70,7 @@ func main() {
 		log.Println("Shutting down enclave service...")
 		if nsmSession != nil {
 			nsmSession.Close()
+			nsmSession = nil
 		}
 		listener.Close()
 		os.Exit(0)
@@ -116,7 +106,6 @@ func initiateNSM() error {
 	if err != nil {
 		return fmt.Errorf("failed to open NSM session: %v", err)
 	}
-	defer session.Close()
 	nsmSession = session
 
 	// generate RSA key pair for NSM session
@@ -157,6 +146,8 @@ func handleConnection(conn net.Conn) {
 		switch req.Type {
 		case "health":
 			handleHealth(encoder)
+		case "session_init":
+			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "decrypt":
 			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, nsmPublicKeyBytes, nsmPrivateKey)
 		default:
