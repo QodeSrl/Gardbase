@@ -23,12 +23,6 @@ import (
 	"github.com/mdlayher/vsock"
 )
 
-type HealthResponse struct {
-	Status string `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-	Uptime string `json:"uptime"`
-}
-
 var (
 	startTime time.Time
 	kmsClient *kms.Client
@@ -145,7 +139,7 @@ func handleConnection(conn net.Conn) {
 
 		switch req.Type {
 		case "health":
-			handleHealth(encoder)
+			handlers.HandleHealth(encoder, startTime)
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "decrypt":
@@ -159,20 +153,6 @@ func handleConnection(conn net.Conn) {
 	if err := scanner.Err(); err != nil {
 		log.Printf("Error reading from connection: %v", err)
 	}
-}
-
-func handleHealth(encoder *json.Encoder) {
-	uptime := time.Since(startTime).String()
-	res := utils.Response{
-		Success: true,
-		Data: HealthResponse{
-			Status: "healthy",
-			Timestamp: time.Now(),
-			Uptime: uptime,
-		},
-		Message: "Service is healthy",
-	}
-	utils.SendResponse(encoder, res)
 }
 
 func getEnv(key, defaultValue string) string {

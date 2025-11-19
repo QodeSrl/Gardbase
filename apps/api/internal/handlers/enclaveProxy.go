@@ -22,9 +22,7 @@ type EnclaveRequest struct {
 	Type                     string          `json:"type,omitempty"`
 	// Request-specific payload 
 	Payload                  json.RawMessage `json:"payload"`
-	// Client's ephemeral public key 
-	ClientEphemeralPublicKey string          `json:"client_ephemeral_public_key"`
-}
+	}
 
 type EnclaveResponse struct {
 	Success bool   `json:"success,omitempty"`
@@ -37,8 +35,7 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 	req := EnclaveRequest{
 		Type: "health",
 		Payload: nil,
-		ClientEphemeralPublicKey: c.GetHeader("X-Client-Ephemeral-Public-Key"),
-	}
+			}
 	res, err := p.sendToEnclave(req, 5*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -68,8 +65,7 @@ func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
 	req := EnclaveRequest{
 		Type: "session_init",
 		Payload: json.RawMessage(payloadBytes),
-		ClientEphemeralPublicKey: initReq.ClientEphemeralPublicKey,
-	}
+			}
 	res, err := p.sendToEnclave(req, 10*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -104,7 +100,6 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	req := EnclaveRequest{
 		Type: "decrypt",
 		Payload: json.RawMessage(payloadBytes),
-		ClientEphemeralPublicKey: decryptReq.ClientEphemeralPublicKey,
 	}
 	res, err := p.sendToEnclave(req, 15*time.Second)
 	if err != nil {
