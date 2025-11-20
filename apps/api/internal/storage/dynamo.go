@@ -12,7 +12,7 @@ import (
 )
 
 type DynamoClient struct {
-	Client *dynamodb.Client
+	Client       *dynamodb.Client
 	ObjectsTable string
 	IndexesTable string
 }
@@ -36,12 +36,12 @@ func (d *DynamoClient) TestConnnectivity(ctx context.Context) error {
 	return err
 }
 
-/* 
-   CreateObjectWithIndexes stores the given object in DynamoDB and creates associated index entries.
-   It first marshals the object and index data into DynamoDB attribute maps.
-   If the total number of items to write (object + indexes) is 25 or fewer, it performs a single transactional write.
-   Otherwise, it writes the object separately and batches the index writes in groups of 25 using BatchWriteItem.
-   Returns an error if any DynamoDB operation fails.
+/*
+CreateObjectWithIndexes stores the given object in DynamoDB and creates associated index entries.
+It first marshals the object and index data into DynamoDB attribute maps.
+If the total number of items to write (object + indexes) is 25 or fewer, it performs a single transactional write.
+Otherwise, it writes the object separately and batches the index writes in groups of 25 using BatchWriteItem.
+Returns an error if any DynamoDB operation fails.
 */
 func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.Object, indexes map[string]string) error {
 	objMap, err := attributevalue.MarshalMap(obj)
@@ -67,7 +67,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.
 		twrite = append(twrite, ddbtypes.TransactWriteItem{
 			Put: &ddbtypes.Put{
 				TableName: aws.String(d.ObjectsTable),
-				Item: objMap,
+				Item:      objMap,
 			},
 		})
 
@@ -76,7 +76,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.
 			twrite = append(twrite, ddbtypes.TransactWriteItem{
 				Put: &ddbtypes.Put{
 					TableName: aws.String(d.IndexesTable),
-					Item: item,
+					Item:      item,
 				},
 			})
 		}
@@ -89,7 +89,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.
 
 	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(d.ObjectsTable),
-		Item: objMap,
+		Item:      objMap,
 	})
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.
 
 	const batchSize = 25
 	for i := 0; i < len(indexItems); i += batchSize {
-		end := min(i + batchSize, len(indexItems))
+		end := min(i+batchSize, len(indexItems))
 
 		writeRequests := make([]ddbtypes.WriteRequest, 0, end-i)
 		for _, item := range indexItems[i:end] {
@@ -122,7 +122,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, obj *models.
 }
 
 /*
-   GetObject retrieves an object by tenant ID and object ID from DynamoDB.
+GetObject retrieves an object by tenant ID and object ID from DynamoDB.
 */
 func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, objectId string) (*models.Object, error) {
 	pk := fmt.Sprintf("TENANT#%s", tenantId)
@@ -131,8 +131,8 @@ func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, objectId 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &d.ObjectsTable,
 		Key: map[string]ddbtypes.AttributeValue{
-			"pk": &ddbtypes.AttributeValueMemberS{ Value: pk },
-			"sk": &ddbtypes.AttributeValueMemberS{ Value: sk },
+			"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbtypes.AttributeValueMemberS{Value: sk},
 		},
 	})
 
@@ -160,15 +160,15 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 		pk := fmt.Sprintf("TENANT#%s", tenantId)
 		sk := fmt.Sprintf("OBJ#%s", objectId)
 		keys = append(keys, map[string]ddbtypes.AttributeValue{
-			"pk": &ddbtypes.AttributeValueMemberS{ Value: pk },
-			"sk": &ddbtypes.AttributeValueMemberS{ Value: sk },
+			"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbtypes.AttributeValueMemberS{Value: sk},
 		})
 	}
 
 	out, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
 		RequestItems: map[string]ddbtypes.KeysAndAttributes{
 			d.ObjectsTable: {
-				Keys: keys,
+				Keys:                 keys,
 				ProjectionExpression: aws.String("sk, encrypted_dek"),
 			},
 		},

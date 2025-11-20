@@ -15,8 +15,6 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-
-
 func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session) {
 	var req enclaveproto.SessionInitRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -25,7 +23,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	}
 
 	// decode client ephemeral public key
-	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey);
+	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey)
 	if err != nil || len(clientPubKeyBytes) != 32 {
 		utils.SendError(encoder, "Invalid client ephemeral key")
 		return
@@ -88,12 +86,12 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	}
 
 	res := enclaveproto.SessionInitResponse{
-		SessionId: sidB64,
+		SessionId:                 sidB64,
 		EnclaveEphemeralPublicKey: base64.StdEncoding.EncodeToString(ephPub[:]),
-		ExpiresAt: expiresAt.Format(time.RFC3339),
+		ExpiresAt:                 expiresAt.Format(time.RFC3339),
 	}
 	if len(attestationDoc) > 0 {
 		res.Attestation = base64.StdEncoding.EncodeToString(attestationDoc)
 	}
-	utils.SendResponse(encoder, enclaveproto.Response{ Success: true, Data: res })
+	utils.SendResponse(encoder, enclaveproto.Response{Success: true, Data: res})
 }

@@ -22,23 +22,23 @@ import (
 type Server struct {
 	router *gin.Engine
 	logger *zap.Logger
-	config *Config	
+	config *Config
 }
 
 type Config struct {
-	Port string `env:"PORT" envDefault:"8080"`
+	Port        string `env:"PORT" envDefault:"8080"`
 	Environment string `env:"ENVIRONMENT" envDefault:"development"`
 }
 
 type AWSConfig struct {
-	Region string
-	S3Bucket string
+	Region             string
+	S3Bucket           string
 	DynamoObjectsTable string
 	DynamoIndexesTable string
-	MaxRetries int
-	RequestTimeout time.Duration
-	UseLocalstack bool
-	LocalstackUrl string
+	MaxRetries         int
+	RequestTimeout     time.Duration
+	UseLocalstack      bool
+	LocalstackUrl      string
 }
 
 func main() {
@@ -53,7 +53,7 @@ func main() {
 	server := NewServer(config, logger)
 
 	server.setupRoutes()
-	
+
 	server.setupEnclaveProxy()
 
 	server.start()
@@ -88,7 +88,7 @@ func (s *Server) setupRoutes() {
 	if err != nil {
 		s.logger.Fatal("Failed to initialize storage clients", zap.Error(err))
 	}
-	
+
 	objectHandler := handlers.NewObjectHandler(s3Client, dynamoClient)
 	objects := api.Group("/objects")
 	objects.Use(middleware.TenantMiddleware())
@@ -100,7 +100,7 @@ func (s *Server) setupRoutes() {
 
 func (s *Server) setupEnclaveProxy() {
 	proxy := &handlers.VsockProxy{
-		EnclaveCID: getEnvUint32("ENCLAVE_CID", 16),
+		EnclaveCID:  getEnvUint32("ENCLAVE_CID", 16),
 		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
 	}
 	s.router.GET("/enclave/health", proxy.HandleHealth)
@@ -116,10 +116,10 @@ func (s *Server) start() {
 
 	// start server in a goroutine
 	go func() {
-		s.logger.Info("Starting Gardbase API server", 
+		s.logger.Info("Starting Gardbase API server",
 			zap.String("port", s.config.Port),
 			zap.String("environment", s.config.Environment))
-		
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			s.logger.Fatal("Failed to start server", zap.Error(err))
 		}
@@ -144,7 +144,7 @@ func (s *Server) start() {
 
 func initStorage(ctx context.Context, logger *zap.Logger) (*storage.S3Client, *storage.DynamoClient, error) {
 	awsConfig := loadAWSConfig()
-	
+
 	cfg, err := loadAWSSDKConfig(ctx, awsConfig)
 	if err != nil {
 		return nil, nil, err
@@ -158,7 +158,7 @@ func initStorage(ctx context.Context, logger *zap.Logger) (*storage.S3Client, *s
 	}
 
 	return s3Client, dynamoClient, nil
-} 
+}
 
 func loadConfig() *Config {
 	config := &Config{
@@ -171,14 +171,14 @@ func loadConfig() *Config {
 
 func loadAWSConfig() *AWSConfig {
 	return &AWSConfig{
-		Region: getEnv("AWS_REGION", "eu-central-1"),
-		S3Bucket: getEnvOrPanic("S3_BUCKET"),
+		Region:             getEnv("AWS_REGION", "eu-central-1"),
+		S3Bucket:           getEnvOrPanic("S3_BUCKET"),
 		DynamoObjectsTable: getEnvOrPanic("DYNAMO_OBJECTS_TABLE"),
 		DynamoIndexesTable: getEnvOrPanic("DYNAMO_INDEXES_TABLE"),
-		MaxRetries: getEnvAsInt("AWS_MAX_RETRIES", 3),
-		RequestTimeout: time.Duration(getEnvAsInt("AWS_REQUEST_TIMEOUT", 5)) * time.Second,
-		UseLocalstack: getEnvAsBool("USE_LOCALSTACK", false),
-		LocalstackUrl: getEnv("LOCALSTACK_URL", "http://localhost:4566"),
+		MaxRetries:         getEnvAsInt("AWS_MAX_RETRIES", 3),
+		RequestTimeout:     time.Duration(getEnvAsInt("AWS_REQUEST_TIMEOUT", 5)) * time.Second,
+		UseLocalstack:      getEnvAsBool("USE_LOCALSTACK", false),
+		LocalstackUrl:      getEnv("LOCALSTACK_URL", "http://localhost:4566"),
 	}
 }
 

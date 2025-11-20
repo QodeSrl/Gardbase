@@ -11,8 +11,8 @@ type SessionEntry struct {
 }
 
 var (
-	sessions   = make(map[string]*SessionEntry)
-	mu sync.RWMutex
+	sessions = make(map[string]*SessionEntry)
+	mu       sync.RWMutex
 )
 
 func StoreSession(id string, key []byte, expiresAt time.Time) {

@@ -8,7 +8,7 @@ import (
 
 func GenerateDEK(ctx context.Context, kmsClient *kms.Client, keyID string) (DEK []byte, encryptedDEK []byte, err error) {
 	generateDEKInput := &kms.GenerateDataKeyInput{
-		KeyId: &keyID,
+		KeyId:   &keyID,
 		KeySpec: "AES_256",
 	}
 	generateDEKOutput, err := kmsClient.GenerateDataKey(ctx, generateDEKInput)

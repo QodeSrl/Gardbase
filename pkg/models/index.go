@@ -9,7 +9,7 @@ type Index struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "IDX#<index_name>#TENANT#<tenant_id>"
 	SK string `dynamodbav:"sk" json:"sk"` // format: "TOKEN#<index_token>#OBJ#<object_id>"
 
-	S3Key     string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"` // Duplicated S3 key for quick access
+	S3Key     string    `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"` // Duplicated S3 key for quick access
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at,omitempty"`
 }
 

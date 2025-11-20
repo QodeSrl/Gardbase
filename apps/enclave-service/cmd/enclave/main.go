@@ -30,8 +30,8 @@ var (
 )
 
 var (
-	nsmSession *nsm.Session
-	nsmPrivateKey *rsa.PrivateKey
+	nsmSession        *nsm.Session
+	nsmPrivateKey     *rsa.PrivateKey
 	nsmPublicKeyBytes []byte
 )
 
@@ -70,7 +70,7 @@ func main() {
 		listener.Close()
 		os.Exit(0)
 	}()
-	
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

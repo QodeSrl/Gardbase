@@ -19,8 +19,6 @@ import (
 	"github.com/hf/nsm"
 )
 
-
-
 func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey, kmsClient *kms.Client) {
 	var req enclaveproto.SessionUnwrapRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -45,26 +43,26 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		objId := it.ObjectId
 		if objId == "" {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId:  objId,
-				Success: false,
-				Error: "missing object_id",
+				ObjectId: objId,
+				Success:  false,
+				Error:    "missing object_id",
 			})
 			continue
 		}
 		if it.Ciphertext == "" {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId:  objId,
-				Success: false,
-				Error: "missing ciphertext",
+				ObjectId: objId,
+				Success:  false,
+				Error:    "missing ciphertext",
 			})
 			continue
 		}
 		ctBytes, err := base64.StdEncoding.DecodeString(it.Ciphertext)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId:  objId,
-				Success: false,
-				Error: fmt.Sprintf("invalid base64 ciphertext: %v", err),
+				ObjectId: objId,
+				Success:  false,
+				Error:    fmt.Sprintf("invalid base64 ciphertext: %v", err),
 			})
 			continue
 		}
@@ -72,28 +70,28 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		ctx := context.Background()
 		input := &kms.DecryptInput{
 			CiphertextBlob: ctBytes,
-			KeyId: &req.KeyId,
+			KeyId:          &req.KeyId,
 			Recipient: &kmsTypes.RecipientInfo{
 				// client has already verified the attestation document when establishing the session
-				AttestationDocument: nil,
+				AttestationDocument:    nil,
 				KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
 			},
 		}
 		output, err := kmsClient.Decrypt(ctx, input)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId:  objId,
-				Success: false,
-				Error: fmt.Sprintf("KMS decrypt failed: %v", err),
+				ObjectId: objId,
+				Success:  false,
+				Error:    fmt.Sprintf("KMS decrypt failed: %v", err),
 			})
 			continue
 		}
 		plainDEK, err := rsa.DecryptOAEP(sha256.New(), nsmSession, nsmPrivKey, output.CiphertextForRecipient, nil)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId:  objId,
-				Success: false,
-				Error: fmt.Sprintf("RSA decryption failed: %v", err),
+				ObjectId: objId,
+				Success:  false,
+				Error:    fmt.Sprintf("RSA decryption failed: %v", err),
 			})
 			continue
 		}
@@ -111,7 +109,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		ciphertextBox := aead.Seal(nil, nonce, plainDEK, []byte(objId))
 
 		results = append(results, enclaveproto.SessionUnwrapItemResult{
-			ObjectId:  objId,
+			ObjectId:   objId,
 			Ciphertext: base64.StdEncoding.EncodeToString(ciphertextBox),
 			Nonce:      base64.StdEncoding.EncodeToString(nonce),
 			Success:    true,
@@ -120,6 +118,6 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 
 	utils.SendResponse(encoder, enclaveproto.Response{
 		Success: true,
-		Data: results,
+		Data:    results,
 	})
 }

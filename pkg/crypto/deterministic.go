@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	contextDEKEncryption = "dek-encryption"
+	contextDEKEncryption  = "dek-encryption"
 	contextDataEncryption = "data-encryption"
 )
 
@@ -46,7 +46,7 @@ func EncryptObjectDeterministic(dek []byte, pt []byte, context string) (cipherTe
 
 // TODO: implement KMS and Nitro Enclaves integration
 func DecryptObjectDeterministic(masterKey, ct, encryptedDEK []byte, context string) (plainText []byte, err error) {
-	if (len(masterKey) != AESKeySize) {
+	if len(masterKey) != AESKeySize {
 		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
 	}
 	if context == "" {

@@ -19,7 +19,7 @@ func TenantMiddleware() gin.HandlerFunc {
 
 		ctx := context.WithValue(c.Request.Context(), tenantKeyType("tenantId"), tenantId)
 		c.Request = c.Request.WithContext(ctx)
-		
+
 		c.Next()
 	}
 }

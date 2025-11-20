@@ -13,14 +13,14 @@ import (
 
 type VsockProxy struct {
 	// Enclave context ID
-	EnclaveCID  uint32
+	EnclaveCID uint32
 	// Enclave listening port
 	EnclavePort uint32
 }
 
 func (p *VsockProxy) HandleHealth(c *gin.Context) {
 	req := enclaveproto.Request{
-		Type: "health",
+		Type:    "health",
 		Payload: nil,
 	}
 	res, err := p.sendToEnclave(req, 5*time.Second)
@@ -32,18 +32,18 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 }
 
 func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
-	var initReq enclaveproto.SessionInitRequest;
+	var initReq enclaveproto.SessionInitRequest
 	if err := c.BindJSON(&initReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
 		return
 	}
-	payloadBytes, err := json.Marshal(initReq); 
+	payloadBytes, err := json.Marshal(initReq)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session init request: %v", err)})
 		return
 	}
 	req := enclaveproto.Request{
-		Type: "session_init",
+		Type:    "session_init",
 		Payload: json.RawMessage(payloadBytes),
 	}
 	res, err := p.sendToEnclave(req, 10*time.Second)
@@ -55,18 +55,18 @@ func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
 }
 
 func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
-	var unwrapReq enclaveproto.SessionUnwrapRequest;
+	var unwrapReq enclaveproto.SessionUnwrapRequest
 	if err := c.BindJSON(&unwrapReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
 		return
 	}
-	payloadBytes, err := json.Marshal(unwrapReq);
+	payloadBytes, err := json.Marshal(unwrapReq)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
 		return
 	}
 	req := enclaveproto.Request{
-		Type: "session_unwrap",
+		Type:    "session_unwrap",
 		Payload: json.RawMessage(payloadBytes),
 	}
 	res, err := p.sendToEnclave(req, 30*time.Second)
@@ -90,7 +90,7 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	}
 	// build enclave request
 	req := enclaveproto.Request{
-		Type: "decrypt",
+		Type:    "decrypt",
 		Payload: json.RawMessage(payloadBytes),
 	}
 	res, err := p.sendToEnclave(req, 15*time.Second)
@@ -122,7 +122,7 @@ func (p *VsockProxy) sendToEnclave(req enclaveproto.Request, timeout time.Durati
 		return nil, err
 	}
 
-	// read response through scanner 
+	// read response through scanner
 	scanner := bufio.NewScanner(conn)
 	if scanner.Scan() {
 		return scanner.Bytes(), nil

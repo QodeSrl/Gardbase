@@ -14,9 +14,9 @@ type Object struct {
 	Sensitivity  string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"`
 
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at,omitempty"`
-	Version   int32  `dynamodbav:"version,omitempty" json:"version,omitempty"`
-	Status    string `dynamodbav:"status,omitempty" json:"status,omitempty"` // "pending", "ready", "deleted"
-	TTL       int64  `dynamodbav:"ttl,omitempty" json:"ttl,omitempty"`       // Unix timestamp for expiration
+	Version   int32     `dynamodbav:"version,omitempty" json:"version,omitempty"`
+	Status    string    `dynamodbav:"status,omitempty" json:"status,omitempty"` // "pending", "ready", "deleted"
+	TTL       int64     `dynamodbav:"ttl,omitempty" json:"ttl,omitempty"`       // Unix timestamp for expiration
 }
 
 const (
@@ -33,12 +33,12 @@ const (
 
 func NewObject(tenantId string, objectId string, s3Key string, encryptedDek string) *Object {
 	return &Object{
-		PK: fmt.Sprintf("TENANT#%s", tenantId),
-		SK: fmt.Sprintf("OBJ#%s", objectId),
-		S3Key:     s3Key,
+		PK:           fmt.Sprintf("TENANT#%s", tenantId),
+		SK:           fmt.Sprintf("OBJ#%s", objectId),
+		S3Key:        s3Key,
 		EncryptedDEK: encryptedDek,
-		Status: StatusPending,
-		CreatedAt: time.Now().UTC(),
-		Version:   1,
+		Status:       StatusPending,
+		CreatedAt:    time.Now().UTC(),
+		Version:      1,
 	}
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func EncryptObjectProbabilistic(dek []byte, pt []byte) (cipherText []byte, err error) {
-	if (len(dek) != AESKeySize) {
+	if len(dek) != AESKeySize {
 		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
 	}
 
@@ -39,7 +39,7 @@ func EncryptObjectProbabilistic(dek []byte, pt []byte) (cipherText []byte, err e
 
 // TODO: implement KMS and Nitro Enclaves integration
 func DecryptObjectProbabilistic(masterKey, ct, encryptedDEK []byte) (plainText []byte, err error) {
-	if (len(masterKey) != AESKeySize) {
+	if len(masterKey) != AESKeySize {
 		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
 	}
 	// decrypt DEK with master key

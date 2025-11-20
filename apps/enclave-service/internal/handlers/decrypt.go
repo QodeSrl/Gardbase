@@ -26,7 +26,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		return
 	}
 
-	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey);
+	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey)
 	if err != nil || len(clientPubKeyBytes) != 32 {
 		utils.SendError(encoder, "Invalid client ephemeral key")
 		return
@@ -34,7 +34,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	var clientPubKey [32]byte
 	copy(clientPubKey[:], clientPubKeyBytes)
 
-	ciphertext, err := base64.StdEncoding.DecodeString(req.Ciphertext);
+	ciphertext, err := base64.StdEncoding.DecodeString(req.Ciphertext)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid ciphertext encoding: %v", err))
 		return
@@ -68,13 +68,13 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	ctx := context.Background()
 	input := &kms.DecryptInput{
 		CiphertextBlob: ciphertext,
-		KeyId: &req.KeyID,
+		KeyId:          &req.KeyID,
 	}
 
 	// include attestation document if available
 	if attestationDoc != nil {
 		input.Recipient = &kmsTypes.RecipientInfo{
-			AttestationDocument: attestationDoc,
+			AttestationDocument:    attestationDoc,
 			KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
 		}
 	}
@@ -85,8 +85,8 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		return
 	}
 	if len(output.CiphertextForRecipient) == 0 {
-    	utils.SendError(encoder, "KMS did not return ciphertext for recipient")
-    	return
+		utils.SendError(encoder, "KMS did not return ciphertext for recipient")
+		return
 	}
 
 	// decrypt the ciphertext for recipient using NSM private key
@@ -120,7 +120,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 			Ciphertext:    base64.StdEncoding.EncodeToString(ciphertextBox),
 			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
 			RequestNonce:  req.Nonce,
-			Attestation: base64.StdEncoding.EncodeToString(attestationDoc),
+			Attestation:   base64.StdEncoding.EncodeToString(attestationDoc),
 		},
 	}
 
