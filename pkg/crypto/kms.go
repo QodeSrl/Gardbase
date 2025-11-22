@@ -98,5 +98,43 @@ func StartDecryptSession(ctx context.Context, endpoint string, clientPriv [32]by
 		AttestationVerified: false,
 	}
 	return ds, nil
+}
 
+func (ds *DecryptSession) SessionUnwrap(ctx context.Context, items []enclaveproto.SessionUnwrapItem, keyID string) (enclaveproto.SessionUnwrapResponse, error) {
+	if time.Now().After(ds.ExpiresAt) {
+		return nil, errors.New("decrypt session has expired")
+	}
+	if !ds.AttestationVerified {
+		if !verifyAttestation(ds) {
+			return nil, errors.New("attestation verification failed")
+		}
+	}
+
+	body := enclaveproto.SessionUnwrapRequest{
+		SessionId: ds.SessionId,
+		KeyId:     keyID,
+		Items:     items,
+	}
+	reqBytes, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ds.endpoint, strings.NewReader(string(reqBytes)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := ds.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
+	}
+
+	var resBody enclaveproto.SessionUnwrapResponse
+	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
+		return nil, err
+	}
+	return resBody, nil
 }
