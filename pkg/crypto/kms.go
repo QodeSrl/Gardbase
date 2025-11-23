@@ -138,3 +138,31 @@ func (ds *DecryptSession) SessionUnwrap(ctx context.Context, items []enclaveprot
 	}
 	return resBody, nil
 }
+
+func (ds *DecryptSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
+	if ds.SessionKey == nil || len(ds.SessionKey) != chacha20poly1305.KeySize {
+		return nil, errors.New("invalid session key")
+	}
+
+	encryptedDEKBytes, err := base64.StdEncoding.DecodeString(encryptedDEKB64)
+	if err != nil {
+		return nil, errors.New("invalid base64 encrypted DEK")
+	}
+	nonce, err := base64.StdEncoding.DecodeString(nonceB64)
+	if err != nil {
+		return nil, errors.New("invalid base64 nonce")
+	}
+	if len(nonce) != chacha20poly1305.NonceSizeX {
+		return nil, errors.New("invalid nonce size")
+	}
+
+	aead, err := chacha20poly1305.NewX(ds.SessionKey)
+	if err != nil {
+		return nil, err
+	}
+	dek, err := aead.Open(nil, nonce, encryptedDEKBytes, []byte(objectID))
+	if err != nil {
+		return nil, err
+	}
+	return dek, nil
+}
