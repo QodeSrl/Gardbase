@@ -166,3 +166,59 @@ func (ds *DecryptSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string,
 	}
 	return dek, nil
 }
+
+func UnwrapSingleDEK(ctx context.Context, wrappedDEKB64 string, nonceB64 string, keyID string, endpoint string) ([]byte, error) {
+	clientPub, clientPriv, err := box.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	clientPubB64 := base64.StdEncoding.EncodeToString(clientPub[:])
+
+	body := enclaveproto.DecryptRequest{
+		Ciphertext:               wrappedDEKB64,
+		Nonce:                    nonceB64,
+		KeyID:                    keyID,
+		ClientEphemeralPublicKey: clientPubB64,
+	}
+
+	reqBytes, _ := json.Marshal(body)
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(reqBytes)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to unwrap DEK: status %d", res.StatusCode)
+	}
+	var resBody enclaveproto.DecryptResponse
+	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
+		return nil, err
+	}
+	ciphertextBox, err := base64.StdEncoding.DecodeString(resBody.Ciphertext)
+	if err != nil {
+		return nil, errors.New("invalid base64 ciphertext")
+	}
+	enclavePubRaw, err := base64.StdEncoding.DecodeString(resBody.EnclavePubKey)
+	if err != nil {
+		return nil, errors.New("invalid base64 enclave public key")
+	}
+	if len(enclavePubRaw) != 32 {
+		return nil, errors.New("invalid enclave public key length")
+	}
+	var nonce [24]byte
+	copy(nonce[:], ciphertextBox[:24])
+
+	// TODO: verify attestation in resBody.Attestation
+
+	dek, ok := box.Open(nil, ciphertextBox[24:], &nonce, (*[32]byte)(enclavePubRaw), clientPriv)
+	if !ok {
+		return nil, errors.New("failed to decrypt DEK with NaCl box")
+	}
+	return dek, nil
+}
