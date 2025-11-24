@@ -2,7 +2,7 @@ package crypto
 
 import (
 	"context"
-"crypto/rand"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/nacl/box"
 )
 
@@ -39,6 +39,9 @@ func GenerateDEK(ctx context.Context, kmsClient *kms.Client, keyID string) (DEK 
 	if err != nil {
 		return nil, nil, err
 	}
+	return generateDEKOutput.Plaintext, generateDEKOutput.CiphertextBlob, nil
+}
+
 func StartDecryptSession(ctx context.Context, endpoint string, clientPriv [32]byte, clientPub [32]byte, clientPubB64 string, nonceB64 string) (*DecryptSession, error) {
 	reqBody := enclaveproto.SessionInitRequest{
 		ClientEphemeralPublicKey: clientPubB64,

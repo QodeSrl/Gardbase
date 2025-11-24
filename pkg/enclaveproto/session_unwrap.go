@@ -1,16 +1,18 @@
 package enclaveproto
 
+type SessionUnwrapItem struct {
+	// Object ID
+	ObjectId string `json:"object_id"`
+	// Encrypted DEK, Base64-encoded
+	Ciphertext string `json:"ciphertext"`
+}
+
 type SessionUnwrapRequest struct {
 	// Session ID, Base64-encoded
 	SessionId string `json:"session_id,omitempty"`
 	// KMS Key ID
-	KeyId string `json:"key_id,omitempty"`
-	Items []struct {
-		// Object ID
-		ObjectId string `json:"object_id"`
-		// Encrypted DEK, Base64-encoded
-		Ciphertext string `json:"ciphertext"`
-	} `json:"items,omitempty"`
+	KeyId string              `json:"key_id,omitempty"`
+	Items []SessionUnwrapItem `json:"items,omitempty"`
 }
 
 type SessionUnwrapItemResult struct {

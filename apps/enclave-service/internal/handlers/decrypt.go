@@ -109,9 +109,6 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	}
 	ciphertextBox := box.Seal(nonce[:], decryptedOutput, &nonce, &clientPubKey, enclavePrivKey)
 
-	// On the client side, the DEK can be decrypted using:
-	// box.Open(nil, ciphertextBox, &nonce, &enclavePubKey, clientPrivKey)
-
 	resp := enclaveproto.Response{
 		Success: true,
 		Message: "Decryption successful",

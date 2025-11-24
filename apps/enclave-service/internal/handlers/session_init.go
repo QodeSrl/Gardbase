@@ -39,7 +39,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	}
 	curve25519.ScalarBaseMult(&ephPub, &ephPriv)
 
-	// derive session key (shared secret)
+	// derive session key (shared secret, x25519 + hkdf)
 	sessKey, err := utils.DeriveSessionKey(ephPriv, clientPubKeyBytes)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to derive session key: %v", err))
