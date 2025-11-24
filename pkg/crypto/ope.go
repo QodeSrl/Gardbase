@@ -18,7 +18,7 @@ import (
 // TODO: Replace with a more secure OPE scheme
 //
 // ct format: encrypted value (8 bytes)
-func EncryptObjectLinearOPE(dek []byte, plaintext uint64) (cipherText []byte, err error) {
+func EncryptObjectLinearOPE(plaintext uint64, dek []byte) ([]byte, error) {
 	if len(dek) != AESKeySize {
 		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
 	}
@@ -39,39 +39,19 @@ func EncryptObjectLinearOPE(dek []byte, plaintext uint64) (cipherText []byte, er
 	return ct, nil
 }
 
-// TODO: implement KMS and Nitro Enclaves integration
 // DecryptObjectLinearOPE decrypts data encrypted with EncryptObjectLinearOPE.
-func DecryptObjectLinearOPE(masterKey, ct, encryptedDEK []byte) (plainText uint64, err error) {
-	if len(masterKey) != AESKeySize {
-		return 0, fmt.Errorf("invalid master key size: %d", len(masterKey))
-	}
-
-	// Decrypt DEK with master key
-	dek, err := aesGCMDecrypt(masterKey, encryptedDEK)
-	if err != nil {
-		return 0, err
-	}
-
+// Performs inverse linear transformation: pt = (ct - b) / a
+func DecryptObjectLinearOPE(ct []byte, dek []byte) (uint64, error) {
 	// Decrypt ciphertext with DEK
-	pt, err := linearOPEDecrypt(dek, ct)
-	if err != nil {
-		return 0, err
-	}
-
-	return pt, nil
-}
-
-// linearOPEDecrypt performs inverse linear transformation: pt = (ct - b) / a
-func linearOPEDecrypt(key, ct []byte) (uint64, error) {
-	if len(key) != AESKeySize {
-		return 0, fmt.Errorf("invalid key size: %d", len(key))
+	if len(dek) != AESKeySize {
+		return 0, fmt.Errorf("invalid key size: %d", len(dek))
 	}
 	if len(ct) != 8 {
 		return 0, errors.New("invalid ciphertext size")
 	}
 
 	// Derive slope and intercept from key
-	a, b := deriveLinearParams(key)
+	a, b := deriveLinearParams(dek)
 
 	// Decode ciphertext
 	ciphertext := binary.BigEndian.Uint64(ct)

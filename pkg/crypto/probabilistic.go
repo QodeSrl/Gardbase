@@ -10,7 +10,7 @@ import (
 	"fmt"
 )
 
-func EncryptObjectProbabilistic(dek []byte, pt []byte) (cipherText []byte, err error) {
+func EncryptObjectProbabilistic(pt []byte, dek []byte) ([]byte, error) {
 	if len(dek) != AESKeySize {
 		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
 	}
@@ -37,34 +37,16 @@ func EncryptObjectProbabilistic(dek []byte, pt []byte) (cipherText []byte, err e
 	return ct, nil
 }
 
-// TODO: implement KMS and Nitro Enclaves integration
-func DecryptObjectProbabilistic(masterKey, ct, encryptedDEK []byte) (plainText []byte, err error) {
-	if len(masterKey) != AESKeySize {
-		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
-	}
-	// decrypt DEK with master key
-	dek, err := aesGCMDecrypt(masterKey, encryptedDEK)
-	if err != nil {
-		return nil, err
-	}
-	// decrypt ct with DEK
-	pt, err := aesGCMDecrypt(dek, ct)
-	if err != nil {
-		return nil, err
-	}
-	return pt, nil
-}
-
-func aesGCMDecrypt(key, input []byte) ([]byte, error) {
-	if len(input) < GMCNonceSize {
+func DecryptObjectProbabilistic(ct []byte, dek []byte) ([]byte, error) {
+	if len(ct) < GMCNonceSize {
 		return nil, errors.New("input too short")
 	}
-	if len(key) != AESKeySize {
-		return nil, fmt.Errorf("invalid key size: %d", len(key))
+	if len(dek) != AESKeySize {
+		return nil, fmt.Errorf("invalid key size: %d", len(dek))
 	}
-	nonce := input[:GMCNonceSize]
-	ct := input[GMCNonceSize:]
-	block, err := aes.NewCipher(key)
+	nonce := ct[:GMCNonceSize]
+	ct = ct[GMCNonceSize:]
+	block, err := aes.NewCipher(dek)
 	if err != nil {
 		return nil, err
 	}

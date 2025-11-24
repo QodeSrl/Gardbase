@@ -14,12 +14,9 @@ import (
 	"fmt"
 )
 
-const (
-	contextDEKEncryption  = "dek-encryption"
-	contextDataEncryption = "data-encryption"
-)
+var contextTypeDeterministicEncryption = "gardbase-data-deterministic-encryption-v1"
 
-func EncryptObjectDeterministic(dek []byte, pt []byte, context string) (cipherText []byte, err error) {
+func EncryptObjectDeterministic(pt []byte, context string, dek []byte) ([]byte, error) {
 	if len(dek) != AESKeySize {
 		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
 	}
@@ -38,43 +35,23 @@ func EncryptObjectDeterministic(dek []byte, pt []byte, context string) (cipherTe
 		return nil, err
 	}
 
-	nonce := deriveNonceHMAC(dek, context, contextDataEncryption, gcm.NonceSize())
+	nonce := deriveNonceHMAC(dek, context, contextTypeDeterministicEncryption, gcm.NonceSize())
 	ct := gcm.Seal(nil, nonce, pt, []byte(context))
 
 	return ct, nil
 }
 
-// TODO: implement KMS and Nitro Enclaves integration
-func DecryptObjectDeterministic(masterKey, ct, encryptedDEK []byte, context string) (plainText []byte, err error) {
-	if len(masterKey) != AESKeySize {
-		return nil, fmt.Errorf("invalid master key size: %d", len(masterKey))
-	}
+func DecryptObjectDeterministic(ct []byte, context string, dek []byte) ([]byte, error) {
 	if context == "" {
 		return nil, fmt.Errorf("context must not be empty for deterministic decryption")
 	}
 
-	// decrypt DEK with master key using context-derived nonce
-	dekContext := fmt.Sprintf("%s:%s", context, "dek")
-	dek, err := aesGCMDecryptDeterministic(masterKey, encryptedDEK, dekContext, contextDEKEncryption)
-	if err != nil {
-		return nil, err
-	}
-
 	// decrypt ct with DEK using context-derived nonce
-	pt, err := aesGCMDecryptDeterministic(dek, ct, context, contextDataEncryption)
-	if err != nil {
-		return nil, err
+	if len(dek) != AESKeySize {
+		return nil, fmt.Errorf("invalid key size: %d", len(dek))
 	}
 
-	return pt, nil
-}
-
-func aesGCMDecryptDeterministic(key, ct []byte, context string, contextType string) ([]byte, error) {
-	if len(key) != AESKeySize {
-		return nil, fmt.Errorf("invalid key size: %d", len(key))
-	}
-
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(dek)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +59,7 @@ func aesGCMDecryptDeterministic(key, ct []byte, context string, contextType stri
 	if err != nil {
 		return nil, err
 	}
-	nonce := deriveNonceHMAC(key, context, contextType, gcm.NonceSize())
+	nonce := deriveNonceHMAC(dek, context, contextTypeDeterministicEncryption, gcm.NonceSize())
 	pt, err := gcm.Open(nil, nonce, ct, []byte(context))
 	if err != nil {
 		return nil, err
