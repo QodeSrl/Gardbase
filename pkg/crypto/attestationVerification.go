@@ -132,8 +132,20 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 	result.VerifiedSteps = append(result.VerifiedSteps, "Timestamp verified")
 
 	// 6: verify nonce
+	expectedNonce, err := base64.StdEncoding.DecodeString(ds.ExpectedNonceB64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode expected nonce: %w", err)
+	}
+	if !bytes.Equal(doc.Nonce, expectedNonce) {
+		return nil, fmt.Errorf("nonce verification failed: %w", err)
+	}
+	result.VerifiedSteps = append(result.VerifiedSteps, "Nonce verified")
 
 	// 7: verify public key
+	if !bytes.Equal(doc.PublicKey, ds.EnclavePubRaw) {
+		return nil, fmt.Errorf("public key verification failed: %w", err)
+	}
+	result.VerifiedSteps = append(result.VerifiedSteps, "Public key verified")
 
 	// 8: verify PCRs
 
