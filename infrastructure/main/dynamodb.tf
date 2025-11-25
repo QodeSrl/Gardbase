@@ -20,7 +20,16 @@ resource "aws_dynamodb_table" "objects" {
     enabled        = true
   }
 
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
   tags = {
+    Name        = "${var.project_name}-objects-${var.environment}"
     Environment = var.environment
     Project     = var.project_name
   }
@@ -44,6 +53,7 @@ resource "aws_dynamodb_table" "indexes" {
   }
 
   tags = {
+    Name        = "${var.project_name}-indexes-${var.environment}"
     Environment = var.environment
     Project     = var.project_name
   }

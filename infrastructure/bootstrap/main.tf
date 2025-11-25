@@ -7,9 +7,9 @@ terraform {
     }
   }
   backend "s3" {
-    bucket = "gardbase-terraform-state"
-    key    = "bootstrap/terraform.tfstate"
-    region = "eu-central-1"
+    bucket  = "gardbase-terraform-state"
+    key     = "bootstrap/terraform.tfstate"
+    region  = "eu-central-1"
     encrypt = true
   }
 }
