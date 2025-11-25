@@ -26,8 +26,8 @@ type Server struct {
 }
 
 type Config struct {
-	Port        string `env:"PORT" envDefault:"8080"`
-	Environment string `env:"ENVIRONMENT" envDefault:"development"`
+	Port        string
+	Environment string
 }
 
 type AWSConfig struct {
