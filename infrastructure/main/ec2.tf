@@ -18,11 +18,19 @@ resource "aws_security_group" "api_sg" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "Allow HTTP"
+    description = "Allow HTTP from anywhere"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] // Allow from anywhere
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
@@ -30,7 +38,7 @@ resource "aws_security_group" "api_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] // Allow from anywhere - restrict to specific IPs for better security
+    cidr_blocks = var.environment == "prod" ? var.allowed_ssh_cidr_blocks : ["0.0.0.0/0"] // in prod, restrict SSH access
   }
 
   egress {
@@ -38,6 +46,10 @@ resource "aws_security_group" "api_sg" {
     to_port     = 0
     protocol    = "-1" // all protocols
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.project_name}-api-sg-${var.environment}"
   }
 }
 
@@ -76,13 +88,34 @@ resource "aws_iam_role_policy" "api_policy" {
         Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"]
         Resource = [
           aws_dynamodb_table.objects.arn,
-          aws_dynamodb_table.indexes.arn
+          "${aws_dynamodb_table.objects.arn}/index/*",
+          aws_dynamodb_table.indexes.arn,
+          "${aws_dynamodb_table.indexes.arn}/index/*"
         ]
       },
       {
         Effect   = "Allow"
         Action   = ["ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = aws_kms_key.enclave_key.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/ec2/${var.project_name}*"
       }
     ]
   })
@@ -92,21 +125,30 @@ resource "aws_iam_role_policy" "api_policy" {
 resource "aws_iam_instance_profile" "api_instance_profile" {
   name = "${var.project_name}-api-instance-profile-${var.environment}"
   role = aws_iam_role.api_role.name
+
+  tags = {
+    Name = "${var.project_name}-api-instance-profile-${var.environment}"
+  }
 }
 
 // AMI for ARM-based instances (Graviton)
-data "aws_ami" "ubuntu_arm64" {
+data "aws_ami" "amazon_linux_2023" {
   most_recent = true
-  owners      = ["099720109477"] // Canonical
+  owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-*"]
+    values = ["al2023-ami-*-x86_64"]
   }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
   }
 }
 
@@ -116,13 +158,29 @@ resource "tls_private_key" "api_key" {
 }
 
 resource "aws_key_pair" "api_key" {
-  key_name   = "${var.project_name}-api-dev-key"
+  key_name   = "${var.project_name}-api-${var.environment}-key"
   public_key = tls_private_key.api_key.public_key_openssh
+
+  tags = {
+    Name = "${var.project_name}-api-${var.environment}-key"
+  }
+}
+
+# Store private key in SSM Parameter Store (encrypted)
+resource "aws_ssm_parameter" "api_private_key" {
+  name        = "/${var.project_name}/${var.environment}/api/ssh-private-key"
+  description = "SSH private key for API server"
+  type        = "SecureString"
+  value       = tls_private_key.api_key.private_key_pem
+
+  tags = {
+    Name = "${var.project_name}-api-private-key-${var.environment}"
+  }
 }
 
 resource "aws_instance" "api" {
 
-  ami           = data.aws_ami.ubuntu_arm64.id
+  ami           = data.aws_ami.amazon_linux_2023.id
   instance_type = var.instance_type
 
   subnet_id                   = element(data.aws_subnets.default.ids, 0) // use the first subnet
@@ -131,37 +189,41 @@ resource "aws_instance" "api" {
   iam_instance_profile        = aws_iam_instance_profile.api_instance_profile.name
   key_name                    = aws_key_pair.api_key.key_name
 
+  // Enable Nitro Enclaves
+  enclave_options {
+    enabled = true
+  }
+
   monitoring = true
 
-  user_data = <<-EOF
-                #!/bin/bash
-                set -e
-                exec > >(tee /var/log/user-data.log) 2>&1
-                apt update -y
-                apt install -y docker.io awscli
-                systemctl enable docker
-                systemctl start docker
-                # login to ECR
-                aws ecr get-login-password --region ${var.region} \
-                | docker login --username AWS --password-stdin ${data.terraform_remote_state.bootstrap.outputs.ecr_repository_url}
-                # pull and run the container
-                docker run -d --restart unless-stopped -p 80:80 \
-                -e S3_BUCKET="${aws_s3_bucket.uploads.bucket}" \
-                -e DYNAMO_OBJECTS_TABLE="${aws_dynamodb_table.objects.name}" \
-                -e DYNAMO_INDEXES_TABLE="${aws_dynamodb_table.indexes.name}" \
-                -e AWS_REGION="${var.region}" \
-                -e AWS_MAX_RETRIES="3" \
-                -e AWS_REQUEST_TIMEOUT="10" \
-                -e USE_LOCALSTACK="false" \
-                -e LOCALSTACK_URL="" \
-                -e ENVIRONMENT="${var.environment}" \
-                -e PORT="80" \
-                ${data.terraform_remote_state.bootstrap.outputs.ecr_repository_url}:latest
-                echo "Setup complete"
-                EOF
+  # Increase root volume size
+  root_block_device {
+    volume_size           = 30
+    volume_type           = "gp3"
+    encrypted             = true
+    delete_on_termination = true
+  }
+
+  user_data = base64encode(templatefile("${path.module}/user_data.sh", {
+    region                      = var.region
+    project_name                = var.project_name
+    environment                 = var.environment
+    ecr_repository_url          = data.terraform_remote_state.bootstrap.outputs.ecr_repository_url
+    s3_bucket                   = aws_s3_bucket.uploads.bucket
+    dynamo_objects_table        = aws_dynamodb_table.objects.name
+    dynamo_indexes_table        = aws_dynamodb_table.indexes.name
+    kms_key_id                  = aws_kms_key.enclave_key.id
+    enclave_cpus                = var.enclave_cpus
+    enclave_memory_mib          = var.enclave_memory_mib
+    enable_debug_mode           = var.enable_debug_mode
+    max_attestation_age_minutes = var.max_attestation_age_minutes
+  }))
+
+  user_data_replace_on_change = true
 
   lifecycle {
     create_before_destroy = true
+    ignore_changes        = [ami] // prevent replacement on AMI updates
   }
 
   tags = {
