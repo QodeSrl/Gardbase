@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 
 	"golang.org/x/crypto/chacha20poly1305"
@@ -66,15 +65,12 @@ func deriveSessionKey(clientPriv [32]byte, enclavePubRaw []byte) ([]byte, error)
 	if _, err := io.ReadFull(hk, key); err != nil {
 		return nil, err
 	}
-	for i := range shared {
-		shared[i] = 0
-	}
+	zero(shared)
 	return key, nil
 }
 
-func verifyAttestation(ds *DecryptSession) bool {
-	// TODO: implement attestation verification
-	fmt.Printf("[WARNING] Attestation verification not implemented yet\n")
-	ds.AttestationVerified = true
-	return true
+func zero(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
 }

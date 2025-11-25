@@ -3,7 +3,9 @@ package crypto
 import (
 	"context"
 	"crypto/rand"
+"crypto/x509"
 	"encoding/base64"
+"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,9 +27,29 @@ type DecryptSession struct {
 	SessionKey          []byte   // derived session key
 	ExpiresAt           time.Time
 	AttestationB64      string // Base64-encoded attestation document
+ExpectedNonceB64    string // Base64-encoded expected nonce for attestation
 	AttestationVerified bool
-	endpoint            string // base URL of proxy
+AttestationResult   *verificationResult
+	endpoint            string
 	httpClient          *http.Client
+}
+
+type SessionConfig struct {
+	// base URL of the proxy server
+	Endpoint string
+	// PCR values you expect from the enclave
+	// Key: PCR index; Value: hex-encoded PCR hash
+	// Note: use "nitro-cli describe-eif --eif-path enclave.eif" to get these
+	ExpectedPCRs map[uint]string
+	// AWS Nitro Root CA certificate (optional)
+	RootCA *x509.Certificate
+	// Maximum age of the attestation document
+	MaxAttestationAge time.Duration
+	// Whether to verify PCR values
+	// Set to false during development, true in production
+	VerifyPCRs bool
+	// HTTPTimeout for requests
+	HTTPTimeout time.Duration
 }
 
 func GenerateDEK(ctx context.Context, kmsClient *kms.Client, keyID string) (DEK []byte, encryptedDEK []byte, err error) {
@@ -42,14 +64,25 @@ func GenerateDEK(ctx context.Context, kmsClient *kms.Client, keyID string) (DEK 
 	return generateDEKOutput.Plaintext, generateDEKOutput.CiphertextBlob, nil
 }
 
-func StartDecryptSession(ctx context.Context, endpoint string, clientPriv [32]byte, clientPub [32]byte, clientPubB64 string, nonceB64 string) (*DecryptSession, error) {
+func StartDecryptSession(ctx context.Context, config SessionConfig) (*DecryptSession, error) {
+
+	clientPriv, clientPub, clientPubB64, err := GenerateEphemeralKeypair()
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	nonceB64 := base64.StdEncoding.EncodeToString(nonce)
+
 	reqBody := enclaveproto.SessionInitRequest{
 		ClientEphemeralPublicKey: clientPubB64,
 		Nonce:                    nonceB64,
 	}
 	reqBytes, _ := json.Marshal(reqBody)
 	httpClient := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(reqBytes)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.Endpoint+"/session/init", strings.NewReader(string(reqBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +129,16 @@ func StartDecryptSession(ctx context.Context, endpoint string, clientPriv [32]by
 		SessionKey:          sessionKey,
 		ExpiresAt:           expiresAt,
 		AttestationB64:      resBody.Attestation,
-		endpoint:            endpoint,
+		ExpectedNonceB64:    nonceB64,
 		httpClient:          httpClient,
 		AttestationVerified: false,
 	}
+
+	if _, err := ds.verifyAttestation(config); err != nil {
+		zero(ds.SessionKey)
+		return nil, fmt.Errorf("attestation verification failed: %w", err)
+	}
+
 	return ds, nil
 }
 
@@ -108,9 +147,7 @@ func (ds *DecryptSession) SessionUnwrap(ctx context.Context, items []enclaveprot
 		return nil, errors.New("decrypt session has expired")
 	}
 	if !ds.AttestationVerified {
-		if !verifyAttestation(ds) {
-			return nil, errors.New("attestation verification failed")
-		}
+		return nil, errors.New("attestation not verified")
 	}
 
 	body := enclaveproto.SessionUnwrapRequest{
