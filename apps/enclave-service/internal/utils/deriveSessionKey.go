@@ -23,8 +23,6 @@ func DeriveSessionKey(ephPriv [32]byte, clientPub []byte) ([]byte, error) {
 	if _, err := io.ReadFull(hk, key); err != nil {
 		return nil, fmt.Errorf("failed to derive session key: %v", err)
 	}
-	for i := range shared {
-		shared[i] = 0
-	}
+	Zero(shared)
 	return key, nil
 }

@@ -110,6 +110,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		// seal DEK with session key using object ID as associated data
 		sealedDEK := aead.Seal(nil, nonce, plainDEK, []byte(objId))
 
+		utils.Zero(plainDEK)
 
 		results = append(results, enclaveproto.SessionUnwrapItemResult{
 			ObjectId:  objId,

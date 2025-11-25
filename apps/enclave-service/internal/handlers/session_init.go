@@ -85,6 +85,8 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 		}
 	}
 
+	defer utils.Zero(ephPriv[:])
+
 	res := enclaveproto.SessionInitResponse{
 		SessionId:                 sidB64,
 		EnclaveEphemeralPublicKey: base64.StdEncoding.EncodeToString(ephPub[:]),
