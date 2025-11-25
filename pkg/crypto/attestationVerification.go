@@ -115,8 +115,21 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 	result.VerifiedSteps = append(result.VerifiedSteps, "Certificate chain verified")
 
 	// 4: verify signature
+	if err := verifyCOSESignature(&cose, doc.Certificate); err != nil {
+		return nil, fmt.Errorf("COSE signature verification failed: %w", err)
+	}
+	result.VerifiedSteps = append(result.VerifiedSteps, "COSE signature verified")
 
 	// 5: verify timestamp
+	docTime := time.Unix(int64(doc.Timestamp)/1000, 0)
+	result.Timestamp = docTime
+	if config.MaxAttestationAge > 0 {
+		age := time.Since(docTime)
+		if age > config.MaxAttestationAge {
+			return nil, fmt.Errorf("attestation document is too old: %s", age)
+		}
+	}
+	result.VerifiedSteps = append(result.VerifiedSteps, "Timestamp verified")
 
 	// 6: verify nonce
 
@@ -163,6 +176,51 @@ func verifyCertificateChain(leafCertDER []byte, caBundleDER [][]byte, rootCA *x5
 }
 
 func verifyCOSESignature(cose *coseSign1, leafCertDER []byte) error {
+	// parse leaf certificate
+	leafCert, err := x509.ParseCertificate(leafCertDER)
+	if err != nil {
+		return fmt.Errorf("failed to parse leaf certificate: %w", err)
+	}
+
+	// get public key
+	pubKey, ok := leafCert.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("leaf certificate public key is not ECDSA")
+	}
+
+	// Construct the Sig_structure for COSE_Sign1
+	// Sig_structure = [
+	//   context = "Signature1",
+	//   body_protected = protected,
+	//   external_aad = '',
+	//   payload = payload
+	// ]
+	sigStructure := []interface{}{
+		"Signature1",
+		cose.Protected,
+		[]byte{}, // empty external_aad
+		cose.Payload,
+	}
+	sigStructureBytes, err := cbor.Marshal(sigStructure)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Sig_structure: %w", err)
+	}
+	// hash the Sig_structure
+	hash := sha256.Sum256(sigStructureBytes)
+
+	// parse the signature (ASN.1 encoded ECDSA signature: SEQUENCE { r INTEGER, s INTEGER })
+	var ecdsaSig struct {
+		R, S *big.Int
+	}
+	_, err = asn1.Unmarshal(cose.Signature, &ecdsaSig)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal ECDSA signature: %w", err)
+	}
+
+	if !ecdsa.Verify(pubKey, hash[:], ecdsaSig.R, ecdsaSig.S) {
+		return fmt.Errorf("ECDSA signature verification failed")
+	}
+
 	return nil
 }
 
