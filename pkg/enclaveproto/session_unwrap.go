@@ -19,7 +19,7 @@ type SessionUnwrapItemResult struct {
 	// Object ID
 	ObjectId string `json:"object_id,omitempty"`
 	// Decrypted DEK, Base64-encoded
-	Ciphertext string `json:"ciphertext"`
+	SealedDEK string `json:"sealed_dek,omitempty"`
 	// Nonce used for decryption, Base64-encoded
 	Nonce   string `json:"nonce"`
 	Success bool   `json:"success"`

@@ -19,7 +19,7 @@ import (
 	"github.com/hf/nsm"
 )
 
-func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey, kmsClient *kms.Client) {
+func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey, nsmAttestation []byte, kmsClient *kms.Client) {
 	var req enclaveproto.SessionUnwrapRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid session unwrap request: %v", err))
@@ -72,8 +72,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 			CiphertextBlob: ctBytes,
 			KeyId:          &req.KeyId,
 			Recipient: &kmsTypes.RecipientInfo{
-				// client has already verified the attestation document when establishing the session
-				AttestationDocument:    nil,
+				AttestationDocument:    nsmAttestation,
 				KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
 			},
 		}
@@ -86,6 +85,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 			})
 			continue
 		}
+		// note: here nsmSession is used as a rand.Reader
 		plainDEK, err := rsa.DecryptOAEP(sha256.New(), nsmSession, nsmPrivKey, output.CiphertextForRecipient, nil)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
@@ -96,6 +96,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 			continue
 		}
 
+		// nonce for session encryption
 		nonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
 		if _, err := rand.Read(nonce); err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
@@ -106,13 +107,15 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 			continue
 		}
 
-		ciphertextBox := aead.Seal(nil, nonce, plainDEK, []byte(objId))
+		// seal DEK with session key using object ID as associated data
+		sealedDEK := aead.Seal(nil, nonce, plainDEK, []byte(objId))
+
 
 		results = append(results, enclaveproto.SessionUnwrapItemResult{
-			ObjectId:   objId,
-			Ciphertext: base64.StdEncoding.EncodeToString(ciphertextBox),
-			Nonce:      base64.StdEncoding.EncodeToString(nonce),
-			Success:    true,
+			ObjectId:  objId,
+			SealedDEK: base64.StdEncoding.EncodeToString(sealedDEK),
+			Nonce:     base64.StdEncoding.EncodeToString(nonce),
+			Success:   true,
 		})
 	}
 

@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
 	"github.com/mdlayher/vsock"
 )
 
@@ -33,6 +34,7 @@ var (
 	nsmSession        *nsm.Session
 	nsmPrivateKey     *rsa.PrivateKey
 	nsmPublicKeyBytes []byte
+	nsmAttestation    []byte
 )
 
 func main() {
@@ -95,22 +97,40 @@ func initializeAWS() error {
 	return nil
 }
 
-func initiateNSM() error {
+func initiateNSM() (err error) {
 	// open NSM session
-	session, err := nsm.OpenDefaultSession()
+	nsmSession, err = nsm.OpenDefaultSession()
 	if err != nil {
 		return fmt.Errorf("failed to open NSM session: %v", err)
 	}
-	nsmSession = session
 
-	// generate RSA key pair for NSM session
-	key, err := rsa.GenerateKey(session, 2048)
+	// generate RSA key pair for NSM session, nsmSession is used here as a crypto/rand.Reader
+	key, err := rsa.GenerateKey(nsmSession, 2048)
 	if err != nil {
 		return fmt.Errorf("failed to generate RSA key: %v", err)
 	}
 	nsmPrivateKey = key
-	// marshal public key for later use
-	nsmPublicKeyBytes = x509.MarshalPKCS1PublicKey(&key.PublicKey)
+
+	// extract public key in DER format
+	nsmPublicKeyBytes, err = x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		return fmt.Errorf("failed to marshal NSM public key: %v", err)
+	}
+
+	// request attestation document with nsm public key
+	req := request.Attestation{
+		PublicKey: nsmPublicKeyBytes,
+		Nonce:     nil,
+		UserData:  nil,
+	}
+	res, err := nsmSession.Send(&req)
+	if err != nil {
+		return fmt.Errorf("failed to get attestation document: %v", err)
+	}
+	if res.Attestation == nil || len(res.Attestation.Document) == 0 {
+		return fmt.Errorf("received empty attestation document from NSM")
+	}
+	nsmAttestation = res.Attestation.Document
 
 	log.Println("NSM session initiated")
 	return nil
@@ -144,7 +164,7 @@ func handleConnection(conn net.Conn) {
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "session_unwrap":
-			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, kmsClient)
+			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, nsmAttestation, kmsClient)
 		case "decrypt":
 			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, nsmPublicKeyBytes, nsmPrivateKey)
 		default:

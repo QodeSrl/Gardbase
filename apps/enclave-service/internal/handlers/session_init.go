@@ -61,8 +61,8 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	// store session in enclave memory
 	session.StoreSession(sidB64, sessKey, expiresAt)
 
-	// request attestation doc
-	var attestationDoc []byte
+	// request attestation doc (generate a new one with session pubkey + client's nonce)
+	var sessionAttDoc []byte
 	if nsmSession != nil {
 		attestationReq := request.Attestation{
 			PublicKey: ephPub[:],
@@ -81,7 +81,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 			return
 		}
 		if attestationRes.Attestation != nil && attestationRes.Attestation.Document != nil {
-			attestationDoc = attestationRes.Attestation.Document
+			sessionAttDoc = attestationRes.Attestation.Document
 		}
 	}
 
@@ -90,8 +90,8 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 		EnclaveEphemeralPublicKey: base64.StdEncoding.EncodeToString(ephPub[:]),
 		ExpiresAt:                 expiresAt.Format(time.RFC3339),
 	}
-	if len(attestationDoc) > 0 {
-		res.Attestation = base64.StdEncoding.EncodeToString(attestationDoc)
+	if len(sessionAttDoc) > 0 {
+		res.Attestation = base64.StdEncoding.EncodeToString(sessionAttDoc)
 	}
 	utils.SendResponse(encoder, enclaveproto.Response{Success: true, Data: res})
 }
