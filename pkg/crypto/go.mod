@@ -2,9 +2,15 @@ module github.com/QodeSrl/gardbase/pkg/crypto
 
 go 1.24.4
 
-require github.com/aws/aws-sdk-go-v2/service/kms v1.48.2
+require (
+	github.com/aws/aws-sdk-go-v2/service/kms v1.48.2
+	github.com/fxamacker/cbor/v2 v2.5.0
+)
 
-require golang.org/x/sys v0.38.0 // indirect
+require (
+	github.com/x448/float16 v0.8.4 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+)
 
 require (
 	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.0
