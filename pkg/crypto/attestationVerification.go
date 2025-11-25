@@ -69,10 +69,41 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 	}
 
 	// 1: decode COSE Sign1 structure
+	var cose coseSign1
+	if err := cbor.Unmarshal(attDoc, &cose); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal COSE Sign1: %w", err)
+	}
+	result.VerifiedSteps = append(result.VerifiedSteps, "COSE_Sign1 decoded")
 
 	// 2: decode attestation document from payload
+	var doc attestationDocument
+	if err := cbor.Unmarshal(cose.Payload, &doc); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal attestation document: %w", err)
+	}
+	result.Document = &doc
+	result.PublicKey = doc.PublicKey
+	result.Nonce = doc.Nonce
+	result.PCRs = doc.PCRs
+	result.VerifiedSteps = append(result.VerifiedSteps, "Attestation document decoded")
 
 	// 3: verify certificate chain
+	rootCA := config.RootCA
+	if rootCA == nil {
+		block, _ := pem.Decode([]byte(awsNitroRootCA))
+		if block == nil {
+			return nil, fmt.Errorf("failed to decode AWS Nitro Root CA PEM")
+		}
+		var err error
+		rootCA, err = x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse AWS Nitro Root CA certificate: %w", err)
+		}
+	}
+
+	if err := verifyCertificateChain(doc.Certificate, doc.CABundle, rootCA); err != nil {
+		return nil, fmt.Errorf("certificate chain verification failed: %w", err)
+	}
+	result.VerifiedSteps = append(result.VerifiedSteps, "Certificate chain verified")
 
 	// 4: verify signature
 
