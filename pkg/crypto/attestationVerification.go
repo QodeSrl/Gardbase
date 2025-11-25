@@ -1,16 +1,16 @@
 package crypto
 
 import (
-"bytes"
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"crypto/x509"
-"encoding/asn1"
+	"encoding/asn1"
 	"encoding/base64"
-"encoding/hex"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
-"math/big"
+	"math/big"
 	"time"
 
 	"github.com/fxamacker/cbor/v2"
@@ -148,13 +148,24 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 	result.VerifiedSteps = append(result.VerifiedSteps, "Public key verified")
 
 	// 8: verify PCRs
+	if config.VerifyPCRs && len(config.ExpectedPCRs) > 0 {
+		if err := verifyPCRs(doc.PCRs, config.ExpectedPCRs); err != nil {
+			return nil, fmt.Errorf("PCR verification failed: %w", err)
+		}
+		result.VerifiedSteps = append(result.VerifiedSteps, "PCRs verified")
+	}
+
+	result.Verified = true
+
+	ds.AttestationVerified = true
+	ds.AttestationResult = result
 
 	return result, nil
 }
 
 // Verifies the certificate chain up to the root CA
 func verifyCertificateChain(leafCertDER []byte, caBundleDER [][]byte, rootCA *x509.Certificate) error {
-// parse leaf certificate
+	// parse leaf certificate
 	leafCert, err := x509.ParseCertificate(leafCertDER)
 	if err != nil {
 		return fmt.Errorf("failed to parse leaf certificate: %w", err)
@@ -237,5 +248,18 @@ func verifyCOSESignature(cose *coseSign1, leafCertDER []byte) error {
 }
 
 func verifyPCRs(actualPCRs map[uint][]byte, expectedPCRs map[uint]string) error {
+	for idx, expectedValueString := range expectedPCRs {
+		actualValue, exists := actualPCRs[idx]
+		expectedValue, err := hex.DecodeString(expectedValueString)
+		if err != nil {
+			return fmt.Errorf("invalid expected PCR %d value: %w", idx, err)
+		}
+		if !exists {
+			return fmt.Errorf("PCR %d not found in attestation document", idx)
+		}
+		if !bytes.Equal(actualValue, expectedValue) {
+			return fmt.Errorf("PCR %d value mismatch", idx)
+		}
+	}
 	return nil
 }
