@@ -1,10 +1,19 @@
 package crypto
 
 import (
+"bytes"
+	"crypto/ecdsa"
+	"crypto/sha256"
 	"crypto/x509"
+"encoding/asn1"
 	"encoding/base64"
+"encoding/hex"
+	"encoding/pem"
 	"fmt"
+"math/big"
 	"time"
+
+	"github.com/fxamacker/cbor/v2"
 )
 
 type attestationDocument struct {
@@ -120,6 +129,36 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 
 // Verifies the certificate chain up to the root CA
 func verifyCertificateChain(leafCertDER []byte, caBundleDER [][]byte, rootCA *x509.Certificate) error {
+// parse leaf certificate
+	leafCert, err := x509.ParseCertificate(leafCertDER)
+	if err != nil {
+		return fmt.Errorf("failed to parse leaf certificate: %w", err)
+	}
+
+	// parse intermediate certificates
+	intermediates := x509.NewCertPool()
+	for i, certDER := range caBundleDER {
+		cert, err := x509.ParseCertificate(certDER)
+		if err != nil {
+			return fmt.Errorf("failed to parse intermediate certificate %d: %w", i, err)
+		}
+		intermediates.AddCert(cert)
+	}
+
+	// create new root pool
+	roots := x509.NewCertPool()
+	roots.AddCert(rootCA)
+
+	opts := x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: intermediates,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}
+
+	if _, err := leafCert.Verify(opts); err != nil {
+		return fmt.Errorf("certificate verification failed: %w", err)
+	}
+
 	return nil
 }
 
