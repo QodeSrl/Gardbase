@@ -3,9 +3,9 @@ package crypto
 import (
 	"context"
 	"crypto/rand"
-"crypto/x509"
+	"crypto/x509"
 	"encoding/base64"
-"encoding/hex"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,9 +27,9 @@ type DecryptSession struct {
 	SessionKey          []byte   // derived session key
 	ExpiresAt           time.Time
 	AttestationB64      string // Base64-encoded attestation document
-ExpectedNonceB64    string // Base64-encoded expected nonce for attestation
+	ExpectedNonceB64    string // Base64-encoded expected nonce for attestation
 	AttestationVerified bool
-AttestationResult   *verificationResult
+	AttestationResult   *verificationResult
 	endpoint            string
 	httpClient          *http.Client
 }
@@ -207,7 +207,31 @@ func (ds *DecryptSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string,
 	return dek, nil
 }
 
-func UnwrapSingleDEK(ctx context.Context, wrappedDEKB64 string, nonceB64 string, keyID string, endpoint string) ([]byte, error) {
+// Close zeros out sensitive data
+func (ds *DecryptSession) Close() {
+	zero(ds.SessionKey)
+	zero(ds.ClientPriv[:])
+}
+
+func (ds *DecryptSession) GetAttestationInfo() map[string]any {
+	if ds.AttestationResult == nil {
+		return nil
+	}
+
+	pcrInfo := make(map[string]string)
+	for idx, value := range ds.AttestationResult.PCRs {
+		pcrInfo[fmt.Sprintf("PCR%d", idx)] = hex.EncodeToString(value)
+	}
+
+	return map[string]interface{}{
+		"verified":       ds.AttestationVerified,
+		"timestamp":      ds.AttestationResult.Timestamp,
+		"pcrs":           pcrInfo,
+		"verified_steps": ds.AttestationResult.VerifiedSteps,
+	}
+}
+
+func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string, nonceB64 string, keyID string) ([]byte, error) {
 	clientPub, clientPriv, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
