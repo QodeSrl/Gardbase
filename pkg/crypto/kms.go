@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/nacl/box"
 )
@@ -52,19 +51,7 @@ type SessionConfig struct {
 	HTTPTimeout time.Duration
 }
 
-func GenerateDEK(ctx context.Context, kmsClient *kms.Client, keyID string) (DEK []byte, encryptedDEK []byte, err error) {
-	generateDEKInput := &kms.GenerateDataKeyInput{
-		KeyId:   &keyID,
-		KeySpec: "AES_256",
-	}
-	generateDEKOutput, err := kmsClient.GenerateDataKey(ctx, generateDEKInput)
-	if err != nil {
-		return nil, nil, err
-	}
-	return generateDEKOutput.Plaintext, generateDEKOutput.CiphertextBlob, nil
-}
-
-func StartDecryptSession(ctx context.Context, config SessionConfig) (*DecryptSession, error) {
+func StartDecryptSession(ctx context.Context, config SessionConfig) (*EnclaveSecureSession, error) {
 
 	clientPriv, clientPub, clientPubB64, err := GenerateEphemeralKeypair()
 	if err != nil {
@@ -179,25 +166,55 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 	return resBody, nil
 }
 
-func (ds *DecryptSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
-	if ds.SessionKey == nil || len(ds.SessionKey) != chacha20poly1305.KeySize {
-		return nil, errors.New("invalid session key")
+func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, count int) (DEKs [][]byte, encryptedDEKs [][]byte, err error) {
+	if time.Now().After(ess.ExpiresAt) {
+		return nil, nil, errors.New("decrypt session has expired")
+	}
+	if !ess.AttestationVerified {
+		return nil, nil, errors.New("attestation not verified")
 	}
 
-	encryptedDEKBytes, err := base64.StdEncoding.DecodeString(encryptedDEKB64)
-	if err != nil {
-		return nil, errors.New("invalid base64 encrypted DEK")
+	body := enclaveproto.SessionGenerateDEKRequest{
+		SessionId: ess.SessionId,
+		KeyId:     keyID,
+		Count:     count,
 	}
-	nonce, err := base64.StdEncoding.DecodeString(nonceB64)
+	reqBytes, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ess.endpoint+"/session/generate-deks", strings.NewReader(string(reqBytes)))
 	if err != nil {
-		return nil, errors.New("invalid base64 nonce")
+		return nil, nil, err
 	}
-	if len(nonce) != chacha20poly1305.NonceSizeX {
-		return nil, errors.New("invalid nonce size")
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := ess.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
 	}
 
-	aead, err := chacha20poly1305.NewX(ds.SessionKey)
-	if err != nil {
+	var resBody enclaveproto.SessionGenerateDEKResponse
+	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
+		return nil, nil, err
+	}
+	for _, DEK := range resBody.DEKs {
+		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, resBody.Nonce)
+		if err != nil {
+			return nil, nil, err
+		}
+		DEKs = append(DEKs, dek)
+
+		correspondingEncryptedDEK, err := base64.StdEncoding.DecodeString(DEK.KmsEncryptedDEK)
+		if err != nil {
+			return nil, nil, errors.New("invalid base64 KMS encrypted DEK")
+		}
+		encryptedDEKs = append(encryptedDEKs, correspondingEncryptedDEK)
+	}
+	return DEKs, encryptedDEKs, nil
+}
 
 func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
 	if ess.SessionKey == nil || len(ess.SessionKey) != chacha20poly1305.KeySize {

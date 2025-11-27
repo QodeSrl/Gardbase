@@ -74,3 +74,23 @@ func zero(b []byte) {
 		b[i] = 0
 	}
 }
+
+func openDEK(sessionKey []byte, sealedDEKB64 string, nonceB64 string) ([]byte, error) {
+	nonce, err := base64.StdEncoding.DecodeString(nonceB64)
+	if len(nonce) != chacha20poly1305.NonceSizeX {
+		return nil, errors.New("invalid nonce size")
+	}
+	aead, err := chacha20poly1305.NewX(sessionKey)
+	if err != nil {
+		return nil, err
+	}
+	sealedDEK, err := base64.StdEncoding.DecodeString(sealedDEKB64)
+	if err != nil {
+		return nil, err
+	}
+	dek, err := aead.Open(nil, nonce, sealedDEK, nil)
+	if err != nil {
+		return nil, err
+	}
+	return dek, nil
+}
