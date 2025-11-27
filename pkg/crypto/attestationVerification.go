@@ -67,12 +67,12 @@ rfMCMQCi85sWBbJwKKXdS6BptQFuZbT73o/gBh1qUxl/nNr12UO8Yfwr6wPLb+6N
 IwLz3/Y=
 -----END CERTIFICATE-----`
 
-func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verificationResult, error) {
+func (ess *EnclaveSecureSession) verifyAttestation(config SessionConfig) (*verificationResult, error) {
 	result := &verificationResult{
 		VerifiedSteps: make([]string, 0),
 	}
 
-	attDoc, err := base64.StdEncoding.DecodeString(ds.AttestationB64)
+	attDoc, err := base64.StdEncoding.DecodeString(ess.AttestationB64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode attestation document: %w", err)
 	}
@@ -132,7 +132,7 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 	result.VerifiedSteps = append(result.VerifiedSteps, "Timestamp verified")
 
 	// 6: verify nonce
-	expectedNonce, err := base64.StdEncoding.DecodeString(ds.ExpectedNonceB64)
+	expectedNonce, err := base64.StdEncoding.DecodeString(ess.ExpectedNonceB64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode expected nonce: %w", err)
 	}
@@ -142,7 +142,7 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 	result.VerifiedSteps = append(result.VerifiedSteps, "Nonce verified")
 
 	// 7: verify public key
-	if !bytes.Equal(doc.PublicKey, ds.EnclavePubRaw) {
+	if !bytes.Equal(doc.PublicKey, ess.EnclavePubRaw) {
 		return nil, fmt.Errorf("public key verification failed: %w", err)
 	}
 	result.VerifiedSteps = append(result.VerifiedSteps, "Public key verified")
@@ -157,8 +157,8 @@ func (ds *DecryptSession) verifyAttestation(config SessionConfig) (*verification
 
 	result.Verified = true
 
-	ds.AttestationVerified = true
-	ds.AttestationResult = result
+	ess.AttestationVerified = true
+	ess.AttestationResult = result
 
 	return result, nil
 }

@@ -19,7 +19,7 @@ import (
 	"golang.org/x/crypto/nacl/box"
 )
 
-type DecryptSession struct {
+type EnclaveSecureSession struct {
 	SessionId           string   // Base64-encoded
 	ClientPriv          [32]byte // x25519 private key
 	ClientPub           [32]byte // x25519 public key
@@ -121,7 +121,7 @@ func StartDecryptSession(ctx context.Context, config SessionConfig) (*DecryptSes
 		return nil, err
 	}
 
-	ds := &DecryptSession{
+	ess := &EnclaveSecureSession{
 		SessionId:           resBody.SessionId,
 		ClientPriv:          clientPriv,
 		ClientPub:           clientPub,
@@ -134,35 +134,35 @@ func StartDecryptSession(ctx context.Context, config SessionConfig) (*DecryptSes
 		AttestationVerified: false,
 	}
 
-	if _, err := ds.verifyAttestation(config); err != nil {
-		zero(ds.SessionKey)
+	if _, err := ess.verifyAttestation(config); err != nil {
+		zero(ess.SessionKey)
 		return nil, fmt.Errorf("attestation verification failed: %w", err)
 	}
 
-	return ds, nil
+	return ess, nil
 }
 
-func (ds *DecryptSession) SessionUnwrap(ctx context.Context, items []enclaveproto.SessionUnwrapItem, keyID string) (enclaveproto.SessionUnwrapResponse, error) {
-	if time.Now().After(ds.ExpiresAt) {
+func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []enclaveproto.SessionUnwrapItem, keyID string) (enclaveproto.SessionUnwrapResponse, error) {
+	if time.Now().After(ess.ExpiresAt) {
 		return nil, errors.New("decrypt session has expired")
 	}
-	if !ds.AttestationVerified {
+	if !ess.AttestationVerified {
 		return nil, errors.New("attestation not verified")
 	}
 
 	body := enclaveproto.SessionUnwrapRequest{
-		SessionId: ds.SessionId,
+		SessionId: ess.SessionId,
 		KeyId:     keyID,
 		Items:     items,
 	}
 	reqBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ds.endpoint, strings.NewReader(string(reqBytes)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ess.endpoint+"/session/unwrap", strings.NewReader(string(reqBytes)))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	res, err := ds.httpClient.Do(req)
+	res, err := ess.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -198,36 +198,41 @@ func (ds *DecryptSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string,
 
 	aead, err := chacha20poly1305.NewX(ds.SessionKey)
 	if err != nil {
-		return nil, err
+
+func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
+	if ess.SessionKey == nil || len(ess.SessionKey) != chacha20poly1305.KeySize {
+		return nil, errors.New("invalid session key")
 	}
-	dek, err := aead.Open(nil, nonce, encryptedDEKBytes, []byte(objectID))
+
+	dek, err := openDEK(ess.SessionKey, encryptedDEKB64, nonceB64)
 	if err != nil {
 		return nil, err
 	}
+
 	return dek, nil
 }
 
 // Close zeros out sensitive data
-func (ds *DecryptSession) Close() {
-	zero(ds.SessionKey)
-	zero(ds.ClientPriv[:])
+func (ess *EnclaveSecureSession) Close() {
+	zero(ess.SessionKey)
+	zero(ess.ClientPriv[:])
 }
 
-func (ds *DecryptSession) GetAttestationInfo() map[string]any {
-	if ds.AttestationResult == nil {
+func (ess *EnclaveSecureSession) GetAttestationInfo() map[string]any {
+	if ess.AttestationResult == nil {
 		return nil
 	}
 
 	pcrInfo := make(map[string]string)
-	for idx, value := range ds.AttestationResult.PCRs {
+	for idx, value := range ess.AttestationResult.PCRs {
 		pcrInfo[fmt.Sprintf("PCR%d", idx)] = hex.EncodeToString(value)
 	}
 
 	return map[string]interface{}{
-		"verified":       ds.AttestationVerified,
-		"timestamp":      ds.AttestationResult.Timestamp,
+		"verified":       ess.AttestationVerified,
+		"timestamp":      ess.AttestationResult.Timestamp,
 		"pcrs":           pcrInfo,
-		"verified_steps": ds.AttestationResult.VerifiedSteps,
+		"verified_steps": ess.AttestationResult.VerifiedSteps,
 	}
 }
 
