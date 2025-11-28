@@ -201,7 +201,7 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 		return nil, nil, err
 	}
 	for _, DEK := range resBody.DEKs {
-		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, resBody.Nonce)
+		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.Nonce)
 		if err != nil {
 			return nil, nil, err
 		}

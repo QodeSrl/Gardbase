@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
@@ -39,6 +38,8 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 	}
 
 	results := make(enclaveproto.SessionUnwrapResponse, 0, len(req.Items))
+	ctx := context.Background()
+
 	for _, it := range req.Items {
 		objId := it.ObjectId
 		if objId == "" {
@@ -67,7 +68,6 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 			continue
 		}
 
-		ctx := context.Background()
 		input := &kms.DecryptInput{
 			CiphertextBlob: ctBytes,
 			KeyId:          &req.KeyId,
@@ -98,7 +98,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 
 		// nonce for session encryption
 		nonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
-		if _, err := rand.Read(nonce); err != nil {
+		if _, err := nsmSession.Read(nonce); err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
 				ObjectId: objId,
 				Success:  false,
