@@ -106,6 +106,7 @@ func (s *Server) setupEnclaveProxy() {
 	s.router.GET("/enclave/health", proxy.HandleHealth)
 	s.router.POST("/enclave/session/init", proxy.HandleSessionInit)
 	s.router.POST("/enclave/session/unwrap", proxy.HandleSessionUnwrap)
+	s.router.POST("/enclave/session/generate_dek", proxy.HandleSessionGenerateDEK)
 	s.router.POST("/enclave/decrypt", proxy.HandleDecrypt)
 }
 

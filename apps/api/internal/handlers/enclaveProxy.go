@@ -77,6 +77,33 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 	c.Data(200, "application/json", res)
 }
 
+func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
+	var generateDEKReq enclaveproto.SessionGenerateDEKRequest
+	if err := c.BindJSON(&generateDEKReq); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
+		return
+	}
+	if generateDEKReq.Count <= 0 || generateDEKReq.Count > 100 {
+		c.JSON(400, gin.H{"error": "Count must be between 1 and 100"})
+		return
+	}
+	payloadBytes, err := json.Marshal(generateDEKReq)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
+		return
+	}
+	req := enclaveproto.Request{
+		Type:    "session_generate_dek",
+		Payload: json.RawMessage(payloadBytes),
+	}
+	res, err := p.sendToEnclave(req, 30*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.Data(200, "application/json", res)
+}
+
 func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	var decryptReq enclaveproto.DecryptRequest
 	if err := c.BindJSON(&decryptReq); err != nil {

@@ -2,10 +2,7 @@ module github.com/QodeSrl/gardbase/pkg/crypto
 
 go 1.24.4
 
-require (
-	github.com/aws/aws-sdk-go-v2/service/kms v1.48.2
-	github.com/fxamacker/cbor/v2 v2.5.0
-)
+require github.com/fxamacker/cbor/v2 v2.5.0
 
 require (
 	github.com/x448/float16 v0.8.4 // indirect
@@ -14,10 +11,6 @@ require (
 
 require (
 	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.0
-	github.com/aws/aws-sdk-go-v2 v1.39.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.13 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.13 // indirect
-	github.com/aws/smithy-go v1.23.2 // indirect
 	golang.org/x/crypto v0.45.0
 )
 
