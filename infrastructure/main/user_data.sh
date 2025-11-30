@@ -31,7 +31,7 @@ echo "Configuration:"
 echo "  Region: $REGION"
 echo "  Environment: $ENVIRONMENT"
 echo "  ECR URL: $ECR_REPOSITORY_URL"
-echo "  Enclave CPUs: $ENCLAVE_CPU_COUNT"
+echo "  Enclave CPUs: $ENCLAVE_CPUS"
 echo "  Enclave Memory: $ENCLAVE_MEMORY_MIB MiB"
 echo "  Debug Mode: $ENABLE_DEBUG_MODE"
 
@@ -93,7 +93,7 @@ chown -R ec2-user:ec2-user /opt/gardbase
 
 # Create systemd service for the parent application
 echo "Creating systemd service for Gardbase parent application..."
-car > /etc/systemd/system/gardbase-parent.service <<EOF
+cat > /etc/systemd/system/gardbase-parent.service <<EOF
 [Unit]
 Description=Gardbase Parent Application
 After=docker.service
@@ -122,7 +122,7 @@ ExecStart=/usr/bin/docker run --rm --name gardbase-parent \\
     -e LOCALSTACK_URL="" \\
     -e ENVIRONMENT="$ENVIRONMENT" \\
     -e PORT="80" \\
-    -e ENCLAVE_PORT="8080" \\
+    -e ENCLAVE_PORT="5000" \\
     -e ENCLAVE_CID="16" \\
     -e ENABLE_DEBUG_MODE="$ENABLE_DEBUG_MODE" \\
     -e MAX_ATTESTATION_AGE_MINUTES="$MAX_ATTESTATION_AGE_MINUTES" \\
@@ -148,6 +148,9 @@ Restart=always
 RestartSec=10
 User=root
 
+# Sleep to allow allocator to be ready
+ExecStartPre=/bin/sleep 5
+
 # Build the enclave image file (EIF) from Docker image
 ExecStartPre=/bin/bash -c 'if [ ! -f /opt/gardbase/enclave.eif ]; then \\
     echo "Building enclave image..."; \\
@@ -164,7 +167,7 @@ ExecStartPre=-/usr/bin/nitro-cli terminate-enclave --all
 # Start the enclave
 ExecStart=/usr/bin/nitro-cli run-enclave \\
     --eif-path /opt/gardbase/enclave.eif \\
-    --cpu-count $ENCLAVE_CPU_COUNT \\
+    --cpu-count $ENCLAVE_CPUS \\
     --memory $ENCLAVE_MEMORY_MIB \\
     --enclave-cid 16 \\
     $( [ "$ENABLE_DEBUG_MODE" = "true" ] && echo "--debug-mode" || echo "" )
@@ -246,6 +249,14 @@ exit 0
 EOF
 
 chmod +x /opt/gardbase/health-check.sh
+
+# Install CloudWatch agent
+echo "Installing CloudWatch agent..."
+curl -fsSL https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm -o /tmp/amazon-cloudwatch-agent.rpm
+rpm -U /tmp/amazon-cloudwatch-agent.rpm
+
+# Ensure CloudWatch agent directories exist
+mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
 
 # Create CloudWatch Logs configuration
 echo "Configuring CloudWatch Logs..."

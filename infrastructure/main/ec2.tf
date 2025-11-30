@@ -204,7 +204,7 @@ resource "aws_instance" "api" {
     delete_on_termination = true
   }
 
-  user_data = base64encode(templatefile("${path.module}/user_data.sh", {
+  user_data_base64 = base64encode(templatefile("${path.module}/user_data.sh", {
     region                      = var.region
     project_name                = var.project_name
     environment                 = var.environment

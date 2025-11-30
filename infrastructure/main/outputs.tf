@@ -33,11 +33,11 @@ output "ssh_private_key_ssm_parameter" {
   sensitive   = true
 }
 
-output "ssh_command" {
-  description = "SSH command to connect to the instance"
-  value       = "aws ssm get-parameter --name ${aws_ssm_parameter.api_private_key.name} --with-decryption --query Parameter.Value --output text > /tmp/key.pem && chmod 400 /tmp/key.pem && ssh -i /tmp/key.pem ec2-user@${aws_eip.api.public_ip}"
-  sensitive   = true
-}
+# output "ssh_command" {
+#   description = "SSH command to connect to the instance"
+#   value       = "aws ssm get-parameter --name ${aws_ssm_parameter.api_private_key.name} --with-decryption --query Parameter.Value --output text > /tmp/key.pem && chmod 400 /tmp/key.pem && ssh -i /tmp/key.pem ec2-user@${aws_eip.api.public_ip}"
+#   sensitive   = true
+# }
 
 output "enclave_configuration" {
   description = "Enclave configuration"
