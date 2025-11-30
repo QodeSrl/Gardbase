@@ -1,26 +1,26 @@
 {
-  "name": "@gardbase/api",
-  "sourceRoot": "apps/api",
+  "name": "@gardbase/enclave-service",
+  "sourceRoot": "apps/enclave-service",
   "projectType": "application",
   "targets": {
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "go build -o ../../dist/apps/api/main ./cmd/server",
-        "cwd": "apps/api"
+        "command": "go build -o ../../dist/apps/enclave-service/main ./cmd/enclave",
+        "cwd": "apps/enclave-service"
       },
-      "outputs": ["{workspaceRoot}/dist/apps/api"]
+      "outputs": ["{workspaceRoot}/dist/apps/enclave-service"]
     },
     "docker-build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker build -t gardbase-api:latest-parent -f Dockerfile.api ."
+        "command": "docker build -t gardbase-api:latest-enclave -f Dockerfile.enclave ."
       }
     },
     "docker-tag": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker tag gardbase-api:latest-parent {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com/gardbase-api:latest-parent"
+        "command": "docker tag gardbase-api:latest-enclave {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com/gardbase-api:latest-enclave"
       }
     },
     "docker-login": {
@@ -32,55 +32,55 @@
     "docker-push": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker push {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com/gardbase-api:latest-parent"
+        "command": "docker push {args.aws_account_id}.dkr.ecr.{args.aws_region}.amazonaws.com/gardbase-api:latest-enclave"
       }
     },
     "build-and-push": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "nx run @gardbase/api:docker-build && nx run @gardbase/api:docker-tag --aws_account_id={args.aws_account_id} --aws_region={args.aws_region} && nx run @gardbase/api:docker-login --aws_account_id={args.aws_account_id} --aws_region={args.aws_region} && nx run @gardbase/api:docker-push --aws_account_id={args.aws_account_id} --aws_region={args.aws_region}"
+        "command": "nx run @gardbase/enclave-service:docker-build && nx run @gardbase/enclave-service:docker-tag --aws_account_id={args.aws_account_id} --aws_region={args.aws_region} && nx run @gardbase/enclave-service:docker-login --aws_account_id={args.aws_account_id} --aws_region={args.aws_region} && nx run @gardbase/enclave-service:docker-push --aws_account_id={args.aws_account_id} --aws_region={args.aws_region}"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "go run ./cmd/server",
-        "cwd": "apps/api"
+        "command": "go run ./cmd/enclave",
+        "cwd": "apps/enclave-service"
       }
     },
     "dev": {
       "executor": "nx:run-commands",
       "options": {
         "command": "air",
-        "cwd": "apps/api"
+        "cwd": "apps/enclave-service"
       }
     },
     "test": {
       "executor": "nx:run-commands",
       "options": {
         "command": "go test ./...",
-        "cwd": "apps/api"
+        "cwd": "apps/enclave-service"
       }
     },
     "lint": {
       "executor": "nx:run-commands",
       "options": {
         "command": "golangci-lint run",
-        "cwd": "apps/api"
+        "cwd": "apps/enclave-service"
       }
     },
     "format": {
       "executor": "nx:run-commands",
       "options": {
         "command": "gofmt -w .",
-        "cwd": "apps/api"
+        "cwd": "apps/enclave-service"
       }
     },
     "tidy": {
       "executor": "nx:run-commands",
       "options": {
         "command": "go mod tidy",
-        "cwd": "apps/api"
+        "cwd": "apps/enclave-service"
       }
     }
   }

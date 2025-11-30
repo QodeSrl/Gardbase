@@ -30,9 +30,9 @@ A minimal Terraform workspace sets up:
 - ECR repository for API Docker image
 
 ```bash
-cd infrastructure/init
+cd infrastructure/bootstrap
 terraform init
-terraform apply -var="env=dev"
+terraform apply -var="environment=dev"
 ```
 
 ### Build & Deploy Lambda
@@ -40,7 +40,7 @@ terraform apply -var="env=dev"
 ```bash
 nx run @gardbase/lambdas/upload-processor:build
 nx run @gardbase/lambdas/upload-processor:package
-nx run @gardbase/lambdas/upload-processor:deploy --bucket=<s3-bucket-name>
+nx run @gardbase/lambdas/upload-processor:push --bucket=<s3-bucket-name>
 # Or
 nx run @gardbase/lambdas/upload-processor:build-and-push --bucket=<s3-bucket-name>
 ```
@@ -50,9 +50,21 @@ nx run @gardbase/lambdas/upload-processor:build-and-push --bucket=<s3-bucket-nam
 ```bash
 nx run api:docker-build
 nx run api:docker-tag --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+nx run api:docker-login --aws_account_id=<aws-account-id> --aws_region=<aws-region>
 nx run api:docker-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
 # Or
 nx run api:build-and-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+```
+
+### Build & Push Enclave Service Docker Image
+
+```bash
+nx run enclave-service:docker-build
+nx run enclave-service:docker-tag --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+nx run enclave-service:docker-login --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+nx run enclave-service:docker-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+# Or
+nx run enclave-service:build-and-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
 ```
 
 ### Deploy Full Infrastructure
@@ -60,5 +72,5 @@ nx run api:build-and-push --aws_account_id=<aws-account-id> --aws_region=<aws-re
 ```bash
 cd infrastructure/main
 terraform init
-terraform apply -var="env=dev"
+terraform apply -var="environment=dev"
 ```
