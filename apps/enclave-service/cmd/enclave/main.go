@@ -49,7 +49,7 @@ func main() {
 		log.Fatalf("Failed to initiate NSM session: %v", err)
 	}
 
-	port := getEnvUint32("ENCLAVE_PORT", 8080)
+	port := getEnvUint32("ENCLAVE_PORT", 5000)
 
 	listener, err := vsock.Listen(port, nil)
 	if err != nil {
@@ -57,7 +57,7 @@ func main() {
 	}
 	defer listener.Close()
 
-	log.Println("Enclave service is listening on port 8000")
+	log.Printf("Enclave service is listening on port %d", port)
 
 	// grateful shutdown
 	go func() {

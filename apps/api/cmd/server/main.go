@@ -164,7 +164,7 @@ func initStorage(ctx context.Context, logger *zap.Logger) (*storage.S3Client, *s
 
 func loadConfig() *Config {
 	config := &Config{
-		Port:        getEnv("PORT", "8080"),
+		Port:        getEnv("PORT", "80"),
 		Environment: getEnv("ENVIRONMENT", "development"),
 	}
 
