@@ -13,6 +13,7 @@ COPY pkg/models/go.mod ./pkg/models/
 COPY pkg/enclaveproto/go.mod ./pkg/enclaveproto/
 
 WORKDIR /root/apps/enclave-service
+ENV GOWORK=off
 RUN go mod download
 
 WORKDIR /root
@@ -22,7 +23,10 @@ COPY pkg/enclaveproto ./pkg/enclaveproto
 
 # CGO_ENABLED=1 is required for vsock support
 WORKDIR /root/apps/enclave-service
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o enclave ./cmd/enclave/main.go
+RUN GOWORK=off CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o enclave ./cmd/enclave/main.go
+
+# Verify that the binary was built successfully
+RUN ls -lh enclave
 
 FROM alpine:latest
 
@@ -33,14 +37,16 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY --from=builder /root/apps/enclave-service/enclave .
+COPY --from=builder /root/apps/enclave-service/enclave /app/enclave
 
-EXPOSE 8080
+# Verify that the binary was copied successfully and is executable
+RUN ls -lh /app/enclave && chmod +x /app/enclave
 
+# Add a non-root user to run the application
 RUN addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser appuser && \
     chown -R appuser:appuser /app
 
 USER appuser
 
-CMD ["./enclave"]
+ENTRYPOINT ["/app/enclave"]
