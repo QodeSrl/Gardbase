@@ -81,7 +81,7 @@ aws ecr get-login-password --region "$REGION" | docker login --username AWS --pa
 # Pull the latest images
 echo "Pulling enclave image from ECR..."
 docker pull "$ECR_REPOSITORY_URL:latest-parent" || \
-    docker pull "$ECR_REPOSITORY_URL:latest"
+    echo "Error: Could not pull parent image from ECR"
 
 docker pull "$ECR_REPOSITORY_URL:latest-enclave" || \
     echo "Warning: Enclave image not found, will be built on first run"
@@ -133,6 +133,49 @@ ExecStop=/usr/bin/docker stop gardbase-parent
 WantedBy=multi-user.target
 EOF
 
+# Create run enclave script
+echo "Creating run enclave script..."
+cat > /opt/gardbase/run-enclave.sh <<EOF
+#!/bin/bash
+set -e
+
+LOG_FILE="/opt/gardbase/enclave-run.log"
+
+CMD="/usr/bin/nitro-cli run-enclave \
+  --eif-path /opt/gardbase/enclave.eif \
+  --cpu-count $ENCLAVE_CPUS \
+  --memory $ENCLAVE_MEMORY_MIB \
+  --enclave-cid 16"
+
+if [ "$ENABLE_DEBUG_MODE" = "true" ]; then
+  CMD="\$CMD --debug-mode"
+fi
+
+echo "Starting enclave..." > "\$LOG_FILE"
+
+# Run the command
+eval "\$CMD" >> "\$LOG_FILE" 2>&1
+EOF
+
+chmod +x /opt/gardbase/run-enclave.sh
+
+# Create capture console script
+echo "Creating capture console script..."
+cat > /opt/gardbase/capture-console.sh <<EOF
+#!/bin/bash
+set -e
+LOG_FILE="/opt/gardbase/enclave-console.log"
+if [ "$ENABLE_DEBUG_MODE" = "true" ]; then
+    echo "Capturing enclave console output..." > "\$LOG_FILE"
+    while ! nitro-cli describe-enclaves | jq -e '.[0].State == "RUNNING"' > /dev/null 2>&1; do
+        sleep 2
+    done
+    nitro-cli console --enclave-id \$(nitro-cli describe-enclaves | jq -r '.[0].EnclaveID') >> "\$LOG_FILE" 2>&1
+fi
+EOF
+
+chmod +x /opt/gardbase/capture-console.sh
+
 # Create systemd service for the Nitro Enclave
 echo "Creating systemd service for Gardbase Nitro Enclave..."
 cat > /etc/systemd/system/gardbase-enclave.service <<EOF
@@ -165,18 +208,13 @@ fi'
 ExecStartPre=-/usr/bin/nitro-cli terminate-enclave --all
 
 # Start the enclave
-ExecStart=/usr/bin/nitro-cli run-enclave \\
-    --eif-path /opt/gardbase/enclave.eif \\
-    --cpu-count $ENCLAVE_CPUS \\
-    --memory $ENCLAVE_MEMORY_MIB \\
-    --enclave-cid 16 \\
-    $( [ "$ENABLE_DEBUG_MODE" = "true" ] && echo "--debug-mode" || echo "" )
+ExecStart=/opt/gardbase/run-enclave.sh
 
 # Stop enclave on service stop
 ExecStop=/usr/bin/nitro-cli terminate-enclave --all
 
 # Capture enclave console output
-ExecStartPost=/bin/bash -c 'sleep 5; nitro-cli console --enclave-id \$(nitro-cli describe-enclaves | jq -r ".[0].EnclaveID") > /opt/gardbase/logs/enclave-console.log 2>&1 &'
+ExecStartPost=/opt/gardbase/capture-console.sh
 
 [Install]
 WantedBy=multi-user.target
@@ -302,7 +340,7 @@ echo "Enabling Gardbase enclave service..."
 systemctl enable gardbase-enclave.service
 systemctl start gardbase-enclave.service
 
-# Wait for enclave to start and extract PCRs
+# Wait for enclave to start
 echo "Waiting for enclave to start..."
 sleep 10
 
