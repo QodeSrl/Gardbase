@@ -170,7 +170,7 @@ if [ "$ENABLE_DEBUG_MODE" = "true" ]; then
     while ! nitro-cli describe-enclaves | jq -e '.[0].State == "RUNNING"' > /dev/null 2>&1; do
         sleep 2
     done
-    nitro-cli console --enclave-id \$(nitro-cli describe-enclaves | jq -r '.[0].EnclaveID') >> "\$LOG_FILE" 2>&1
+    nitro-cli console --enclave-id \$(nitro-cli describe-enclaves | jq -r '.[0].EnclaveID') >> "\$LOG_FILE" 2>&1 &
 fi
 EOF
 
@@ -186,10 +186,13 @@ Requires=nitro-enclaves-allocator.service docker.service
 Before=gardbase-parent.service
 
 [Service]
-Type=simple
-Restart=always
-RestartSec=10
-User=root
+Type=oneshot
+Restart=no
+RemainAfterExit=yes
+
+Environment="NITRO_CLI_BLOBS=/usr/share/nitro_enclaves/blobs"
+Environment="NITRO_CLI_ARTIFACTS=/opt/nitro_enclaves"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 
 # Sleep to allow allocator to be ready
 ExecStartPre=/bin/sleep 5
@@ -201,7 +204,7 @@ ExecStartPre=/bin/bash -c 'if [ ! -f /opt/gardbase/enclave.eif ]; then \\
         --docker-uri $ECR_REPOSITORY_URL:latest-enclave \\
         --output-file /opt/gardbase/enclave.eif > /opt/gardbase/enclave-build.log 2>&1; \\
     echo "Enclave build complete. PCR values:"; \\
-    cat /opt/gardbase/enclave-build.log | grep -A 10 "Measurements:"; \\
+    cat /opt/gardbase/enclave-build.log | grep -A 10 "Measurements"; \\
 fi'
 
 # Stop any existing enclave
