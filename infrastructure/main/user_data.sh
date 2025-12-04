@@ -225,45 +225,46 @@ EOF
 
 # Create script to extract and save PCR values
 echo "Creating PCR extraction script..."
-cat > /opt/gardbase/extract-pcrs.sh <<'EOF'
+cat > /opt/gardbase/extract-pcrs.sh <<EOF
 #!/bin/bash
 # Extract PCR values from the enclave build log
+
 BUILD_LOG="/opt/gardbase/enclave-build.log"
 OUTPUT_FILE="/opt/gardbase/pcr-values.json"
 
-if [ ! -f "$BUILD_LOG" ]; then
-    echo "Build log not found: $BUILD_LOG"
+if [ ! -f "\$BUILD_LOG" ]; then
+    echo "Build log not found: \$BUILD_LOG"
     exit 1
 fi
 
-# Extract PCR values
-PCR0=$(grep "PCR0:" "$BUILD_LOG" | awk '{print $2}')
-PCR1=$(grep "PCR1:" "$BUILD_LOG" | awk '{print $2}')
-PCR2=$(grep "PCR2:" "$BUILD_LOG" | awk '{print $2}')
+JSON_CONTENT=\$(sed -n '/^{/,\$p' "\$BUILD_LOG")
 
-# Create JSON output
-cat > "$OUTPUT_FILE" <<EOFPCR
+PCR0=\$(echo "\$JSON_CONTENT" | jq -r '.Measurements.PCR0')
+PCR1=\$(echo "\$JSON_CONTENT" | jq -r '.Measurements.PCR1')
+PCR2=\$(echo "\$JSON_CONTENT" | jq -r '.Measurements.PCR2')
+
+cat > "\$OUTPUT_FILE" <<EOFPCR
 {
   "pcr_values": {
-    "PCR0": "$PCR0",
-    "PCR1": "$PCR1",
-    "PCR2": "$PCR2"
+    "PCR0": "\$PCR0",
+    "PCR1": "\$PCR1",
+    "PCR2": "\$PCR2"
   },
-  "extracted_at": "$(date -Iseconds)",
+  "extracted_at": "\$(date -Iseconds)",
   "environment": "$ENVIRONMENT",
   "debug_mode": $ENABLE_DEBUG_MODE
 }
 EOFPCR
 
-echo "PCR values saved to $OUTPUT_FILE"
-cat "$OUTPUT_FILE"
+echo "PCR values saved to \$OUTPUT_FILE"
+cat "\$OUTPUT_FILE"
 
 # Also save to Parameter Store for easy client access
 aws ssm put-parameter \
     --region "$REGION" \
     --name "/$PROJECT_NAME/$ENVIRONMENT/enclave/pcr-values" \
     --type "String" \
-    --value "$(cat $OUTPUT_FILE)" \
+    --value "\$(cat \$OUTPUT_FILE)" \
     --overwrite || echo "Warning: Could not save to Parameter Store"
 EOF
 
@@ -271,7 +272,7 @@ chmod +x /opt/gardbase/extract-pcrs.sh
 
 # Create health check script
 echo "Creating health check script..."
-cat > /opt/gardbase/health-check.sh <<'EOF'
+cat > /opt/gardbase/health-check.sh <<EOF
 #!/bin/bash
 # Check if parent application is responding
 if ! curl -f http://localhost/health > /dev/null 2>&1; then
