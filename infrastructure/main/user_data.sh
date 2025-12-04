@@ -48,6 +48,11 @@ dnf install -y \
     jq \
     git
 
+echo "Enabling user namespaces required for vsock..."
+echo "user.max_user_namespaces=16384" >> /etc/sysctl.conf
+echo "user.max_mnt_namespaces=16384" >> /etc/sysctl.conf
+sysctl -p
+
 # Start Docker service
 echo "Starting Docker service..."
 systemctl enable docker
@@ -70,7 +75,7 @@ systemctl start nitro-enclaves-allocator.service
 echo "Nitro Enclaves allocator status:"
 systemctl status nitro-enclaves-allocator.service --no-pager
 
-# Add docker user to ne group (Nitro Enclaves group)
+# Add ec2-user to ne and docker groups
 usermod -aG ne ec2-user
 usermod -aG docker ec2-user
 
@@ -108,6 +113,8 @@ ExecStartPre=-/usr/bin/docker stop gardbase-parent
 ExecStartPre=-/usr/bin/docker rm gardbase-parent
 ExecStartPre=/usr/bin/docker pull $ECR_REPOSITORY_URL:latest-parent
 ExecStart=/usr/bin/docker run --rm --name gardbase-parent \\
+    --device=/dev/vsock \\
+    --security-opt seccomp=unconfined \\
     -p 80:80 \\
     -p 443:443 \\
     -v /opt/gardbase/logs:/app/logs \\
