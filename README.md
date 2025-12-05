@@ -15,23 +15,24 @@
 - Terraform 1.5+
 - Node.js 22.14.0+
 - pnpm 10.13.1+
-- AWS CLI configured with an account that can create: VPC, EC2, IAM roles, S3 buckets, DynamoDB tables, Lambda, ECR
+- AWS CLI configured with an account that can create: VPC, Lambda, ECR, EC2, IAM, S3, DynamoDB tables, KMS keys, CloudWatch resources
 
 ```bash
 aws configure
 aws sts get-caller-identity
 ```
 
-### Bootstrap S3 Bucket & ECR Repo
+### Bootstrap Lambda S3 Bucket & ECR Repo
 
 A minimal Terraform workspace sets up:
 
 - S3 bucket for Lambda code
-- ECR repository for API Docker image
+- ECR repository for API Docker images
 
 ```bash
 cd infrastructure/bootstrap
 terraform init
+terraform plan -var="environment=dev"
 terraform apply -var="environment=dev"
 ```
 
@@ -74,3 +75,23 @@ cd infrastructure/main
 terraform init
 terraform apply -var="environment=dev"
 ```
+
+## Components
+
+### Apps
+
+#### API
+
+#### Enclave Service
+
+#### Lambdas
+
+- Upload Processor
+
+### Packages
+
+#### Crypto
+
+#### Enclaveproto
+
+#### Models
