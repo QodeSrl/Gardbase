@@ -85,20 +85,21 @@ func StartDecryptSession(ctx context.Context, config SessionConfig) (*EnclaveSec
 		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
-	var resBody enclaveproto.SessionInitResponse
+	var resBody enclaveproto.Response[enclaveproto.SessionInitResponse]
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
+	data := resBody.Data
 
-	enclavePubRaw, err := base64.StdEncoding.DecodeString(resBody.EnclaveEphemeralPublicKey)
+	enclavePubRaw, err := base64.StdEncoding.DecodeString(data.EnclaveEphemeralPublicKey)
 	if err != nil {
 		return nil, errors.New("invalid enclave ephemeral public key")
 	}
 	if len(enclavePubRaw) != 32 {
-		return nil, errors.New("invalid enclave ephemeral public key length")
+		return nil, fmt.Errorf("invalid enclave ephemeral public key length")
 	}
 
-	expiresAt, err := time.Parse(time.RFC3339, resBody.ExpiresAt)
+	expiresAt, err := time.Parse(time.RFC3339, data.ExpiresAt)
 	if err != nil {
 		return nil, errors.New("invalid session expiration time")
 	}
@@ -109,15 +110,16 @@ func StartDecryptSession(ctx context.Context, config SessionConfig) (*EnclaveSec
 	}
 
 	ess := &EnclaveSecureSession{
-		SessionId:           resBody.SessionId,
+		SessionId:           data.SessionId,
 		ClientPriv:          clientPriv,
 		ClientPub:           clientPub,
 		EnclavePubRaw:       enclavePubRaw,
 		SessionKey:          sessionKey,
 		ExpiresAt:           expiresAt,
-		AttestationB64:      resBody.Attestation,
+		AttestationB64:      data.Attestation,
 		ExpectedNonceB64:    nonceB64,
 		httpClient:          httpClient,
+		endpoint:            config.Endpoint,
 		AttestationVerified: false,
 	}
 
@@ -159,11 +161,11 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 		return nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
 	}
 
-	var resBody enclaveproto.SessionUnwrapResponse
+	var resBody enclaveproto.Response[enclaveproto.SessionUnwrapResponse]
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
-	return resBody, nil
+	return resBody.Data, nil
 }
 
 func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, count int) (DEKs [][]byte, encryptedDEKs [][]byte, err error) {
@@ -196,11 +198,11 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 		return nil, nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
 	}
 
-	var resBody enclaveproto.SessionGenerateDEKResponse
+	var resBody enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, nil, err
 	}
-	for _, DEK := range resBody.DEKs {
+	for _, DEK := range resBody.Data.DEKs {
 		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.Nonce)
 		if err != nil {
 			return nil, nil, err
@@ -282,15 +284,16 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to unwrap DEK: status %d", res.StatusCode)
 	}
-	var resBody enclaveproto.DecryptResponse
+	var resBody enclaveproto.Response[enclaveproto.DecryptResponse]
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
-	ciphertextBox, err := base64.StdEncoding.DecodeString(resBody.Ciphertext)
+	data := resBody.Data
+	ciphertextBox, err := base64.StdEncoding.DecodeString(data.Ciphertext)
 	if err != nil {
 		return nil, errors.New("invalid base64 ciphertext")
 	}
-	enclavePubRaw, err := base64.StdEncoding.DecodeString(resBody.EnclavePubKey)
+	enclavePubRaw, err := base64.StdEncoding.DecodeString(data.EnclavePubKey)
 	if err != nil {
 		return nil, errors.New("invalid base64 enclave public key")
 	}
@@ -300,7 +303,7 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 	var nonce [24]byte
 	copy(nonce[:], ciphertextBox[:24])
 
-	// TODO: verify attestation in resBody.Attestation
+	// TODO: verify attestation in data.Attestation
 
 	dek, ok := box.Open(nil, ciphertextBox[24:], &nonce, (*[32]byte)(enclavePubRaw), clientPriv)
 	if !ok {

@@ -7,7 +7,7 @@ import (
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 )
 
-func SendResponse(encoder *json.Encoder, res enclaveproto.Response) {
+func SendResponse[T any](encoder *json.Encoder, res enclaveproto.Response[T]) {
 	// encode the response as JSON and send it
 	if err := encoder.Encode(res); err != nil {
 		log.Printf("Failed to send response: %v", err)
@@ -15,7 +15,7 @@ func SendResponse(encoder *json.Encoder, res enclaveproto.Response) {
 }
 
 func SendError(encoder *json.Encoder, errMsg string) {
-	response := enclaveproto.Response{
+	response := enclaveproto.Response[any]{
 		Success: false,
 		Error:   errMsg,
 	}

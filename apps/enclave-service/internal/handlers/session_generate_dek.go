@@ -84,7 +84,7 @@ func HandleSessionGenerateDEK(encoder *json.Encoder, payload json.RawMessage, ns
 		DEKs: results,
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]{
 		Success: true,
 		Data:    res,
 	})

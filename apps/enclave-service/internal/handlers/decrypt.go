@@ -109,7 +109,7 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 	}
 	ciphertextBox := box.Seal(nonce[:], decryptedOutput, &nonce, &clientPubKey, enclavePrivKey)
 
-	resp := enclaveproto.Response{
+	resp := enclaveproto.Response[enclaveproto.DecryptResponse]{
 		Success: true,
 		Message: "Decryption successful",
 		Data: enclaveproto.DecryptResponse{

@@ -95,5 +95,5 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	if len(sessionAttDoc) > 0 {
 		res.Attestation = base64.StdEncoding.EncodeToString(sessionAttDoc)
 	}
-	utils.SendResponse(encoder, enclaveproto.Response{Success: true, Data: res})
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionInitResponse]{Success: true, Data: res})
 }

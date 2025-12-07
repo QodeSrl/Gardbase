@@ -10,7 +10,7 @@ import (
 
 func HandleHealth(encoder *json.Encoder, startTime time.Time) {
 	uptime := time.Since(startTime).String()
-	res := enclaveproto.Response{
+	res := enclaveproto.Response[enclaveproto.HealthResponse]{
 		Success: true,
 		Data: enclaveproto.HealthResponse{
 			Status:    "healthy",

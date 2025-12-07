@@ -120,7 +120,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		})
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionUnwrapResponse]{
 		Success: true,
 		Data:    results,
 	})

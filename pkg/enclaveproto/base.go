@@ -7,9 +7,9 @@ type Request struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-type Response struct {
+type Response[T any] struct {
 	Success bool   `json:"success,omitempty"`
 	Message string `json:"message"`
-	Data    any    `json:"data"`
+	Data    T      `json:"data"`
 	Error   string `json:"error"`
 }
