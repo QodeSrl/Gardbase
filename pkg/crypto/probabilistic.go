@@ -34,7 +34,7 @@ func EncryptObjectProbabilistic(pt []byte, dek []byte) ([]byte, error) {
 	out = append(out, nonce...)
 	out = append(out, ct...)
 
-	return ct, nil
+	return out, nil
 }
 
 func DecryptObjectProbabilistic(ct []byte, dek []byte) ([]byte, error) {

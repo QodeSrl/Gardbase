@@ -3,9 +3,8 @@ package crypto
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
@@ -212,13 +211,7 @@ func verifyCOSESignature(cose *coseSign1, leafCertDER []byte) error {
 	}
 
 	// Construct the Sig_structure for COSE_Sign1
-	// Sig_structure = [
-	//   context = "Signature1",
-	//   body_protected = protected,
-	//   external_aad = '',
-	//   payload = payload
-	// ]
-	sigStructure := []interface{}{
+	sigStructure := []any{
 		"Signature1",
 		cose.Protected,
 		[]byte{}, // empty external_aad
@@ -228,19 +221,20 @@ func verifyCOSESignature(cose *coseSign1, leafCertDER []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal Sig_structure: %w", err)
 	}
-	// hash the Sig_structure
-	hash := sha256.Sum256(sigStructureBytes)
 
-	// parse the signature (ASN.1 encoded ECDSA signature: SEQUENCE { r INTEGER, s INTEGER })
-	var ecdsaSig struct {
-		R, S *big.Int
-	}
-	_, err = asn1.Unmarshal(cose.Signature, &ecdsaSig)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal ECDSA signature: %w", err)
+	// Hash the Sig_structure - AWS Nitro uses SHA-384 for ES384
+	hash := sha512.Sum384(sigStructureBytes)
+
+	// AWS Nitro uses raw ECDSA signature format (R || S), not ASN.1
+	if len(cose.Signature) != 96 {
+		return fmt.Errorf("invalid signature length: expected 96 bytes for ES384, got %d", len(cose.Signature))
 	}
 
-	if !ecdsa.Verify(pubKey, hash[:], ecdsaSig.R, ecdsaSig.S) {
+	// Split signature into R and S (each 48 bytes for P-384)
+	r := new(big.Int).SetBytes(cose.Signature[:48])
+	s := new(big.Int).SetBytes(cose.Signature[48:])
+
+	if !ecdsa.Verify(pubKey, hash[:], r, s) {
 		return fmt.Errorf("ECDSA signature verification failed")
 	}
 
