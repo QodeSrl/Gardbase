@@ -1,0 +1,10 @@
+go 1.24.4
+
+use (
+    "./apps/api"
+    "./apps/lambdas/upload-processor"
+    "./apps/enclave-service"
+    "./pkg/models"
+    "./pkg/crypto"
+    "./pkg/enclaveproto"
+)
