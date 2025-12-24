@@ -51,7 +51,7 @@ type SessionConfig struct {
 	HTTPTimeout time.Duration
 }
 
-func StartDecryptSession(ctx context.Context, config SessionConfig) (*EnclaveSecureSession, error) {
+func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*EnclaveSecureSession, error) {
 
 	clientPriv, clientPub, clientPubB64, err := GenerateEphemeralKeypair()
 	if err != nil {
@@ -168,12 +168,17 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 	return resBody.Data, nil
 }
 
-func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, count int) (DEKs [][]byte, encryptedDEKs [][]byte, err error) {
+type GeneratedDEK struct {
+	PlaintextDEK []byte
+	EncryptedDEK []byte
+}
+
+func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, count int) (generatedDEKs []GeneratedDEK, err error) {
 	if time.Now().After(ess.ExpiresAt) {
-		return nil, nil, errors.New("decrypt session has expired")
+		return nil, errors.New("decrypt session has expired")
 	}
 	if !ess.AttestationVerified {
-		return nil, nil, errors.New("attestation not verified")
+		return nil, errors.New("attestation not verified")
 	}
 
 	body := enclaveproto.SessionGenerateDEKRequest{
@@ -184,38 +189,39 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 	reqBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ess.endpoint+"/session/generate-deks", strings.NewReader(string(reqBytes)))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := ess.httpClient.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
+		return nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
 	}
 
 	var resBody enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for _, DEK := range resBody.Data.DEKs {
 		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.Nonce)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		DEKs = append(DEKs, dek)
-
-		correspondingEncryptedDEK, err := base64.StdEncoding.DecodeString(DEK.KmsEncryptedDEK)
+		encryptedDEK, err := base64.StdEncoding.DecodeString(DEK.KmsEncryptedDEK)
 		if err != nil {
-			return nil, nil, errors.New("invalid base64 KMS encrypted DEK")
+			return nil, errors.New("invalid base64 KMS encrypted DEK")
 		}
-		encryptedDEKs = append(encryptedDEKs, correspondingEncryptedDEK)
+		generatedDEKs = append(generatedDEKs, GeneratedDEK{
+			PlaintextDEK: dek,
+			EncryptedDEK: encryptedDEK,
+		})
 	}
-	return DEKs, encryptedDEKs, nil
+	return generatedDEKs, nil
 }
 
 func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
