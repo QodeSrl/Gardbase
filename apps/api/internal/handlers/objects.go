@@ -69,6 +69,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		S3Key:     s3Key,
 		UploadURL: uploadUrl,
 		ExpiresIn: int64(h.PresignTTL.Seconds()),
+		CreatedAt: obj.CreatedAt,
 	}
 
 	c.JSON(http.StatusCreated, resp)

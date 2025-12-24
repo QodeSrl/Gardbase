@@ -14,6 +14,7 @@ type Object struct {
 	Sensitivity  string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"`
 
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at,omitempty"`
+	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at,omitempty"`
 	Version   int32     `dynamodbav:"version,omitempty" json:"version,omitempty"`
 	Status    string    `dynamodbav:"status,omitempty" json:"status,omitempty"` // "pending", "ready", "deleted"
 	TTL       int64     `dynamodbav:"ttl,omitempty" json:"ttl,omitempty"`       // Unix timestamp for expiration
@@ -39,6 +40,7 @@ func NewObject(tenantId string, objectId string, s3Key string, encryptedDek stri
 		EncryptedDEK: encryptedDek,
 		Status:       StatusPending,
 		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
 		Version:      1,
 	}
 }
@@ -50,10 +52,11 @@ type CreateObjectRequest struct {
 }
 
 type CreateObjectResponse struct {
-	ObjectID  string `json:"object_id"`
-	S3Key     string `json:"s3_key"`
-	UploadURL string `json:"upload_url"`
-	ExpiresIn int64  `json:"expires_in_seconds"`
+	ObjectID  string    `json:"object_id"`
+	S3Key     string    `json:"s3_key"`
+	UploadURL string    `json:"upload_url"`
+	ExpiresIn int64     `json:"expires_in_seconds"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type GetObjectResponse struct {
