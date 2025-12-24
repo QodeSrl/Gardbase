@@ -53,7 +53,6 @@ type CreateObjectRequest struct {
 
 type CreateObjectResponse struct {
 	ObjectID  string    `json:"object_id"`
-	S3Key     string    `json:"s3_key"`
 	UploadURL string    `json:"upload_url"`
 	ExpiresIn int64     `json:"expires_in_seconds"`
 	CreatedAt time.Time `json:"created_at"`
@@ -61,8 +60,9 @@ type CreateObjectResponse struct {
 
 type GetObjectResponse struct {
 	ObjectID     string    `json:"object_id"`
-	S3Key        string    `json:"s3_key"`
+	GetURL       string    `json:"get_url"`
 	EncryptedDEK string    `json:"encrypted_dek"`
 	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 	Version      int32     `json:"version"`
 }

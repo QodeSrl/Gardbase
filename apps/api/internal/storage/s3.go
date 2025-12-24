@@ -56,3 +56,19 @@ func (s *S3Client) PresignPutObjectUrl(ctx context.Context, key string, lifetime
 	}
 	return request.URL, nil
 }
+
+func (s *S3Client) PresignGetObjectUrl(ctx context.Context, key string, lifetime time.Duration) (string, error) {
+	request, err := s.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = lifetime
+	})
+	if err != nil {
+		return "", err
+	}
+	if request.URL == "" {
+		return "", errors.New("failed to generate presigned URL")
+	}
+	return request.URL, nil
+}

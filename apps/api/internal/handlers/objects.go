@@ -66,7 +66,6 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 
 	resp := models.CreateObjectResponse{
 		ObjectID:  objectId,
-		S3Key:     s3Key,
 		UploadURL: uploadUrl,
 		ExpiresIn: int64(h.PresignTTL.Seconds()),
 		CreatedAt: obj.CreatedAt,
@@ -93,11 +92,18 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		return
 	}
 
+	getUrl, err := h.S3Client.PresignGetObjectUrl(ctx, obj.S3Key, h.PresignTTL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned GET URL: " + err.Error()})
+		return
+	}
+
 	resp := models.GetObjectResponse{
 		ObjectID:     id,
-		S3Key:        obj.S3Key,
 		EncryptedDEK: obj.EncryptedDEK,
+		GetURL:       getUrl,
 		CreatedAt:    obj.CreatedAt,
+		UpdatedAt:    obj.UpdatedAt,
 		Version:      obj.Version,
 	}
 
