@@ -177,6 +177,7 @@ func handleConnection(conn net.Conn) {
 
 	if err := scanner.Err(); err != nil {
 		log.Printf("Error reading from connection: %v", err)
+		utils.SendError(encoder, fmt.Sprintf("Error reading from connection: %v", err))
 	}
 }
 

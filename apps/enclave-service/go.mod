@@ -3,7 +3,7 @@ module github.com/QodeSrl/gardbase/apps/enclave-service
 go 1.24.4
 
 require (
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.0
+	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.2
 	github.com/aws/aws-sdk-go-v2/config v1.32.5
 	github.com/aws/aws-sdk-go-v2/service/kms v1.49.4
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9
