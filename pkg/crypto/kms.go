@@ -125,8 +125,10 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 
 	if _, err := ess.verifyAttestation(config); err != nil {
 		zero(ess.SessionKey)
-		return nil, fmt.Errorf("attestation verification failed: %w", err)
+		return ess, fmt.Errorf("attestation verification failed: %w", err)
 	}
+
+	ess.AttestationVerified = true
 
 	return ess, nil
 }
