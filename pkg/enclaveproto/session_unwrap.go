@@ -9,17 +9,17 @@ type SessionUnwrapItem struct {
 
 type SessionUnwrapRequest struct {
 	// Session ID, Base64-encoded
-	SessionId string `json:"session_id,omitempty"`
+	SessionId string `json:"session_id"`
 	// KMS Key ID
-	KeyId string              `json:"key_id,omitempty"`
-	Items []SessionUnwrapItem `json:"items,omitempty"`
+	KeyId string              `json:"key_id"`
+	Items []SessionUnwrapItem `json:"items"`
 }
 
 type SessionUnwrapItemResult struct {
 	// Object ID
-	ObjectId string `json:"object_id,omitempty"`
+	ObjectId string `json:"object_id"`
 	// Decrypted DEK, Base64-encoded
-	SealedDEK string `json:"sealed_dek,omitempty"`
+	SealedDEK string `json:"sealed_dek"`
 	// Nonce used for decryption, Base64-encoded
 	Nonce   string `json:"nonce"`
 	Success bool   `json:"success"`

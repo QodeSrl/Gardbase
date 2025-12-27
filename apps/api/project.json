@@ -14,7 +14,7 @@
     "docker-build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker build -t gardbase-api:latest-parent -f Dockerfile.api ."
+        "command": "docker build -t gardbase-api:latest-parent -f Dockerfile.Api ."
       }
     },
     "docker-tag": {
