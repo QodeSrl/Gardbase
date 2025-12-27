@@ -23,9 +23,18 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 		Type:    "health",
 		Payload: nil,
 	}
-	res, err := p.sendToEnclave(req, 5*time.Second)
+	resBytes, err := p.sendToEnclave(req, 5*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var res enclaveproto.Response[json.RawMessage]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal health response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
 	c.JSON(200, res)
@@ -46,9 +55,18 @@ func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
 		Type:    "session_init",
 		Payload: json.RawMessage(payloadBytes),
 	}
-	res, err := p.sendToEnclave(req, 10*time.Second)
+	resBytes, err := p.sendToEnclave(req, 10*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var res enclaveproto.Response[enclaveproto.SessionInitResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session init response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
 	c.JSON(200, res)
@@ -69,9 +87,18 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 		Type:    "session_unwrap",
 		Payload: json.RawMessage(payloadBytes),
 	}
-	res, err := p.sendToEnclave(req, 30*time.Second)
+	resBytes, err := p.sendToEnclave(req, 30*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var res enclaveproto.Response[enclaveproto.SessionUnwrapResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session unwrap response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
 	c.JSON(200, res)
@@ -96,9 +123,18 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		Type:    "session_generate_dek",
 		Payload: json.RawMessage(payloadBytes),
 	}
-	res, err := p.sendToEnclave(req, 30*time.Second)
+	resBytes, err := p.sendToEnclave(req, 30*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var res enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session unwrap response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
 	c.JSON(200, res)
@@ -120,30 +156,33 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 		Type:    "decrypt",
 		Payload: json.RawMessage(payloadBytes),
 	}
-	res, err := p.sendToEnclave(req, 15*time.Second)
+	resBytes, err := p.sendToEnclave(req, 15*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var res enclaveproto.Response[enclaveproto.DecryptResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal decrypt response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
 	c.JSON(200, res)
 }
 
-func (p *VsockProxy) sendToEnclave(req enclaveproto.Request, timeout time.Duration) (enclaveproto.Response[any], error) {
+func (p *VsockProxy) sendToEnclave(req enclaveproto.Request, timeout time.Duration) (json.RawMessage, error) {
 	jsonReq, err := json.Marshal(req)
 	if err != nil {
-		return enclaveproto.Response[any]{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to marshal request: %v", err),
-		}, err
+		return nil, fmt.Errorf("Failed to marshal request: %v", err)
 	}
 
 	// connect to enclave via vsock
 	conn, err := vsock.Dial(p.EnclaveCID, p.EnclavePort, nil)
 	if err != nil {
-		return enclaveproto.Response[any]{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to connect to enclave vsock: %v", err),
-		}, err
+		return nil, fmt.Errorf("Failed to connect to enclave vsock: %v", err)
 	}
 	defer conn.Close()
 
@@ -151,32 +190,17 @@ func (p *VsockProxy) sendToEnclave(req enclaveproto.Request, timeout time.Durati
 
 	// send request
 	if _, err = conn.Write(append(jsonReq, '\n')); err != nil {
-		return enclaveproto.Response[any]{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to send request to enclave: %v", err),
-		}, err
+		return nil, fmt.Errorf("Failed to send request to enclave: %v", err)
 	}
 
 	// read response through scanner
 	scanner := bufio.NewScanner(conn)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
-			return enclaveproto.Response[any]{
-				Success: false,
-				Error:   fmt.Sprintf("Failed to read response from enclave: %v", err),
-			}, err
+			return nil, fmt.Errorf("Failed to read response from enclave: %v", err)
 		}
-		return enclaveproto.Response[any]{
-			Success: false,
-			Error:   "No response from enclave",
-		}, fmt.Errorf("no response from enclave")
+		return nil, fmt.Errorf("no response from enclave")
 	}
-	var response enclaveproto.Response[any]
-	if err := json.Unmarshal(scanner.Bytes(), &response); err != nil {
-		return enclaveproto.Response[any]{
-			Success: false,
-			Error:   fmt.Sprintf("Failed to unmarshal response from enclave: %v", err),
-		}, err
-	}
-	return response, nil
+
+	return scanner.Bytes(), nil
 }
