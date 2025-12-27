@@ -44,7 +44,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	objectId := uuid.NewString()
 	s3Key := generateS3Key(tenantId, objectId, 1)
 
-	obj := models.NewObject(tenantId, objectId, s3Key, req.EncryptedDEK)
+	obj := models.NewObject(tenantId, objectId, s3Key, req.EncryptedDEK, req.EncryptedSchemaName)
 	if req.Sensitivity != "" {
 		obj.Sensitivity = req.Sensitivity
 	} else {
@@ -99,12 +99,13 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	}
 
 	resp := models.GetObjectResponse{
-		ObjectID:     id,
-		EncryptedDEK: obj.EncryptedDEK,
-		GetURL:       getUrl,
-		CreatedAt:    obj.CreatedAt,
-		UpdatedAt:    obj.UpdatedAt,
-		Version:      obj.Version,
+		ObjectID:            id,
+		EncryptedDEK:        obj.EncryptedDEK,
+		EncryptedSchemaName: obj.EncryptedSchemaName,
+		GetURL:              getUrl,
+		CreatedAt:           obj.CreatedAt,
+		UpdatedAt:           obj.UpdatedAt,
+		Version:             obj.Version,
 	}
 
 	c.JSON(http.StatusOK, resp)
