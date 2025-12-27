@@ -9,9 +9,10 @@ type Object struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>"
 	SK string `dynamodbav:"sk" json:"sk"` // format: "OBJ#<object_id>"
 
-	S3Key        string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`
-	EncryptedDEK string `dynamodbav:"encrypted_dek,omitempty" json:"encrypted_dek,omitempty"`
-	Sensitivity  string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"`
+	S3Key               string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`
+	EncryptedDEK        string `dynamodbav:"encrypted_dek,omitempty" json:"encrypted_dek,omitempty"`
+	EncryptedSchemaName string `dynamodbav:"encrypted_schema,omitempty" json:"encrypted_schema,omitempty"`
+	Sensitivity         string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"`
 
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at,omitempty"`
 	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at,omitempty"`
@@ -32,23 +33,25 @@ const (
 	SensitivityHigh   = "high"
 )
 
-func NewObject(tenantId string, objectId string, s3Key string, encryptedDek string) *Object {
+func NewObject(tenantId string, objectId string, s3Key string, encryptedDek string, encryptedSchemaName string) *Object {
 	return &Object{
-		PK:           fmt.Sprintf("TENANT#%s", tenantId),
-		SK:           fmt.Sprintf("OBJ#%s", objectId),
-		S3Key:        s3Key,
-		EncryptedDEK: encryptedDek,
-		Status:       StatusPending,
-		CreatedAt:    time.Now().UTC(),
-		UpdatedAt:    time.Now().UTC(),
-		Version:      1,
+		PK:                  fmt.Sprintf("TENANT#%s", tenantId),
+		SK:                  fmt.Sprintf("OBJ#%s", objectId),
+		S3Key:               s3Key,
+		EncryptedDEK:        encryptedDek,
+		EncryptedSchemaName: encryptedSchemaName,
+		Status:              StatusPending,
+		CreatedAt:           time.Now().UTC(),
+		UpdatedAt:           time.Now().UTC(),
+		Version:             1,
 	}
 }
 
 type CreateObjectRequest struct {
-	EncryptedDEK string            `json:"encrypted_dek" binding:"required"`
-	Indexes      map[string]string `json:"indexes,omitempty"`
-	Sensitivity  string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
+	EncryptedDEK        string            `json:"encrypted_dek" binding:"required"`
+	EncryptedSchemaName string            `json:"encrypted_schema" binding:"required"`
+	Indexes             map[string]string `json:"indexes,omitempty"`
+	Sensitivity         string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
 }
 
 type CreateObjectResponse struct {
@@ -59,10 +62,11 @@ type CreateObjectResponse struct {
 }
 
 type GetObjectResponse struct {
-	ObjectID     string    `json:"object_id"`
-	GetURL       string    `json:"get_url"`
-	EncryptedDEK string    `json:"encrypted_dek"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	Version      int32     `json:"version"`
+	ObjectID            string    `json:"object_id"`
+	GetURL              string    `json:"get_url"`
+	EncryptedDEK        string    `json:"encrypted_dek"`
+	EncryptedSchemaName string    `json:"encrypted_schema"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+	Version             int32     `json:"version"`
 }
