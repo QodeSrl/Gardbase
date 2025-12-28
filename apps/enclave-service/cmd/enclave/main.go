@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
@@ -12,38 +13,32 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/handlers"
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/hf/nsm"
-	"github.com/hf/nsm/request"
 	"github.com/mdlayher/vsock"
 )
 
 var (
 	startTime time.Time
-	kmsClient *kms.Client
 )
 
 var (
 	nsmSession        *nsm.Session
 	nsmPrivateKey     *rsa.PrivateKey
 	nsmPublicKeyBytes []byte
-	nsmAttestation    []byte
+
+	attestation utils.Attestation = utils.Attestation{Mu: sync.RWMutex{}}
 )
 
 func main() {
 	startTime = time.Now()
 	log.Println("Starting enclave service...")
-
-	if err := initializeAWS(); err != nil {
-		log.Fatalf("Failed to initialize AWS SDK: %v", err)
-	}
 
 	if err := initiateNSM(); err != nil {
 		log.Fatalf("Failed to initiate NSM session: %v", err)
@@ -85,18 +80,6 @@ func main() {
 	}
 }
 
-func initializeAWS() error {
-	ctx := context.Background()
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(getEnv("AWS_REGION", "eu-central-1")))
-	if err != nil {
-		return fmt.Errorf("unable to load AWS SDK config: %v", err)
-	}
-
-	kmsClient = kms.NewFromConfig(cfg)
-	log.Println("AWS KMS client initialized")
-	return nil
-}
-
 func initiateNSM() (err error) {
 	// open NSM session
 	nsmSession, err = nsm.OpenDefaultSession()
@@ -105,35 +88,56 @@ func initiateNSM() (err error) {
 	}
 
 	// generate RSA key pair for NSM session, nsmSession is used here as a crypto/rand.Reader
-	key, err := rsa.GenerateKey(nsmSession, 2048)
+	nsmPrivateKey, err = rsa.GenerateKey(nsmSession, 2048)
 	if err != nil {
 		return fmt.Errorf("failed to generate RSA key: %v", err)
 	}
-	nsmPrivateKey = key
 
 	// extract public key in DER format
-	nsmPublicKeyBytes, err = x509.MarshalPKIXPublicKey(&key.PublicKey)
+	nsmPublicKeyBytes, err = x509.MarshalPKIXPublicKey(&nsmPrivateKey.PublicKey)
 	if err != nil {
-		return fmt.Errorf("failed to marshal NSM public key: %v", err)
+		return fmt.Errorf("failed to marshal RSA public key: %v", err)
 	}
 
-	// request attestation document with nsm public key
-	req := request.Attestation{
-		PublicKey: nsmPublicKeyBytes,
-		Nonce:     nil,
-		UserData:  nil,
-	}
-	res, err := nsmSession.Send(&req)
-	if err != nil {
-		return fmt.Errorf("failed to get attestation document: %v", err)
-	}
-	if res.Attestation == nil || len(res.Attestation.Document) == 0 {
-		return fmt.Errorf("received empty attestation document from NSM")
-	}
-	nsmAttestation = res.Attestation.Document
+	log.Printf(
+		"RSA public key fingerprint: %x",
+		sha256.Sum256(nsmPublicKeyBytes),
+	)
 
 	log.Println("NSM session initiated")
+
+	return refreshAttestation()
+}
+
+func refreshAttestation() error {
+	att, err := utils.RequestAttestation(nsmSession, nsmPublicKeyBytes)
+	if err != nil {
+		return err
+	}
+
+	attestation.Mu.Lock()
+	attestation.Doc = append([]byte(nil), att...)
+	attestation.Mu.Unlock()
+
+	log.Printf("Attestation document refreshed: len=%d", len(attestation.Doc))
 	return nil
+}
+
+func startAttestationRefresher(ctx context.Context) {
+	ticker := time.NewTicker(4 * time.Minute)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := refreshAttestation(); err != nil {
+					log.Printf("Failed to refresh attestation document: %v", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
 
 func handleConnection(conn net.Conn) {
@@ -156,21 +160,21 @@ func handleConnection(conn net.Conn) {
 			continue
 		}
 
-		log.Printf("Received request: %+v", req)
+		log.Printf("Received request type: %s, payload size: %d bytes", req.Type, len(req.Payload))
 
 		switch req.Type {
 		case "health":
 			handlers.HandleHealth(encoder, startTime)
 		case "get_attestation":
-			handlers.HandleGetAttestation(encoder, nsmAttestation)
+			handlers.HandleGetAttestation(encoder, &attestation)
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "session_unwrap":
-			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, nsmAttestation, kmsClient)
+			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, nsmPublicKeyBytes)
 		case "session_prepare_dek":
 			handlers.HandleSessionPrepareDEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
 		case "decrypt":
-			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, nsmPublicKeyBytes, nsmPrivateKey)
+			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, nsmPublicKeyBytes, nsmPrivateKey)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
 			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))
