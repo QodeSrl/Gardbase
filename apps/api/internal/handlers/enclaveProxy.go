@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/gin-gonic/gin"
 	"github.com/mdlayher/vsock"
 )
@@ -16,6 +19,8 @@ type VsockProxy struct {
 	EnclaveCID uint32
 	// Enclave listening port
 	EnclavePort uint32
+	// KMS Client
+	KMSClient *kms.Client
 }
 
 func (p *VsockProxy) HandleHealth(c *gin.Context) {
@@ -105,6 +110,7 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 }
 
 func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
+	// Validate request (SessionGenerateDEKRequest)
 	var generateDEKReq enclaveproto.SessionGenerateDEKRequest
 	if err := c.BindJSON(&generateDEKReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
@@ -119,8 +125,65 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
 		return
 	}
+
+	// Request attestation document from enclave (GetAttestationRequest)
+	attReq := enclaveproto.Request{
+		Type: "get_attestation",
+	}
+	resAttBytes, err := p.sendToEnclave(attReq, 10*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var resAtt enclaveproto.Response[enclaveproto.GetAttestationResponse]
+	if err := json.Unmarshal(resAttBytes, &resAtt); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal get attestation response: %v", err)})
+		return
+	}
+	att, err := base64.StdEncoding.DecodeString(resAtt.Data.Attestation)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode attestation document: %v", err)})
+		return
+	}
+
+	// Generate data keys with KMS using attestation document
+	input := &kms.GenerateDataKeyInput{
+		KeyId:   &generateDEKReq.KeyId,
+		KeySpec: "AES_256",
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    att,
+			KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
+		},
+	}
+	deks := make([]enclaveproto.EnclaveDEKToPrepare, generateDEKReq.Count)
+	for i := 0; i < generateDEKReq.Count; i++ {
+		out, err := p.KMSClient.GenerateDataKey(c.Request.Context(), input)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate data key: %v", err)})
+			return
+		}
+		if out.CiphertextForRecipient == nil {
+			c.JSON(500, gin.H{"error": "No CiphertextForRecipient in KMS response"})
+			return
+		}
+		deks[i] = enclaveproto.EnclaveDEKToPrepare{
+			CiphertextBlob:         base64.StdEncoding.EncodeToString(out.CiphertextBlob),
+			CiphertextForRecipient: base64.StdEncoding.EncodeToString(out.CiphertextForRecipient),
+		}
+	}
+
+	// Prepare DEK in enclave (EnclavePrepareDEKRequest)
+	prepareDEKReq := enclaveproto.EnclavePrepareDEKRequest{
+		DEKs:      deks,
+		SessionId: generateDEKReq.SessionId,
+	}
+	payloadBytes, err = json.Marshal(prepareDEKReq)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
+		return
+	}
 	req := enclaveproto.Request{
-		Type:    "session_generate_dek",
+		Type:    "session_prepare_dek",
 		Payload: json.RawMessage(payloadBytes),
 	}
 	resBytes, err := p.sendToEnclave(req, 30*time.Second)
@@ -128,15 +191,24 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	var res enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]
-	if err := json.Unmarshal(resBytes, &res); err != nil {
+	var prepRes enclaveproto.Response[enclaveproto.EnclavePrepareDEKResponse]
+	if err := json.Unmarshal(resBytes, &prepRes); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session unwrap response: %v", err)})
 		return
 	}
-	if !res.Success {
-		c.JSON(500, gin.H{"error": res.Error})
+	if !prepRes.Success {
+		c.JSON(500, gin.H{"error": prepRes.Error})
 		return
 	}
+
+	// Build response
+	res := enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]{
+		Success: true,
+		Data: enclaveproto.SessionGenerateDEKResponse{
+			DEKs: prepRes.Data.DEKs,
+		},
+	}
+
 	c.JSON(200, res)
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -99,10 +100,19 @@ func (s *Server) setupRoutes() {
 }
 
 func (s *Server) setupEnclaveProxy() {
+	awsConfig := loadAWSConfig()
+	cfg, err := loadAWSSDKConfig(context.Background(), awsConfig)
+	if err != nil {
+		s.logger.Fatal("Failed to load AWS SDK config for enclave proxy", zap.Error(err))
+	}
+	kmsClient := kms.NewFromConfig(cfg)
+
 	proxy := &handlers.VsockProxy{
 		EnclaveCID:  getEnvUint32("ENCLAVE_CID", 16),
 		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
+		KMSClient:   kmsClient,
 	}
+
 	s.router.GET("/enclave/health", proxy.HandleHealth)
 	s.router.POST("/enclave/session/init", proxy.HandleSessionInit)
 	s.router.POST("/enclave/session/unwrap", proxy.HandleSessionUnwrap)
