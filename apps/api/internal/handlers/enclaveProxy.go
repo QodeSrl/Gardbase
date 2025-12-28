@@ -300,21 +300,75 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 }
 
 func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
+	// Validate request (DecryptRequest)
 	var decryptReq enclaveproto.DecryptRequest
 	if err := c.BindJSON(&decryptReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid decrypt request: %v", err)})
 		return
 	}
+
+	// Request attestation document from enclave (GetAttestationRequest)
+	attReq := enclaveproto.Request{
+		Type: "get_attestation",
+	}
+	resAttBytes, err := p.sendToEnclave(attReq, 5*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var resAtt enclaveproto.Response[enclaveproto.GetAttestationResponse]
+	if err := json.Unmarshal(resAttBytes, &resAtt); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal get attestation response: %v", err)})
+		return
+	}
+	att, err := base64.StdEncoding.DecodeString(resAtt.Data.Attestation)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode attestation document: %v", err)})
+		return
+	}
+	if !resAtt.Success {
+		c.JSON(500, gin.H{"error": resAtt.Error})
+		return
+	}
+	if len(att) == 0 {
+		c.JSON(500, gin.H{"error": "Empty attestation document"})
+		return
+	}
+
+	ciphertext, err := base64.StdEncoding.DecodeString(decryptReq.Ciphertext)
+	if err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid ciphertext encoding: %v", err)})
+		return
+	}
+
+	// Unwrap data key with KMS using attestation document
+	input := &kms.DecryptInput{
+		CiphertextBlob: ciphertext,
+		KeyId:          &decryptReq.KeyID,
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    att,
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+		},
+	}
+	out, err := p.KMSClient.Decrypt(c.Request.Context(), input)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("KMS decrypt failed: %v", err)})
+		return
+	}
+
+	// Prepare decrypt request for enclave
+	decryptReq.Ciphertext = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
 	payloadBytes, err := json.Marshal(decryptReq)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal decrypt request: %v", err)})
 		return
 	}
-	// build enclave request
 	req := enclaveproto.Request{
 		Type:    "decrypt",
 		Payload: json.RawMessage(payloadBytes),
 	}
+
+	// Send decrypt request to enclave
 	resBytes, err := p.sendToEnclave(req, 15*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
