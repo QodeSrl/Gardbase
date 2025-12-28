@@ -161,12 +161,14 @@ func handleConnection(conn net.Conn) {
 		switch req.Type {
 		case "health":
 			handlers.HandleHealth(encoder, startTime)
+		case "get_attestation":
+			handlers.HandleGetAttestation(encoder, nsmAttestation)
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "session_unwrap":
 			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, nsmAttestation, kmsClient)
-		case "session_generate_dek":
-			handlers.HandleSessionGenerateDEK(encoder, req.Payload, nsmSession, nsmPrivateKey, nsmAttestation, kmsClient)
+		case "session_prepare_dek":
+			handlers.HandleSessionPrepareDEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
 		case "decrypt":
 			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, kmsClient, nsmPublicKeyBytes, nsmPrivateKey)
 		default:
