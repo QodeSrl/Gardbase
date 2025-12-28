@@ -170,11 +170,11 @@ func handleConnection(conn net.Conn) {
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "session_unwrap":
-			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey, nsmPublicKeyBytes)
+			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey)
 		case "session_prepare_dek":
 			handlers.HandleSessionPrepareDEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
 		case "decrypt":
-			handlers.HandleDecrypt(encoder, req.Payload, nsmSession, nsmPublicKeyBytes, nsmPrivateKey)
+			handlers.HandleDecrypt(encoder, req.Payload, nsmPrivateKey)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
 			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))

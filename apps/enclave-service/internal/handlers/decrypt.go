@@ -10,7 +10,7 @@ import (
 	"github.com/hf/nsm"
 )
 
-func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, pubKeyBytes []byte, nsmPrivKey *rsa.PrivateKey) {
+func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *rsa.PrivateKey) {
 	// var req enclaveproto.DecryptRequest
 	// if err := json.Unmarshal(payload, &req); err != nil {
 	// 	utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
