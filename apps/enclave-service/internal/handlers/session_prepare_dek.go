@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
@@ -11,14 +10,12 @@ import (
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/session"
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/hf/nsm"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func HandleSessionGenerateDEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey, nsmAttestation []byte, kmsClient *kms.Client) {
-	var req enclaveproto.SessionGenerateDEKRequest
+func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
+	var req enclaveproto.EnclavePrepareDEKRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid session generate DEK request: %v", err))
 		return
@@ -36,26 +33,17 @@ func HandleSessionGenerateDEK(encoder *json.Encoder, payload json.RawMessage, ns
 		return
 	}
 
-	results := make([]enclaveproto.GeneratedDEK, 0, req.Count)
-	ctx := context.Background()
+	count := len(req.DEKs)
+	results := make([]enclaveproto.GeneratedDEK, 0, count)
 
-	input := &kms.GenerateDataKeyInput{
-		KeyId:   &req.KeyId,
-		KeySpec: "AES_256",
-		Recipient: &kmsTypes.RecipientInfo{
-			AttestationDocument:    nsmAttestation,
-			KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
-		},
-	}
-
-	for i := 0; i < req.Count; i++ {
-		output, err := kmsClient.GenerateDataKey(ctx, input)
+	for i := 0; i < count; i++ {
+		ciphertextForRecipient, err := base64.StdEncoding.DecodeString(req.DEKs[i].CiphertextForRecipient)
 		if err != nil {
-			utils.SendError(encoder, fmt.Sprintf("Failed to generate data key: %v", err))
+			utils.SendError(encoder, fmt.Sprintf("Failed to decode CiphertextForRecipient: %v", err))
 			return
 		}
 		// note: here nsmSession is used as a rand.Reader
-		plainDEK, err := rsa.DecryptOAEP(sha256.New(), nsmSession, nsmPrivKey, output.CiphertextForRecipient, nil)
+		plainDEK, err := rsa.DecryptOAEP(sha256.New(), nsmSession, nsmPrivKey, ciphertextForRecipient, nil)
 		if err != nil {
 			utils.SendError(encoder, fmt.Sprintf("Failed to decrypt data key: %v", err))
 			return
@@ -75,7 +63,7 @@ func HandleSessionGenerateDEK(encoder *json.Encoder, payload json.RawMessage, ns
 
 		results = append(results, enclaveproto.GeneratedDEK{
 			SealedDEK:       base64.StdEncoding.EncodeToString(sealedDEK),
-			KmsEncryptedDEK: base64.StdEncoding.EncodeToString(output.CiphertextBlob),
+			KmsEncryptedDEK: req.DEKs[i].CiphertextBlob,
 			Nonce:           base64.StdEncoding.EncodeToString(nonce),
 		})
 	}
