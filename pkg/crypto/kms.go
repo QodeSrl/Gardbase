@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -51,6 +52,10 @@ type SessionConfig struct {
 	HTTPTimeout time.Duration
 }
 
+type errBody struct {
+	Error string `json:"error"`
+}
+
 func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*EnclaveSecureSession, error) {
 
 	clientPriv, clientPub, clientPubB64, err := GenerateEphemeralKeypair()
@@ -82,6 +87,11 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
+		var errBody errBody
+		if err := json.NewDecoder(res.Body).Decode(&errBody); err == nil {
+			bodyBytes, _ := io.ReadAll(res.Body)
+			return nil, fmt.Errorf("failed to start decrypt session: status %d, error: %s", res.StatusCode, string(bodyBytes))
+		}
 		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
@@ -160,7 +170,12 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
+		var errBody errBody
+		if err := json.NewDecoder(res.Body).Decode(&errBody); err == nil {
+			bodyBytes, _ := io.ReadAll(res.Body)
+			return nil, fmt.Errorf("failed to start decrypt session: status %d, error: %s", res.StatusCode, string(bodyBytes))
+		}
+		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
 	var resBody enclaveproto.Response[enclaveproto.SessionUnwrapResponse]
@@ -202,7 +217,12 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to unwrap session items: status %d", res.StatusCode)
+		var errBody errBody
+		if err := json.NewDecoder(res.Body).Decode(&errBody); err == nil {
+			bodyBytes, _ := io.ReadAll(res.Body)
+			return nil, fmt.Errorf("failed to start decrypt session: status %d, error: %s", res.StatusCode, string(bodyBytes))
+		}
+		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
 	var resBody enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]
@@ -290,7 +310,12 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to unwrap DEK: status %d", res.StatusCode)
+		var errBody errBody
+		if err := json.NewDecoder(res.Body).Decode(&errBody); err == nil {
+			bodyBytes, _ := io.ReadAll(res.Body)
+			return nil, fmt.Errorf("failed to start decrypt session: status %d, error: %s", res.StatusCode, string(bodyBytes))
+		}
+		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 	var resBody enclaveproto.Response[enclaveproto.DecryptResponse]
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
