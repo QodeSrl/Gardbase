@@ -20,6 +20,7 @@ func rsaPrivateKeyToPem(privKey *rsa.PrivateKey) []byte {
 	return privateKeyPEM
 }
 
+// Note: This function requires OpenSSL to be installed and accessible in the system's PATH.
 func DecryptWithOpenSSL(ciphertextForRecipient []byte, privKey *rsa.PrivateKey) ([]byte, error) {
 	privateKeyPEM := rsaPrivateKeyToPem(privKey)
 
