@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -33,22 +32,19 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 		return
 	}
 
-	count := len(req.DEKs)
-	results := make([]enclaveproto.GeneratedDEK, 0, count)
+	results := make([]enclaveproto.GeneratedDEK, 0, len(req.DEKs))
 
-	for i := 0; i < count; i++ {
-		ciphertextForRecipient, err := base64.StdEncoding.DecodeString(req.DEKs[i].CiphertextForRecipient)
+	for _, dek := range req.DEKs {
+		ciphertextForRecipient, err := base64.StdEncoding.DecodeString(dek.CiphertextForRecipient)
 		if err != nil {
 			utils.SendError(encoder, fmt.Sprintf("Failed to decode CiphertextForRecipient: %v", err))
 			return
 		}
-		// note: here nsmSession is used as a rand.Reader
-		plainDEK, err := rsa.DecryptOAEP(sha256.New(), nsmSession, nsmPrivKey, ciphertextForRecipient, nil)
+		plainDEK, err := utils.DecryptWithOpenSSL(ciphertextForRecipient, nsmPrivKey)
 		if err != nil {
 			utils.SendError(encoder, fmt.Sprintf("Failed to decrypt data key: %v", err))
 			return
 		}
-
 		// nonce for session encryption
 		nonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
 		if _, err := nsmSession.Read(nonce); err != nil {
@@ -63,7 +59,7 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 
 		results = append(results, enclaveproto.GeneratedDEK{
 			SealedDEK:       base64.StdEncoding.EncodeToString(sealedDEK),
-			KmsEncryptedDEK: req.DEKs[i].CiphertextBlob,
+			KmsEncryptedDEK: dek.CiphertextBlob,
 			Nonce:           base64.StdEncoding.EncodeToString(nonce),
 		})
 	}
