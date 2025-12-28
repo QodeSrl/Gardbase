@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
@@ -130,7 +131,7 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 	attReq := enclaveproto.Request{
 		Type: "get_attestation",
 	}
-	resAttBytes, err := p.sendToEnclave(attReq, 10*time.Second)
+	resAttBytes, err := p.sendToEnclave(attReq, 5*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -145,6 +146,14 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode attestation document: %v", err)})
 		return
 	}
+	if !resAtt.Success {
+		c.JSON(500, gin.H{"error": resAtt.Error})
+		return
+	}
+	if len(att) == 0 {
+		c.JSON(500, gin.H{"error": "Empty attestation document"})
+		return
+	}
 
 	// Generate data keys with KMS using attestation document
 	input := &kms.GenerateDataKeyInput{
@@ -152,7 +161,7 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		KeySpec: "AES_256",
 		Recipient: &kmsTypes.RecipientInfo{
 			AttestationDocument:    att,
-			KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
 		},
 	}
 	deks := make([]enclaveproto.EnclaveDEKToPrepare, generateDEKReq.Count)
@@ -170,6 +179,7 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 			CiphertextBlob:         base64.StdEncoding.EncodeToString(out.CiphertextBlob),
 			CiphertextForRecipient: base64.StdEncoding.EncodeToString(out.CiphertextForRecipient),
 		}
+		log.Printf("Generated DEK %d: CiphertextBlob len=%d, CiphertextForRecipient len=%d", i, len(out.CiphertextBlob), len(out.CiphertextForRecipient))
 	}
 
 	// Prepare DEK in enclave (EnclavePrepareDEKRequest)
