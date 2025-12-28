@@ -204,15 +204,20 @@ Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 # Sleep to allow allocator to be ready
 ExecStartPre=/bin/sleep 5
 
+# Pull the latest enclave image from ECR
+ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REPOSITORY_URL'
+ExecStartPre=/usr/bin/docker pull $ECR_REPOSITORY_URL:latest-enclave
+
+# Remove old EIF to force rebuild with new image
+ExecStartPre=-/bin/rm -f /opt/gardbase/enclave.eif
+
 # Build the enclave image file (EIF) from Docker image
-ExecStartPre=/bin/bash -c 'if [ ! -f /opt/gardbase/enclave.eif ]; then \\
-    echo "Building enclave image..."; \\
+ExecStartPre=/bin/bash -c 'echo "Building enclave image..."; \\
     nitro-cli build-enclave \\
         --docker-uri $ECR_REPOSITORY_URL:latest-enclave \\
         --output-file /opt/gardbase/enclave.eif > /opt/gardbase/enclave-build.log 2>&1; \\
     echo "Enclave build complete. PCR values:"; \\
-    cat /opt/gardbase/enclave-build.log | grep -A 10 "Measurements"; \\
-fi'
+    cat /opt/gardbase/enclave-build.log | grep -A 10 "Measurements"'
 
 # Stop any existing enclave
 ExecStartPre=-/usr/bin/nitro-cli terminate-enclave --all
