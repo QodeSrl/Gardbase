@@ -43,6 +43,8 @@ func main() {
 	if err := initiateNSM(); err != nil {
 		log.Fatalf("Failed to initiate NSM session: %v", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	startAttestationRefresher(ctx)
 
 	port := getEnvUint32("ENCLAVE_PORT", 5000)
 
@@ -54,11 +56,12 @@ func main() {
 
 	log.Printf("Enclave service is listening on port %d", port)
 
-	// grateful shutdown
+	// graceful shutdown
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
+		cancel()
 		log.Println("Shutting down enclave service...")
 		if nsmSession != nil {
 			nsmSession.Close()
