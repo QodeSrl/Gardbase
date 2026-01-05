@@ -230,7 +230,7 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 		return nil, err
 	}
 	for _, DEK := range resBody.Data.DEKs {
-		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.Nonce)
+		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.Nonce, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +251,7 @@ func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEKB64 
 		return nil, errors.New("invalid session key")
 	}
 
-	dek, err := openDEK(ess.SessionKey, encryptedDEKB64, nonceB64)
+	dek, err := openDEK(ess.SessionKey, encryptedDEKB64, nonceB64, []byte(objectID))
 	if err != nil {
 		return nil, err
 	}
