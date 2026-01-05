@@ -1,25 +1,20 @@
 package handlers
 
 import (
-	"context"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
-	"golang.org/x/crypto/chacha20poly1305"
-
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/session"
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/hf/nsm"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey, nsmAttestation []byte, kmsClient *kms.Client) {
-	var req enclaveproto.SessionUnwrapRequest
+func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
+	var req enclaveproto.EnclaveSessionUnwrapRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid session unwrap request: %v", err))
 		return
@@ -37,56 +32,21 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		return
 	}
 
-	results := make(enclaveproto.SessionUnwrapResponse, 0, len(req.Items))
-	ctx := context.Background()
+	results := make([]enclaveproto.SessionUnwrapItemResult, 0, len(req.Items))
 
 	for _, it := range req.Items {
 		objId := it.ObjectId
-		if objId == "" {
-			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId: objId,
-				Success:  false,
-				Error:    "missing object_id",
-			})
-			continue
-		}
-		if it.Ciphertext == "" {
-			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId: objId,
-				Success:  false,
-				Error:    "missing ciphertext",
-			})
-			continue
-		}
-		ctBytes, err := base64.StdEncoding.DecodeString(it.Ciphertext)
+		ciphertext, err := base64.StdEncoding.DecodeString(it.Ciphertext)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
 				ObjectId: objId,
 				Success:  false,
-				Error:    fmt.Sprintf("invalid base64 ciphertext: %v", err),
-			})
-			continue
-		}
-
-		input := &kms.DecryptInput{
-			CiphertextBlob: ctBytes,
-			KeyId:          &req.KeyId,
-			Recipient: &kmsTypes.RecipientInfo{
-				AttestationDocument:    nsmAttestation,
-				KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
-			},
-		}
-		output, err := kmsClient.Decrypt(ctx, input)
-		if err != nil {
-			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId: objId,
-				Success:  false,
-				Error:    fmt.Sprintf("KMS decrypt failed: %v", err),
+				Error:    fmt.Sprintf("Invalid base64 ciphertext: %v", err),
 			})
 			continue
 		}
 		// note: here nsmSession is used as a rand.Reader
-		plainDEK, err := rsa.DecryptOAEP(sha256.New(), nsmSession, nsmPrivKey, output.CiphertextForRecipient, nil)
+		plainDEK, err := utils.DecryptWithOpenSSL(ciphertext, nsmPrivKey)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
 				ObjectId: objId,
@@ -120,7 +80,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		})
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionUnwrapResponse]{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.EnclaveSessionUnwrapResponse]{
 		Success: true,
 		Data:    results,
 	})

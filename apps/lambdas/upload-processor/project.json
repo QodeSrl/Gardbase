@@ -6,7 +6,7 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cross-env GOOS=linux GOARCH=amd64 go build -o ../../../dist/apps/lambdas/upload-processor/main .",
+        "command": "cross-env GOOS=linux GOARCH=amd64 go build -o ../../../dist/apps/lambdas/upload-processor/bootstrap .",
         "cwd": "apps/lambdas/upload-processor"
       },
       "outputs": ["{workspaceRoot}/dist/apps/lambdas/upload-processor"]
@@ -14,7 +14,7 @@
     "package": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cross-zip main upload-processor.zip",
+        "command": "cross-zip bootstrap upload-processor.zip",
         "cwd": "dist/apps/lambdas/upload-processor"
       },
       "dependsOn": ["build"],

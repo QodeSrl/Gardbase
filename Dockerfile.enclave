@@ -33,7 +33,8 @@ FROM alpine:latest
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
-    libc6-compat
+    libc6-compat \
+    openssl
 
 WORKDIR /app
 
