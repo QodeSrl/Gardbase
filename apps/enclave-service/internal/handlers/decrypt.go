@@ -1,25 +1,19 @@
 package handlers
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"golang.org/x/crypto/nacl/box"
 
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/hf/nsm"
-	"github.com/hf/nsm/request"
-	"golang.org/x/crypto/nacl/box"
 )
 
-func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, kmsClient *kms.Client, pubKeyBytes []byte, nsmPrivKey *rsa.PrivateKey) {
+func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *rsa.PrivateKey) {
 	var req enclaveproto.DecryptRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
@@ -40,57 +34,8 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 		return
 	}
 
-	// generate attestation document for KMS, based on NSM public key and (request's) nonce
-	var attestationDoc []byte
-	if nsmSession != nil {
-		attestationReq := request.Attestation{
-			PublicKey: pubKeyBytes,
-		}
-		if req.Nonce != "" {
-			nonce, err := base64.StdEncoding.DecodeString(req.Nonce)
-			if err != nil {
-				utils.SendError(encoder, fmt.Sprintf("Invalid nonce encoding: %v", err))
-				return
-			}
-			attestationReq.Nonce = nonce
-		}
-		attestationRes, err := nsmSession.Send(&attestationReq)
-		if err != nil {
-			utils.SendError(encoder, fmt.Sprintf("Failed to get attestation document: %v", err))
-			return
-		}
-		if attestationRes.Attestation != nil && attestationRes.Attestation.Document != nil {
-			attestationDoc = attestationRes.Attestation.Document
-		}
-	}
-
-	// call kms to decrypt
-	ctx := context.Background()
-	input := &kms.DecryptInput{
-		CiphertextBlob: ciphertext,
-		KeyId:          &req.KeyID,
-	}
-
-	// include attestation document if available
-	if attestationDoc != nil {
-		input.Recipient = &kmsTypes.RecipientInfo{
-			AttestationDocument:    attestationDoc,
-			KeyEncryptionAlgorithm: "RSAES_OAEP_SHA_256",
-		}
-	}
-
-	output, err := kmsClient.Decrypt(ctx, input)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("KMS decrypt failed: %v", err))
-		return
-	}
-	if len(output.CiphertextForRecipient) == 0 {
-		utils.SendError(encoder, "KMS did not return ciphertext for recipient")
-		return
-	}
-
 	// decrypt the ciphertext for recipient using NSM private key
-	decryptedOutput, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, nsmPrivKey, output.CiphertextForRecipient, nil)
+	decryptedOutput, err := utils.DecryptWithOpenSSL(ciphertext, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
 		return
@@ -117,7 +62,6 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmSession *n
 			Ciphertext:    base64.StdEncoding.EncodeToString(ciphertextBox),
 			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
 			RequestNonce:  req.Nonce,
-			Attestation:   base64.StdEncoding.EncodeToString(attestationDoc),
 		},
 	}
 

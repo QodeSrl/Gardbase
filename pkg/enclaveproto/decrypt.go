@@ -20,6 +20,4 @@ type DecryptResponse struct {
 	Nonce string `json:"nonce"`
 	// Request nonce, Base64-encoded
 	RequestNonce string `json:"request_nonce"`
-	// Attestation used for KMS decryption, Base64-encoded
-	Attestation string `json:"attestation"`
 }

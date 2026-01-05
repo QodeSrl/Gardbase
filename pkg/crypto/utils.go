@@ -75,7 +75,7 @@ func zero(b []byte) {
 	}
 }
 
-func openDEK(sessionKey []byte, sealedDEKB64 string, nonceB64 string) ([]byte, error) {
+func openDEK(sessionKey []byte, sealedDEKB64 string, nonceB64 string, associatedData []byte) ([]byte, error) {
 	nonce, err := base64.StdEncoding.DecodeString(nonceB64)
 	if len(nonce) != chacha20poly1305.NonceSizeX {
 		return nil, errors.New("invalid nonce size")
@@ -88,7 +88,7 @@ func openDEK(sessionKey []byte, sealedDEKB64 string, nonceB64 string) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
-	dek, err := aead.Open(nil, nonce, sealedDEK, nil)
+	dek, err := aead.Open(nil, nonce, sealedDEK, associatedData)
 	if err != nil {
 		return nil, err
 	}

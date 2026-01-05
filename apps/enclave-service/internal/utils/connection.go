@@ -19,6 +19,7 @@ func SendError(encoder *json.Encoder, errMsg string) {
 		Success: false,
 		Error:   errMsg,
 	}
+	log.Printf("Sending error response: %s", errMsg)
 	if err := encoder.Encode(response); err != nil {
 		log.Printf("Failed to send error response: %v", err)
 	}
