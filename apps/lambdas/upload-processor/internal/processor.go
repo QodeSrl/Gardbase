@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -27,20 +28,36 @@ func init() {
 func UpdateStatus(ctx context.Context, bucket string, key string) error {
 	var tenantId, objectId string
 	// extract tenantId and objectId from key
-	fmt.Sscanf(key, "tenant-%s/objects/%s/v%d", &tenantId, &objectId)
-	_, err := dynamoClient.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+	err := extractFromKey(key, &tenantId, &objectId)
+	if err != nil {
+		return err
+	}
+	_, err = dynamoClient.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &tableName,
 		Key: map[string]ddbTypes.AttributeValue{
 			"pk": &ddbTypes.AttributeValueMemberS{Value: "TENANT#" + tenantId},
-			"sk": &ddbTypes.AttributeValueMemberS{Value: "OBJ#" + key},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: "OBJ#" + objectId},
 		},
-		UpdateExpression: aws.String("SET #status = :ready REMOVE TTL"),
+		UpdateExpression: aws.String("SET #status = :ready REMOVE #ttl"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
+			"#ttl":    "TTL",
 		},
 		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
 			":ready": &ddbTypes.AttributeValueMemberS{Value: models.StatusReady},
 		},
 	})
 	return err
+}
+
+func extractFromKey(key string, tenantId *string, objectId *string) error {
+	// key format: tenant-<tenant_id>/objects/<object_id>/v{n}
+	parts := strings.Split(key, "/")
+	if len(parts) != 4 || parts[1] != "objects" || !strings.HasPrefix(parts[0], "tenant-") || !strings.HasPrefix(parts[3], "v") {
+		return fmt.Errorf("invalid S3 key format: %s", key)
+	}
+
+	*tenantId = strings.TrimPrefix(parts[0], "tenant-")
+	*objectId = parts[2]
+	return nil
 }
