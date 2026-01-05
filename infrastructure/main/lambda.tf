@@ -55,12 +55,13 @@ resource "aws_lambda_permission" "allow_bucket" {
 }
 
 resource "aws_lambda_function" "upload-processor" {
-  function_name = "${var.project_name}-upload-processor-${var.environment}"
-  s3_bucket     = data.terraform_remote_state.bootstrap.outputs.lambdas_bucket_name
-  s3_key        = "upload-processor.zip"
-  handler       = "main"
-  runtime       = "provided.al2023"
-  role          = aws_iam_role.lambda_role[0].arn
+  function_name    = "${var.project_name}-upload-processor-${var.environment}"
+  s3_bucket        = data.terraform_remote_state.bootstrap.outputs.lambdas_bucket_name
+  s3_key           = "upload-processor.zip"
+  handler          = "bootstrap"
+  runtime          = "provided.al2023"
+  role             = aws_iam_role.lambda_role[0].arn
+  source_code_hash = filebase64sha256("${path.root}/../../dist/apps/lambdas/upload-processor/upload-processor.zip")
   environment {
     variables = {
       "DYNAMO_OBJECTS_TABLE" = aws_dynamodb_table.objects.name
