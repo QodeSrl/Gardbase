@@ -12,20 +12,22 @@ import (
 )
 
 type DynamoClient struct {
-	Client       *dynamodb.Client
-	ObjectsTable string
-	IndexesTable string
+	Client            *dynamodb.Client
+	ObjectsTable      string
+	IndexesTable      string
+	TenantConfigTable string
 }
 
-func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
+func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, tenantConfigTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
 	return &DynamoClient{
 		Client: dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
 			if useLocalstack {
 				o.BaseEndpoint = aws.String(localstackUrl)
 			}
 		}),
-		ObjectsTable: objectsTable,
-		IndexesTable: indexesTable,
+		ObjectsTable:      objectsTable,
+		IndexesTable:      indexesTable,
+		TenantConfigTable: tenantConfigTable,
 	}
 }
 
@@ -188,6 +190,18 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 		result[extractObjectIdFromSK(obj.SK)] = obj.EncryptedDEK
 	}
 	return result, nil
+}
+
+func (d *DynamoClient) StoreTenantConfig(ctx context.Context, config *models.TenantConfig) error {
+	item, err := attributevalue.MarshalMap(config)
+	if err != nil {
+		return err
+	}
+	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(d.TenantConfigTable),
+		Item:      item,
+	})
+	return err
 }
 
 // Helper function to extract tenant from PK of format "TENANT#<tenant_id>"
