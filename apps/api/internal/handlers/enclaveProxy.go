@@ -133,12 +133,17 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 			c.JSON(400, gin.H{"error": fmt.Sprintf("invalid base64 ciphertext for object_id %s: %v", objId, err)})
 			return
 		}
+		tenantId := c.GetString("tenantId")
 		input := &kms.DecryptInput{
 			CiphertextBlob: ctBytes,
 			KeyId:          &unwrapReq.KeyId,
 			Recipient: &kmsTypes.RecipientInfo{
 				AttestationDocument:    att,
 				KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+			},
+			EncryptionContext: map[string]string{
+				"tenant_id": tenantId,
+				"purpose":   "dek",
 			},
 		}
 		out, err := p.KMSClient.Decrypt(c.Request.Context(), input)
@@ -232,6 +237,8 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		return
 	}
 
+	tenantId := c.GetString("tenantId")
+
 	// Generate data keys with KMS using attestation document
 	input := &kms.GenerateDataKeyInput{
 		KeyId:   &generateDEKReq.KeyId,
@@ -239,6 +246,10 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		Recipient: &kmsTypes.RecipientInfo{
 			AttestationDocument:    att,
 			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+		},
+		EncryptionContext: map[string]string{
+			"tenant_id": tenantId,
+			"purpose":   "dek",
 		},
 	}
 	deks := make([]enclaveproto.EnclaveDEKToPrepare, generateDEKReq.Count)
