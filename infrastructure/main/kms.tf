@@ -23,14 +23,32 @@ resource "aws_kms_key" "enclave_key" {
           AWS = aws_iam_role.api_role.arn
         }
         Action = [
-          "kms:GenerateDataKey",
-          "kms:Decrypt",
-          "kms:DescribeKey"
+          "kms:GenerateDataKey", # for DEKs
+          "kms:Decrypt",         # for unwrapping
+          "kms:ReEncrypt",       # for key rotation
+          "kms:Encrypt",         # for wrapping tenant master keys
+          "kms:DescribeKey",
         ],
         Resource = "*"
         Condition = {
           StringEqualsIgnoreCase = {
             "kms:RecipientAttestation:ImageSha384" = var.enable_debug_mode ? "*" : var.enclave_pcr0_sha384
+          }
+        }
+      },
+      {
+        Sid    = "Allow API to Read Encrypted Tenant Keys"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.api_role.arn
+        }
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:EncryptionContext:Purpose" = "tenant-master-key"
           }
         }
       }
