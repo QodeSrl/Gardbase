@@ -32,14 +32,15 @@ type Config struct {
 }
 
 type AWSConfig struct {
-	Region             string
-	S3Bucket           string
-	DynamoObjectsTable string
-	DynamoIndexesTable string
-	MaxRetries         int
-	RequestTimeout     time.Duration
-	UseLocalstack      bool
-	LocalstackUrl      string
+	Region                   string
+	S3Bucket                 string
+	DynamoObjectsTable       string
+	DynamoIndexesTable       string
+	DynamoTenantConfigsTable string
+	MaxRetries               int
+	RequestTimeout           time.Duration
+	UseLocalstack            bool
+	LocalstackUrl            string
 }
 
 func main() {
@@ -163,7 +164,7 @@ func initStorage(ctx context.Context, logger *zap.Logger) (*storage.S3Client, *s
 	}
 
 	s3Client := storage.NewS3Client(ctx, awsConfig.S3Bucket, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
-	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
+	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTenantConfigsTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 
 	if err := testAWSConnectivity(ctx, s3Client, dynamoClient, logger); err != nil {
 		return nil, nil, err
@@ -183,14 +184,15 @@ func loadConfig() *Config {
 
 func loadAWSConfig() *AWSConfig {
 	return &AWSConfig{
-		Region:             getEnv("AWS_REGION", "eu-central-1"),
-		S3Bucket:           getEnvOrPanic("S3_BUCKET"),
-		DynamoObjectsTable: getEnvOrPanic("DYNAMO_OBJECTS_TABLE"),
-		DynamoIndexesTable: getEnvOrPanic("DYNAMO_INDEXES_TABLE"),
-		MaxRetries:         getEnvAsInt("AWS_MAX_RETRIES", 3),
-		RequestTimeout:     time.Duration(getEnvAsInt("AWS_REQUEST_TIMEOUT", 5)) * time.Second,
-		UseLocalstack:      getEnvAsBool("USE_LOCALSTACK", false),
-		LocalstackUrl:      getEnv("LOCALSTACK_URL", "http://localhost:4566"),
+		Region:                   getEnv("AWS_REGION", "eu-central-1"),
+		S3Bucket:                 getEnvOrPanic("S3_BUCKET"),
+		DynamoObjectsTable:       getEnvOrPanic("DYNAMO_OBJECTS_TABLE"),
+		DynamoIndexesTable:       getEnvOrPanic("DYNAMO_INDEXES_TABLE"),
+		DynamoTenantConfigsTable: getEnvOrPanic("DYNAMO_TENANT_CONFIGS_TABLE"),
+		MaxRetries:               getEnvAsInt("AWS_MAX_RETRIES", 3),
+		RequestTimeout:           time.Duration(getEnvAsInt("AWS_REQUEST_TIMEOUT", 5)) * time.Second,
+		UseLocalstack:            getEnvAsBool("USE_LOCALSTACK", false),
+		LocalstackUrl:            getEnv("LOCALSTACK_URL", "http://localhost:4566"),
 	}
 }
 
