@@ -4,40 +4,39 @@ import "time"
 
 type TenantConfig struct {
 	PK string `dynamodbav:"pk"` // "TENANT#<tenant_id>"
-	SK string `dynamodbav:"sk"` // "#CONFIG"
 
 	// Wrapped keys encrypted with KMS
-	WrappedMasterKey string `dynamodbav:"wrapped_master_key"`
-	WrappedTableSalt string `dynamodbav:"wrapped_table_salt"`
+	WrappedMasterKey string `dynamodbav:"wrapped_master_key" json:"wrapped_master_key"`
+	WrappedTableSalt string `dynamodbav:"wrapped_table_salt" json:"wrapped_table_salt"`
 
 	// Key metadata
-	MasterKeyVersion int       `dynamodbav:"master_key_version"`
-	MasterKeyID      string    `dynamodbav:"master_key_id"`
-	CreatedAt        time.Time `dynamodbav:"created_at"`
-	UpdatedAt        time.Time `dynamodbav:"updated_at"`
+	MasterKeyVersion int `dynamodbav:"master_key_version" json:"master_key_version"`
 
-	PreviousWrappedKeys []HistoricalKey `dynamodbav:"previous_wrapped_keys,omitempty"`
-	LastRotatedAt       *time.Time      `dynamodbav:"last_rotated_at,omitempty"`
-
-	RecoveryEmail    string   `dynamodbav:"recovery_email,omitempty"`
-	RecoveryContacts []string `dynamodbav:"recovery_contacts,omitempty"`
+	CreatedAt time.Time `dynamodbav:"created_at" json:"created_at"`
+	UpdatedAt time.Time `dynamodbav:"updated_at" json:"updated_at"`
 }
 
-type HistoricalKey struct {
-	WrappedKey string    `dynamodbav:"wrapped_key"`
-	Version    string    `dynamodbav:"version"`
-	ValidUntil time.Time `dynamodbav:"valid_until"`
-}
-
-func NewTenantConfig(tenantID string, wrappedMasterKKey []byte, wrappedTableSalt []byte, masterKeyVersion int, masterKeyID string) *TenantConfig {
+func NewTenantConfig(tenantID string, wrappedMasterKKey []byte, wrappedTableSalt []byte, masterKeyVersion int) *TenantConfig {
 	return &TenantConfig{
 		PK:               "TENANT#" + tenantID,
-		SK:               "#CONFIG",
 		WrappedMasterKey: string(wrappedMasterKKey),
 		WrappedTableSalt: string(wrappedTableSalt),
 		MasterKeyVersion: masterKeyVersion,
-		MasterKeyID:      masterKeyID,
 		CreatedAt:        time.Now().UTC(),
 		UpdatedAt:        time.Now().UTC(),
 	}
+}
+
+type CreateTenantRequest struct {
+	ClientPubKey string `json:"client_public_key" binding:"required"`
+}
+
+type CreateTenantResponse struct {
+	TenantID            string `json:"tenant_id"`
+	EncryptedMasterKey  string `json:"encrypted_master_key"`
+	EncryptedTableSalt  string `json:"encrypted_table_salt"`
+	EnclavePubKey       string `json:"enclave_public_key"`
+	AttestationDocument string `json:"attestation_document"`
+	Nonce               string `json:"nonce"`
+	APIKey              string `json:"api_key"`
 }
