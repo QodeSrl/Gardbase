@@ -6,16 +6,20 @@ import (
 )
 
 type Object struct {
-	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>"
+	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>"
 	SK string `dynamodbav:"sk" json:"sk"` // format: "OBJ#<object_id>"
 
 	S3Key               string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`
-	EncryptedDEK        string `dynamodbav:"encrypted_dek,omitempty" json:"encrypted_dek,omitempty"`
 	EncryptedSchemaName string `dynamodbav:"encrypted_schema,omitempty" json:"encrypted_schema,omitempty"`
-	Sensitivity         string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"`
 
-	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at,omitempty"`
-	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at,omitempty"`
+	KMSWrappedDEK    string `dynamodbav:"kms_wrapped_dek,omitempty" json:"kms_wrapped_dek,omitempty"`       // DEK wrapped with KMS
+	MasterWrappedDEK string `dynamodbav:"master_wrapped_dek,omitempty" json:"master_wrapped_dek,omitempty"` // DEK wrapped with tenant master key
+	DEKNonce         string `dynamodbav:"dek_nonce,omitempty" json:"dek_nonce,omitempty"`                   // Nonce used for master_wrapped_dek
+
+	Sensitivity string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"` // TODO: this is still unused
+
+	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at"`
+	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at"`
 	Version   int32     `dynamodbav:"version,omitempty" json:"version,omitempty"`
 	Status    string    `dynamodbav:"status,omitempty" json:"status,omitempty"` // "pending", "ready", "deleted"
 	TTL       int64     `dynamodbav:"ttl,omitempty" json:"ttl,omitempty"`       // Unix timestamp for expiration
@@ -33,12 +37,14 @@ const (
 	SensitivityHigh   = "high"
 )
 
-func NewObject(tenantId string, objectId string, s3Key string, encryptedDek string, encryptedSchemaName string) *Object {
+func NewObject(tenantId string, tableHash string, objectId string, s3Key string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string, encryptedSchemaName string) *Object {
 	return &Object{
-		PK:                  fmt.Sprintf("TENANT#%s", tenantId),
+		PK:                  fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash),
 		SK:                  fmt.Sprintf("OBJ#%s", objectId),
 		S3Key:               s3Key,
-		EncryptedDEK:        encryptedDek,
+		KMSWrappedDEK:       kmsWrappedDEK,
+		MasterWrappedDEK:    masterWrappedDEK,
+		DEKNonce:            dekNonce,
 		EncryptedSchemaName: encryptedSchemaName,
 		Status:              StatusPending,
 		CreatedAt:           time.Now().UTC(),
