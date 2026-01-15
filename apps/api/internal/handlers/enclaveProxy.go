@@ -8,10 +8,15 @@ import (
 	"log"
 	"time"
 
+	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"github.com/QodeSrl/gardbase/pkg/models"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	kmsTypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/mdlayher/vsock"
 )
 
@@ -22,6 +27,35 @@ type VsockProxy struct {
 	EnclavePort uint32
 	// KMS Client
 	KMSClient *kms.Client
+	// DynamoDB Client
+	Dynamo *storage.DynamoClient
+	// KMS Key ID
+	KMSKeyID string
+}
+
+func (p *VsockProxy) requestAttestationDocument() ([]byte, error) {
+	req := enclaveproto.Request{
+		Type: "get_attestation",
+	}
+	resBytes, err := p.sendToEnclave(req, 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	var res enclaveproto.Response[enclaveproto.GetAttestationResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		return nil, fmt.Errorf("Failed to unmarshal get attestation response: %v", err)
+	}
+	att, err := base64.StdEncoding.DecodeString(res.Data.Attestation)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to decode attestation document: %v", err)
+	}
+	if !res.Success {
+		return nil, fmt.Errorf("Enclave returned error: %s", res.Error)
+	}
+	if len(att) == 0 {
+		return nil, fmt.Errorf("Empty attestation document")
+	}
+	return att, nil
 }
 
 func (p *VsockProxy) HandleHealth(c *gin.Context) {
@@ -44,6 +78,108 @@ func (p *VsockProxy) HandleHealth(c *gin.Context) {
 		return
 	}
 	c.JSON(200, res)
+}
+
+func (p *VsockProxy) HandleCreateTenant(c *gin.Context) {
+	tenantID := uuid.NewString()
+	var req models.CreateTenantRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid create tenant request: %v", err)})
+		return
+	}
+
+	att, err := p.requestAttestationDocument()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	masterKeyRes, err := p.KMSClient.GenerateDataKey(c.Request.Context(), &kms.GenerateDataKeyInput{
+		KeyId:   aws.String(p.KMSKeyID),
+		KeySpec: types.DataKeySpecAes256,
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    att,
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+		},
+		EncryptionContext: map[string]string{
+			"tenant_id": tenantID,
+			"purpose":   "master_key",
+		},
+	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate master key: %v", err)})
+		return
+	}
+
+	tableSaltRes, err := p.KMSClient.GenerateDataKey(c.Request.Context(), &kms.GenerateDataKeyInput{
+		KeyId:   aws.String(p.KMSKeyID),
+		KeySpec: types.DataKeySpecAes256,
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    att,
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+		},
+		EncryptionContext: map[string]string{
+			"tenant_id": tenantID,
+			"purpose":   "table_salt",
+		},
+	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate table salt: %v", err)})
+		return
+	}
+
+	prepareMasterKeyReq := enclaveproto.EnclavePrepareKEKRequest{
+		ClientEphemeralPublicKey: req.ClientPubKey,
+		MasterKey:                base64.StdEncoding.EncodeToString(masterKeyRes.CiphertextForRecipient),
+		TableSalt:                base64.StdEncoding.EncodeToString(tableSaltRes.CiphertextForRecipient),
+	}
+
+	payloadBytes, err := json.Marshal(prepareMasterKeyReq)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal prepare KEK request: %v", err)})
+		return
+	}
+
+	reqEnclave := enclaveproto.Request{
+		Type:    "prepare_kek",
+		Payload: json.RawMessage(payloadBytes),
+	}
+	resBytes, err := p.sendToEnclave(reqEnclave, 15*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var res enclaveproto.Response[enclaveproto.EnclavePrepareKEKResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal prepare KEK response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
+		return
+	}
+
+	err = p.Dynamo.CreateTenant(c.Request.Context(), tenantID, masterKeyRes.CiphertextBlob, tableSaltRes.CiphertextBlob)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create tenant: %v", err)})
+		return
+	}
+	// TODO: Implement key recovery mechanism
+	apiKey, err := p.Dynamo.CreateAPIKey(c.Request.Context(), tenantID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create API key: %v", err)})
+		return
+	}
+
+	c.JSON(200, models.CreateTenantResponse{
+		TenantID:            tenantID,
+		EncryptedMasterKey:  res.Data.MasterKey,
+		EncryptedTableSalt:  res.Data.TableSalt,
+		EnclavePubKey:       res.Data.EnclavePubKey,
+		AttestationDocument: base64.StdEncoding.EncodeToString(att),
+		Nonce:               res.Data.Nonce,
+		APIKey:              apiKey,
+	})
 }
 
 func (p *VsockProxy) HandleSessionInit(c *gin.Context) {
@@ -90,31 +226,9 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 	items := make([]enclaveproto.EnclaveSessionUnwrapItem, 0, len(unwrapReq.Items))
 
 	// Request attestation document from enclave (GetAttestationRequest)
-	attReq := enclaveproto.Request{
-		Type: "get_attestation",
-	}
-	resAttBytes, err := p.sendToEnclave(attReq, 5*time.Second)
+	att, err := p.requestAttestationDocument()
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	var resAtt enclaveproto.Response[enclaveproto.GetAttestationResponse]
-	if err := json.Unmarshal(resAttBytes, &resAtt); err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal get attestation response: %v", err)})
-		return
-	}
-	att, err := base64.StdEncoding.DecodeString(resAtt.Data.Attestation)
-	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode attestation document: %v", err)})
-		return
-	}
-	if !resAtt.Success {
-		c.JSON(500, gin.H{"error": resAtt.Error})
-		return
-	}
-	if len(att) == 0 {
-		c.JSON(500, gin.H{"error": "Empty attestation document"})
-		return
 	}
 
 	// Unwrap data keys with KMS using attestation document
@@ -210,30 +324,9 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 	}
 
 	// Request attestation document from enclave (GetAttestationRequest)
-	attReq := enclaveproto.Request{
-		Type: "get_attestation",
-	}
-	resAttBytes, err := p.sendToEnclave(attReq, 5*time.Second)
+	att, err := p.requestAttestationDocument()
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	var resAtt enclaveproto.Response[enclaveproto.GetAttestationResponse]
-	if err := json.Unmarshal(resAttBytes, &resAtt); err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal get attestation response: %v", err)})
-		return
-	}
-	att, err := base64.StdEncoding.DecodeString(resAtt.Data.Attestation)
-	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode attestation document: %v", err)})
-		return
-	}
-	if !resAtt.Success {
-		c.JSON(500, gin.H{"error": resAtt.Error})
-		return
-	}
-	if len(att) == 0 {
-		c.JSON(500, gin.H{"error": "Empty attestation document"})
 		return
 	}
 
@@ -319,30 +412,9 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	}
 
 	// Request attestation document from enclave (GetAttestationRequest)
-	attReq := enclaveproto.Request{
-		Type: "get_attestation",
-	}
-	resAttBytes, err := p.sendToEnclave(attReq, 5*time.Second)
+	att, err := p.requestAttestationDocument()
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	var resAtt enclaveproto.Response[enclaveproto.GetAttestationResponse]
-	if err := json.Unmarshal(resAttBytes, &resAtt); err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal get attestation response: %v", err)})
-		return
-	}
-	att, err := base64.StdEncoding.DecodeString(resAtt.Data.Attestation)
-	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode attestation document: %v", err)})
-		return
-	}
-	if !resAtt.Success {
-		c.JSON(500, gin.H{"error": resAtt.Error})
-		return
-	}
-	if len(att) == 0 {
-		c.JSON(500, gin.H{"error": "Empty attestation document"})
 		return
 	}
 
