@@ -192,8 +192,9 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 	return result, nil
 }
 
-func (d *DynamoClient) StoreTenantConfig(ctx context.Context, config *models.TenantConfig) error {
-	item, err := attributevalue.MarshalMap(config)
+func (d *DynamoClient) CreateTenant(ctx context.Context, tenantID string, wrappedMasterKey []byte, wrappedTableSalt []byte) error {
+	tenantConfig := models.NewTenantConfig(tenantID, wrappedMasterKey, wrappedTableSalt, 1)
+	item, err := attributevalue.MarshalMap(tenantConfig)
 	if err != nil {
 		return err
 	}
@@ -202,6 +203,24 @@ func (d *DynamoClient) StoreTenantConfig(ctx context.Context, config *models.Ten
 		Item:      item,
 	})
 	return err
+}
+
+func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (string, error) {
+	apiKey := models.GenerateAPIKey()
+	hashedKey, err := models.HashAPIKey(apiKey)
+	if err != nil {
+		return "", err
+	}
+	apiKeyModel := models.NewAPIKey(tenantID, "default", hashedKey, []string{"read", "write"}, nil)
+	item, err := attributevalue.MarshalMap(apiKeyModel)
+	if err != nil {
+		return "", err
+	}
+	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(d.TenantConfigTable),
+		Item:      item,
+	})
+	return apiKey, err
 }
 
 // Helper function to extract tenant from PK of format "TENANT#<tenant_id>"
