@@ -37,6 +37,7 @@ type AWSConfig struct {
 	DynamoObjectsTable       string
 	DynamoIndexesTable       string
 	DynamoTenantConfigsTable string
+	DynamoAPIKeysTable       string
 	MaxRetries               int
 	RequestTimeout           time.Duration
 	UseLocalstack            bool
@@ -54,9 +55,14 @@ func main() {
 
 	server := NewServer(config, logger)
 
-	server.setupRoutes()
+	s3Client, dynamoClient, err := initStorage(context.Background(), logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize storage clients", zap.Error(err))
+	}
 
-	server.setupEnclaveProxy()
+	server.setupRoutes(s3Client, dynamoClient)
+
+	server.setupEnclaveProxy(dynamoClient)
 
 	server.start()
 }
@@ -80,27 +86,21 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 	}
 }
 
-func (s *Server) setupRoutes() {
+func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.DynamoClient) {
 	s.router.GET("/health", handlers.HealthCheckHandler)
 
 	api := s.router.Group("/api")
-
-	ctx := context.Background()
-	s3Client, dynamoClient, err := initStorage(ctx, s.logger)
-	if err != nil {
-		s.logger.Fatal("Failed to initialize storage clients", zap.Error(err))
-	}
 
 	objectHandler := handlers.NewObjectHandler(s3Client, dynamoClient)
 	objects := api.Group("/objects")
 	objects.Use(middleware.TenantMiddleware())
 	{
-		objects.GET("/:id", objectHandler.Get)
-		objects.POST("", objectHandler.Create)
+		objects.GET("/:table_hash/:id", objectHandler.Get)
+		objects.POST("/:table_hash", objectHandler.Create)
 	}
 }
 
-func (s *Server) setupEnclaveProxy() {
+func (s *Server) setupEnclaveProxy(dynamoClient *storage.DynamoClient) {
 	awsConfig := loadAWSConfig()
 	cfg, err := loadAWSSDKConfig(context.Background(), awsConfig)
 	if err != nil {
@@ -112,6 +112,7 @@ func (s *Server) setupEnclaveProxy() {
 		EnclaveCID:  getEnvUint32("ENCLAVE_CID", 16),
 		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
 		KMSClient:   kmsClient,
+		Dynamo:      dynamoClient,
 	}
 
 	s.router.GET("/enclave/health", proxy.HandleHealth)
@@ -119,6 +120,8 @@ func (s *Server) setupEnclaveProxy() {
 	s.router.POST("/enclave/session/unwrap", proxy.HandleSessionUnwrap)
 	s.router.POST("/enclave/session/generate-deks", proxy.HandleSessionGenerateDEK)
 	s.router.POST("/enclave/decrypt", proxy.HandleDecrypt)
+
+	s.router.POST("/auth/tenant", proxy.HandleCreateTenant)
 }
 
 func (s *Server) start() {
@@ -164,7 +167,7 @@ func initStorage(ctx context.Context, logger *zap.Logger) (*storage.S3Client, *s
 	}
 
 	s3Client := storage.NewS3Client(ctx, awsConfig.S3Bucket, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
-	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTenantConfigsTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
+	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTenantConfigsTable, awsConfig.DynamoAPIKeysTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 
 	if err := testAWSConnectivity(ctx, s3Client, dynamoClient, logger); err != nil {
 		return nil, nil, err
@@ -189,6 +192,7 @@ func loadAWSConfig() *AWSConfig {
 		DynamoObjectsTable:       getEnvOrPanic("DYNAMO_OBJECTS_TABLE"),
 		DynamoIndexesTable:       getEnvOrPanic("DYNAMO_INDEXES_TABLE"),
 		DynamoTenantConfigsTable: getEnvOrPanic("DYNAMO_TENANT_CONFIGS_TABLE"),
+		DynamoAPIKeysTable:       getEnvOrPanic("DYNAMO_API_KEYS_TABLE"),
 		MaxRetries:               getEnvAsInt("AWS_MAX_RETRIES", 3),
 		RequestTimeout:           time.Duration(getEnvAsInt("AWS_REQUEST_TIMEOUT", 5)) * time.Second,
 		UseLocalstack:            getEnvAsBool("USE_LOCALSTACK", false),

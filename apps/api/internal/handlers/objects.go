@@ -40,11 +40,12 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		return
 	}
 	tenantId := c.GetString("tenantId")
+	tableHash := c.Param("table_hash")
 
 	objectId := uuid.NewString()
 	s3Key := generateS3Key(tenantId, objectId, 1)
 
-	obj := models.NewObject(tenantId, objectId, s3Key, req.EncryptedDEK, req.EncryptedSchemaName)
+	obj := models.NewObject(tenantId, tableHash, objectId, s3Key, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce, req.EncryptedTableName)
 	if req.Sensitivity != "" {
 		obj.Sensitivity = req.Sensitivity
 	} else {
@@ -59,7 +60,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if err := h.Dynamo.CreateObjectWithIndexes(ctx, obj, req.Indexes); err != nil {
+	if err := h.Dynamo.CreateObjectWithIndexes(ctx, tableHash, obj, req.Indexes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
 		return
 	}
@@ -81,8 +82,9 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantId := c.GetString("tenantId")
 	id := c.Param("id")
+	tableHash := c.Param("table_hash")
 
-	obj, err := h.Dynamo.GetObject(ctx, tenantId, id)
+	obj, err := h.Dynamo.GetObject(ctx, tenantId, tableHash, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get object from DynamoDB: " + err.Error()})
 		return
@@ -99,13 +101,12 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	}
 
 	resp := models.GetObjectResponse{
-		ObjectID:            id,
-		EncryptedDEK:        obj.EncryptedDEK,
-		EncryptedSchemaName: obj.EncryptedSchemaName,
-		GetURL:              getUrl,
-		CreatedAt:           obj.CreatedAt,
-		UpdatedAt:           obj.UpdatedAt,
-		Version:             obj.Version,
+		ObjectID:           id,
+		EncryptedTableName: obj.EncryptedTableName,
+		GetURL:             getUrl,
+		CreatedAt:          obj.CreatedAt,
+		UpdatedAt:          obj.UpdatedAt,
+		Version:            obj.Version,
 	}
 
 	c.JSON(http.StatusOK, resp)
