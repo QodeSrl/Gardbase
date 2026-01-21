@@ -13,7 +13,7 @@ import (
 	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
 )
 
-func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *rsa.PrivateKey, nsmSession *nsm.Session) {
+func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
 	var req enclaveproto.EnclavePrepareKEKRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
