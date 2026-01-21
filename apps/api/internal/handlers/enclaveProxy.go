@@ -94,6 +94,7 @@ func (p *VsockProxy) HandleCreateTenant(c *gin.Context) {
 		return
 	}
 
+	// TODO: implement master key recovery mechanism
 	masterKeyRes, err := p.KMSClient.GenerateDataKey(c.Request.Context(), &kms.GenerateDataKeyInput{
 		KeyId:   aws.String(p.KMSKeyID),
 		KeySpec: types.DataKeySpecAes256,
@@ -172,7 +173,8 @@ func (p *VsockProxy) HandleCreateTenant(c *gin.Context) {
 	}
 
 	c.JSON(200, models.CreateTenantResponse{
-		TenantID:            tenantID,
+		TenantID: tenantID,
+		// TODO: should the master key and table salt be returned here?
 		EncryptedMasterKey:  res.Data.MasterKey,
 		EncryptedTableSalt:  res.Data.TableSalt,
 		EnclavePubKey:       res.Data.EnclavePubKey,
@@ -250,7 +252,7 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 		tenantId := c.GetString("tenantId")
 		input := &kms.DecryptInput{
 			CiphertextBlob: ctBytes,
-			KeyId:          &unwrapReq.KeyId,
+			KeyId:          aws.String(p.KMSKeyID),
 			Recipient: &kmsTypes.RecipientInfo{
 				AttestationDocument:    att,
 				KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
@@ -275,7 +277,6 @@ func (p *VsockProxy) HandleSessionUnwrap(c *gin.Context) {
 	// Prepare enclave unwrap request
 	unwrapEnclaveReq := enclaveproto.EnclaveSessionUnwrapRequest{
 		SessionId: unwrapReq.SessionId,
-		KeyId:     unwrapReq.KeyId,
 		Items:     items,
 	}
 	payloadBytes, err := json.Marshal(unwrapEnclaveReq)
@@ -331,11 +332,16 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 	}
 
 	tenantId := c.GetString("tenantId")
+	tenant, err := p.Dynamo.GetTenant(c.Request.Context(), tenantId)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get tenant config"})
+		return
+	}
 
 	// Generate data keys with KMS using attestation document
 	input := &kms.GenerateDataKeyInput{
-		KeyId:   &generateDEKReq.KeyId,
-		KeySpec: "AES_256",
+		KeyId:   aws.String(p.KMSKeyID),
+		KeySpec: types.DataKeySpecAes256,
 		Recipient: &kmsTypes.RecipientInfo{
 			AttestationDocument:    att,
 			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
@@ -363,10 +369,32 @@ func (p *VsockProxy) HandleSessionGenerateDEK(c *gin.Context) {
 		log.Printf("Generated DEK %d: CiphertextBlob len=%d, CiphertextForRecipient len=%d", i, len(out.CiphertextBlob), len(out.CiphertextForRecipient))
 	}
 
+	KMSWrappedMasterKey, err := base64.StdEncoding.DecodeString(tenant.WrappedMasterKey)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode wrapped master key: %v", err)})
+		return
+	}
+	wrappedMasterkeyOut, err := p.KMSClient.Decrypt(c.Request.Context(), &kms.DecryptInput{
+		CiphertextBlob: KMSWrappedMasterKey,
+		Recipient: &kmsTypes.RecipientInfo{
+			AttestationDocument:    att,
+			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,
+		},
+		EncryptionContext: map[string]string{
+			"tenant_id": tenantId,
+			"purpose":   "master_key",
+		},
+	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped master key: %v", err)})
+		return
+	}
+
 	// Prepare DEK in enclave (EnclavePrepareDEKRequest)
 	prepareDEKReq := enclaveproto.EnclavePrepareDEKRequest{
-		DEKs:      deks,
-		SessionId: generateDEKReq.SessionId,
+		DEKs:             deks,
+		WrappedMasterKey: base64.StdEncoding.EncodeToString(wrappedMasterkeyOut.CiphertextForRecipient),
+		SessionId:        generateDEKReq.SessionId,
 	}
 	payloadBytes, err = json.Marshal(prepareDEKReq)
 	if err != nil {
@@ -427,7 +455,7 @@ func (p *VsockProxy) HandleDecrypt(c *gin.Context) {
 	// Unwrap data key with KMS using attestation document
 	input := &kms.DecryptInput{
 		CiphertextBlob: ciphertext,
-		KeyId:          &decryptReq.KeyID,
+		KeyId:          aws.String(p.KMSKeyID),
 		Recipient: &kmsTypes.RecipientInfo{
 			AttestationDocument:    att,
 			KeyEncryptionAlgorithm: kmsTypes.KeyEncryptionMechanismRsaesOaepSha256,

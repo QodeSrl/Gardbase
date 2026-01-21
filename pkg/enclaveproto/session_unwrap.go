@@ -9,10 +9,8 @@ type SessionUnwrapItem struct {
 
 type SessionUnwrapRequest struct {
 	// Session ID, Base64-encoded
-	SessionId string `json:"session_id"`
-	// KMS Key ID
-	KeyId string              `json:"key_id"`
-	Items []SessionUnwrapItem `json:"items"`
+	SessionId string              `json:"session_id"`
+	Items     []SessionUnwrapItem `json:"items"`
 }
 
 type SessionUnwrapItemResult struct {
@@ -40,8 +38,6 @@ type EnclaveSessionUnwrapItem struct {
 type EnclaveSessionUnwrapRequest struct {
 	// Session ID, Base64-encoded
 	SessionId string `json:"session_id"`
-	// KMS Key ID
-	KeyId string `json:"key_id"`
 	// List of items to unwrap
 	Items []EnclaveSessionUnwrapItem `json:"items"`
 }

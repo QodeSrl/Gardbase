@@ -143,7 +143,7 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 	return ess, nil
 }
 
-func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []enclaveproto.SessionUnwrapItem, keyID string) (enclaveproto.SessionUnwrapResponse, error) {
+func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []enclaveproto.SessionUnwrapItem) (enclaveproto.SessionUnwrapResponse, error) {
 	if time.Now().After(ess.ExpiresAt) {
 		return nil, errors.New("decrypt session has expired")
 	}
@@ -153,7 +153,6 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 
 	body := enclaveproto.SessionUnwrapRequest{
 		SessionId: ess.SessionId,
-		KeyId:     keyID,
 		Items:     items,
 	}
 	reqBytes, _ := json.Marshal(body)
@@ -186,11 +185,13 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 }
 
 type GeneratedDEK struct {
-	PlaintextDEK []byte
-	EncryptedDEK []byte
+	PlaintextDEK          []byte
+	KMSEncryptedDEK       []byte
+	MasterKeyEncryptedDEK []byte
+	MasterKeyNonce        []byte
 }
 
-func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, count int) (generatedDEKs []GeneratedDEK, err error) {
+func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (generatedDEKs []GeneratedDEK, err error) {
 	if time.Now().After(ess.ExpiresAt) {
 		return nil, errors.New("decrypt session has expired")
 	}
@@ -200,7 +201,6 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 
 	body := enclaveproto.SessionGenerateDEKRequest{
 		SessionId: ess.SessionId,
-		KeyId:     keyID,
 		Count:     count,
 	}
 	reqBytes, _ := json.Marshal(body)
@@ -230,7 +230,7 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 		return nil, err
 	}
 	for _, DEK := range resBody.Data.DEKs {
-		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.Nonce, nil)
+		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.SessionNonce, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -238,9 +238,19 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, keyID string, 
 		if err != nil {
 			return nil, errors.New("invalid base64 KMS encrypted DEK")
 		}
+		masterKeyEncryptedDEK, err := base64.StdEncoding.DecodeString(DEK.MasterEncryptedDEK)
+		if err != nil {
+			return nil, errors.New("invalid base64 Master Key encrypted DEK")
+		}
+		masterKeyNonce, err := base64.StdEncoding.DecodeString(DEK.MasterKeyNonce)
+		if err != nil {
+			return nil, errors.New("invalid base64 Master Key nonce")
+		}
 		generatedDEKs = append(generatedDEKs, GeneratedDEK{
-			PlaintextDEK: dek,
-			EncryptedDEK: encryptedDEK,
+			PlaintextDEK:          dek,
+			KMSEncryptedDEK:       encryptedDEK,
+			MasterKeyEncryptedDEK: masterKeyEncryptedDEK,
+			MasterKeyNonce:        masterKeyNonce,
 		})
 	}
 	return generatedDEKs, nil
@@ -283,7 +293,7 @@ func (ess *EnclaveSecureSession) GetAttestationInfo() map[string]any {
 	}
 }
 
-func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string, nonceB64 string, keyID string) ([]byte, error) {
+func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string, nonceB64 string) ([]byte, error) {
 	clientPub, clientPriv, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -293,7 +303,6 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 	body := enclaveproto.DecryptRequest{
 		Ciphertext:               wrappedDEKB64,
 		Nonce:                    nonceB64,
-		KeyID:                    keyID,
 		ClientEphemeralPublicKey: clientPubB64,
 	}
 
