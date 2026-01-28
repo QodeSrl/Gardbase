@@ -1,28 +1,95 @@
 package handlers
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
+	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type ObjectHandler struct {
+	Vsock      *services.Vsock
 	S3Client   *storage.S3Client
 	Dynamo     *storage.DynamoClient
+	KMS        *services.KMS
 	PresignTTL time.Duration
 }
 
-func NewObjectHandler(s3Client *storage.S3Client, dynamo *storage.DynamoClient) *ObjectHandler {
-	return &ObjectHandler{
-		S3Client:   s3Client,
-		Dynamo:     dynamo,
-		PresignTTL: 15 * time.Minute,
+func (h *ObjectHandler) GetTableHash(c *gin.Context) {
+	tenantId := c.GetString("tenantId")
+	var req models.GetTableHashRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
+	tenant, err := h.Dynamo.GetTenant(c.Request.Context(), tenantId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get tenant from DynamoDB: " + err.Error()})
+		return
+	}
+	attDoc, err := h.Vsock.RequestAttestationDocument()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get attestation document: " + err.Error()})
+		return
+	}
+	wrappedTableSalt, err := base64.StdEncoding.DecodeString(tenant.WrappedTableSalt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode table salt: " + err.Error()})
+		return
+	}
+	// Decrypt table salt using KMS
+	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), wrappedTableSalt, attDoc, tenantId, "table_salt")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt table salt: " + err.Error()})
+		return
+	}
+	// Build enclave request
+	enclaveReqBody := enclaveproto.EnclaveSessionGenerateTableHashRequest{
+		SessionID:                 req.SessionID,
+		SessionEncryptedTableName: req.SessionEncryptedTableName,
+		SessionTableNameNonce:     req.SessionTableNameNonce,
+		TableSalt:                 base64.StdEncoding.EncodeToString(tableSalt.CiphertextForRecipient),
+	}
+	if err := c.BindJSON(&enclaveReqBody); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
+		return
+	}
+	payloadBytes, err := json.Marshal(enclaveReqBody)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session init request: %v", err)})
+		return
+	}
+	enclaveReq := enclaveproto.Request{
+		Type:    "session_generate_table_hash",
+		Payload: json.RawMessage(payloadBytes),
+	}
+	resBytes, err := h.Vsock.SendToEnclave(enclaveReq, 10*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	// Generate table hash from tenant table salt
+	var res enclaveproto.Response[enclaveproto.EnclaveSessionGenerateTableHashResponse]
+	if err := json.Unmarshal(resBytes, &res); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session init response: %v", err)})
+		return
+	}
+	if !res.Success {
+		c.JSON(500, gin.H{"error": res.Error})
+		return
+	}
+	resp := models.GetTableHashResponse{
+		TableHash: res.Data.TableHash,
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 /*
@@ -39,9 +106,11 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	tableHash := c.Param("table-hash")
+	// Get tenant ID from context
 	tenantId := c.GetString("tenantId")
-	tableHash := c.Param("table_hash")
 
+	// Generate object ID and S3 key
 	objectId := uuid.NewString()
 	s3Key := generateS3Key(tenantId, objectId, 1)
 
@@ -59,8 +128,6 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL: " + err.Error()})
 		return
 	}
-
-	// TODO: Add enclave integration to decrypt session encrypted table name and generate table hash
 
 	if err := h.Dynamo.CreateObjectWithIndexes(ctx, tableHash, obj, req.Indexes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
@@ -84,7 +151,7 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantId := c.GetString("tenantId")
 	id := c.Param("id")
-	tableHash := c.Param("table_hash")
+	tableHash := c.Param("table-hash")
 
 	obj, err := h.Dynamo.GetObject(ctx, tenantId, tableHash, id)
 	if err != nil {

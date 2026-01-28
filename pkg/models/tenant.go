@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/base64"
+	"time"
+)
 
 type TenantConfig struct {
 	PK string `dynamodbav:"pk"` // "TENANT#<tenant_id>"
@@ -19,8 +22,8 @@ type TenantConfig struct {
 func NewTenantConfig(tenantID string, wrappedMasterKKey []byte, wrappedTableSalt []byte, masterKeyVersion int) *TenantConfig {
 	return &TenantConfig{
 		PK:               "TENANT#" + tenantID,
-		WrappedMasterKey: string(wrappedMasterKKey),
-		WrappedTableSalt: string(wrappedTableSalt),
+		WrappedMasterKey: base64.StdEncoding.EncodeToString(wrappedMasterKKey),
+		WrappedTableSalt: base64.StdEncoding.EncodeToString(wrappedTableSalt),
 		MasterKeyVersion: masterKeyVersion,
 		CreatedAt:        time.Now().UTC(),
 		UpdatedAt:        time.Now().UTC(),
@@ -28,7 +31,8 @@ func NewTenantConfig(tenantID string, wrappedMasterKKey []byte, wrappedTableSalt
 }
 
 type CreateTenantRequest struct {
-	ClientPubKey string `json:"client_public_key" binding:"required"`
+	// TODO: later on, implement advanced self-managed keys
+	// ClientPubKey string `json:"client_public_key" binding:"required"`
 }
 
 type CreateTenantResponse struct {

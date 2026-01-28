@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/google/uuid"
 )
 
 type DynamoClient struct {
@@ -235,7 +236,7 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 	if err != nil {
 		return "", err
 	}
-	apiKeyModel := models.NewAPIKey(tenantID, "default", hashedKey, []string{"read", "write"}, nil)
+	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, []string{"read", "write"}, nil)
 	item, err := attributevalue.MarshalMap(apiKeyModel)
 	if err != nil {
 		return "", err

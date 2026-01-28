@@ -47,7 +47,13 @@ func HandleSessionGenerateTableHash(encoder *json.Encoder, payload json.RawMessa
 		return
 	}
 
-	tableHash := utils.Hash(tableName, req.TableSalt)
+	tableSalt, err := base64.StdEncoding.DecodeString(req.TableSalt)
+	if err != nil {
+		utils.SendError(encoder, fmt.Sprintf("Failed to decode table salt: %v", err))
+		return
+	}
+
+	tableHash := utils.Hash(tableName, tableSalt)
 	res := enclaveproto.EnclaveSessionGenerateTableHashResponse{
 		TableHash: tableHash,
 	}

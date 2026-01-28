@@ -51,14 +51,23 @@ func NewObject(tenantId string, tableHash string, objectId string, s3Key string,
 	}
 }
 
+type GetTableHashRequest struct {
+	SessionID                 string `json:"session_id" binding:"required"` // Base64-encoded session ID
+	SessionEncryptedTableName string `json:"encrypted_table_name,omitempty"`
+	SessionTableNameNonce     string `json:"table_name_nonce,omitempty"`
+}
+
+type GetTableHashResponse struct {
+	TableHash string `json:"table_hash"`
+}
+
 type CreateObjectRequest struct {
-	SessionID                 string            `json:"session_id" binding:"required"` // Base64-encoded session ID
-	KMSEncryptedDEK           string            `json:"encrypted_dek" binding:"required"`
-	MasterEncryptedDEK        string            `json:"master_encrypted_dek" binding:"required"`
-	SessionEncryptedTableName string            `json:"encrypted_table_name,omitempty"`
-	DEKNonce                  string            `json:"dek_nonce" binding:"required"`
-	Indexes                   map[string]string `json:"indexes,omitempty"`
-	Sensitivity               string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
+	KMSEncryptedDEK    string            `json:"encrypted_dek" binding:"required"`
+	MasterEncryptedDEK string            `json:"master_encrypted_dek" binding:"required"`
+	DEKNonce           string            `json:"dek_nonce" binding:"required"`
+	TableHash          string            `json:"table_hash" binding:"required"`
+	Indexes            map[string]string `json:"indexes,omitempty"`
+	Sensitivity        string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
 }
 
 type CreateObjectResponse struct {
@@ -66,6 +75,7 @@ type CreateObjectResponse struct {
 	UploadURL string    `json:"upload_url"`
 	ExpiresIn int64     `json:"expires_in_seconds"`
 	CreatedAt time.Time `json:"created_at"`
+	TableHash string    `json:"table_hash"`
 }
 
 type GetObjectResponse struct {
