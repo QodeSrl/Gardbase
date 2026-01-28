@@ -11,8 +11,8 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func HandleGenerateTableHash(encoder *json.Encoder, payload json.RawMessage) {
-	var req enclaveproto.EnclaveGenerateTableHashRequest
+func HandleSessionGenerateTableHash(encoder *json.Encoder, payload json.RawMessage) {
+	var req enclaveproto.EnclaveSessionGenerateTableHashRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid generate table hash request: %v", err))
 		return
@@ -48,10 +48,10 @@ func HandleGenerateTableHash(encoder *json.Encoder, payload json.RawMessage) {
 	}
 
 	tableHash := utils.Hash(tableName, req.TableSalt)
-	res := enclaveproto.EnclaveGenerateTableHashResponse{
+	res := enclaveproto.EnclaveSessionGenerateTableHashResponse{
 		TableHash: tableHash,
 	}
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.EnclaveGenerateTableHashResponse]{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.EnclaveSessionGenerateTableHashResponse]{
 		Success: true,
 		Data:    res,
 	})

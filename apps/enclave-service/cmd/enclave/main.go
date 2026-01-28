@@ -173,8 +173,8 @@ func handleConnection(conn net.Conn) {
 			handlers.HandlePrepareKEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
 		case "get_attestation":
 			handlers.HandleGetAttestation(encoder, &attestation)
-		case "generate_table_hash":
-			handlers.HandleGenerateTableHash(encoder, req.Payload)
+		case "session_generate_table_hash":
+			handlers.HandleSessionGenerateTableHash(encoder, req.Payload)
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "session_unwrap":
