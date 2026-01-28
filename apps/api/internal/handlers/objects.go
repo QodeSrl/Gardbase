@@ -45,7 +45,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	objectId := uuid.NewString()
 	s3Key := generateS3Key(tenantId, objectId, 1)
 
-	obj := models.NewObject(tenantId, tableHash, objectId, s3Key, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce, req.EncryptedTableName)
+	obj := models.NewObject(tenantId, tableHash, objectId, s3Key, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
 	if req.Sensitivity != "" {
 		obj.Sensitivity = req.Sensitivity
 	} else {
@@ -59,6 +59,8 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL: " + err.Error()})
 		return
 	}
+
+	// TODO: Add enclave integration to decrypt session encrypted table name and generate table hash
 
 	if err := h.Dynamo.CreateObjectWithIndexes(ctx, tableHash, obj, req.Indexes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
@@ -101,12 +103,11 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	}
 
 	resp := models.GetObjectResponse{
-		ObjectID:           id,
-		EncryptedTableName: obj.EncryptedTableName,
-		GetURL:             getUrl,
-		CreatedAt:          obj.CreatedAt,
-		UpdatedAt:          obj.UpdatedAt,
-		Version:            obj.Version,
+		ObjectID:  id,
+		GetURL:    getUrl,
+		CreatedAt: obj.CreatedAt,
+		UpdatedAt: obj.UpdatedAt,
+		Version:   obj.Version,
 	}
 
 	c.JSON(http.StatusOK, resp)

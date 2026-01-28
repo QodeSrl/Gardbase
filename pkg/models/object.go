@@ -9,8 +9,7 @@ type Object struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>"
 	SK string `dynamodbav:"sk" json:"sk"` // format: "OBJ#<object_id>"
 
-	S3Key              string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`
-	EncryptedTableName string `dynamodbav:"encrypted_table_name,omitempty" json:"encrypted_table_name,omitempty"`
+	S3Key string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`
 
 	KMSWrappedDEK    string `dynamodbav:"kms_wrapped_dek,omitempty" json:"kms_wrapped_dek,omitempty"`       // DEK wrapped with KMS
 	MasterWrappedDEK string `dynamodbav:"master_wrapped_dek,omitempty" json:"master_wrapped_dek,omitempty"` // DEK wrapped with tenant master key
@@ -37,29 +36,29 @@ const (
 	SensitivityHigh   = "high"
 )
 
-func NewObject(tenantId string, tableHash string, objectId string, s3Key string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string, encryptedTableName string) *Object {
+func NewObject(tenantId string, tableHash string, objectId string, s3Key string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string) *Object {
 	return &Object{
-		PK:                 fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash),
-		SK:                 fmt.Sprintf("OBJ#%s", objectId),
-		S3Key:              s3Key,
-		KMSWrappedDEK:      kmsWrappedDEK,
-		MasterWrappedDEK:   masterWrappedDEK,
-		DEKNonce:           dekNonce,
-		EncryptedTableName: encryptedTableName,
-		Status:             StatusPending,
-		CreatedAt:          time.Now().UTC(),
-		UpdatedAt:          time.Now().UTC(),
-		Version:            1,
+		PK:               fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash),
+		SK:               fmt.Sprintf("OBJ#%s", objectId),
+		S3Key:            s3Key,
+		KMSWrappedDEK:    kmsWrappedDEK,
+		MasterWrappedDEK: masterWrappedDEK,
+		DEKNonce:         dekNonce,
+		Status:           StatusPending,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+		Version:          1,
 	}
 }
 
 type CreateObjectRequest struct {
-	KMSEncryptedDEK    string            `json:"encrypted_dek" binding:"required"`
-	MasterEncryptedDEK string            `json:"master_encrypted_dek" binding:"required"`
-	DEKNonce           string            `json:"dek_nonce" binding:"required"`
-	EncryptedTableName string            `json:"encrypted_table_name" binding:"required"`
-	Indexes            map[string]string `json:"indexes,omitempty"`
-	Sensitivity        string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
+	SessionID                 string            `json:"session_id" binding:"required"` // Base64-encoded session ID
+	KMSEncryptedDEK           string            `json:"encrypted_dek" binding:"required"`
+	MasterEncryptedDEK        string            `json:"master_encrypted_dek" binding:"required"`
+	SessionEncryptedTableName string            `json:"encrypted_table_name,omitempty"`
+	DEKNonce                  string            `json:"dek_nonce" binding:"required"`
+	Indexes                   map[string]string `json:"indexes,omitempty"`
+	Sensitivity               string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
 }
 
 type CreateObjectResponse struct {
@@ -70,10 +69,9 @@ type CreateObjectResponse struct {
 }
 
 type GetObjectResponse struct {
-	ObjectID           string    `json:"object_id"`
-	GetURL             string    `json:"get_url"`
-	EncryptedTableName string    `json:"encrypted_table_name"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	Version            int32     `json:"version"`
+	ObjectID  string    `json:"object_id"`
+	GetURL    string    `json:"get_url"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Version   int32     `json:"version"`
 }

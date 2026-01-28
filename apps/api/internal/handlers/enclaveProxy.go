@@ -129,36 +129,36 @@ func (p *VsockProxy) HandleCreateTenant(c *gin.Context) {
 		return
 	}
 
-	prepareMasterKeyReq := enclaveproto.EnclavePrepareKEKRequest{
-		ClientEphemeralPublicKey: req.ClientPubKey,
-		MasterKey:                base64.StdEncoding.EncodeToString(masterKeyRes.CiphertextForRecipient),
-		TableSalt:                base64.StdEncoding.EncodeToString(tableSaltRes.CiphertextForRecipient),
-	}
+	// prepareMasterKeyReq := enclaveproto.EnclavePrepareKEKRequest{
+	// 	ClientEphemeralPublicKey: req.ClientPubKey,
+	// 	MasterKey:                base64.StdEncoding.EncodeToString(masterKeyRes.CiphertextForRecipient),
+	// 	TableSalt:                base64.StdEncoding.EncodeToString(tableSaltRes.CiphertextForRecipient),
+	// }
 
-	payloadBytes, err := json.Marshal(prepareMasterKeyReq)
-	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal prepare KEK request: %v", err)})
-		return
-	}
+	// payloadBytes, err := json.Marshal(prepareMasterKeyReq)
+	// if err != nil {
+	// 	c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal prepare KEK request: %v", err)})
+	// 	return
+	// }
 
-	reqEnclave := enclaveproto.Request{
-		Type:    "prepare_kek",
-		Payload: json.RawMessage(payloadBytes),
-	}
-	resBytes, err := p.sendToEnclave(reqEnclave, 15*time.Second)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	var res enclaveproto.Response[enclaveproto.EnclavePrepareKEKResponse]
-	if err := json.Unmarshal(resBytes, &res); err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal prepare KEK response: %v", err)})
-		return
-	}
-	if !res.Success {
-		c.JSON(500, gin.H{"error": res.Error})
-		return
-	}
+	// reqEnclave := enclaveproto.Request{
+	// 	Type:    "prepare_kek",
+	// 	Payload: json.RawMessage(payloadBytes),
+	// }
+	// resBytes, err := p.sendToEnclave(reqEnclave, 15*time.Second)
+	// if err != nil {
+	// 	c.JSON(500, gin.H{"error": err.Error()})
+	// 	return
+	// }
+	// var res enclaveproto.Response[enclaveproto.EnclavePrepareKEKResponse]
+	// if err := json.Unmarshal(resBytes, &res); err != nil {
+	// 	c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal prepare KEK response: %v", err)})
+	// 	return
+	// }
+	// if !res.Success {
+	// 	c.JSON(500, gin.H{"error": res.Error})
+	// 	return
+	// }
 
 	err = p.Dynamo.CreateTenant(c.Request.Context(), tenantID, masterKeyRes.CiphertextBlob, tableSaltRes.CiphertextBlob)
 	if err != nil {
@@ -174,13 +174,13 @@ func (p *VsockProxy) HandleCreateTenant(c *gin.Context) {
 
 	c.JSON(200, models.CreateTenantResponse{
 		TenantID: tenantID,
-		// TODO: should the master key and table salt be returned here?
-		EncryptedMasterKey:  res.Data.MasterKey,
-		EncryptedTableSalt:  res.Data.TableSalt,
-		EnclavePubKey:       res.Data.EnclavePubKey,
+		// TODO: later on, implement advanced self-managed keys
+		// EncryptedMasterKey:  res.Data.MasterKey,
+		// EncryptedTableSalt:  res.Data.TableSalt,
+		// EnclavePubKey:       res.Data.EnclavePubKey,
 		AttestationDocument: base64.StdEncoding.EncodeToString(att),
-		Nonce:               res.Data.Nonce,
-		APIKey:              apiKey,
+		// Nonce:               res.Data.Nonce,
+		APIKey: apiKey,
 	})
 }
 
