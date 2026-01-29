@@ -14,7 +14,7 @@ import (
 )
 
 func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
-	var req enclaveproto.EnclavePrepareKEKRequest
+	var req enclaveproto.PrepareKEKRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
 		return
@@ -69,9 +69,9 @@ func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession
 	encryptedMasterKey := box.Seal(nonce[:], masterKey, &nonce, &clientPubKey, enclavePrivKey)
 	encryptedTableSalt := box.Seal(nonce[:], tableSalt, &nonce, &clientPubKey, enclavePrivKey)
 
-	resp := enclaveproto.Response[enclaveproto.EnclavePrepareKEKResponse]{
+	resp := enclaveproto.Response[enclaveproto.PrepareKEKResponse]{
 		Success: true,
-		Data: enclaveproto.EnclavePrepareKEKResponse{
+		Data: enclaveproto.PrepareKEKResponse{
 			EnclavePubKey: base64.StdEncoding.EncodeToString(enclavePubKey[:]),
 			MasterKey:     base64.StdEncoding.EncodeToString(encryptedMasterKey),
 			TableSalt:     base64.StdEncoding.EncodeToString(encryptedTableSalt),
