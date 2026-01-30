@@ -93,10 +93,19 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
 	}
 
-	s.router.GET("/health", healthCheck.HealthCheckHandler)
-	s.router.GET("/enclave/health", vsock.HandleHealth)
-
 	api := s.router.Group("/api")
+
+	healthCheckHandler := &healthCheck.HealthCheckHandler{
+		Vsock:    vsock,
+		KMS:      kmsService,
+		Dynamo:   dynamoClient,
+		S3Client: s3Client,
+	}
+	health := api.Group("/health")
+	health.GET("/", healthCheckHandler.HandleAPIHealthCheck)
+	health.GET("/enclave", healthCheckHandler.HandleEnclaveHealthCheck)
+	health.GET("/storage", healthCheckHandler.HandleStorageHealthCheck)
+	health.GET("/kms", healthCheckHandler.HandleKMSHealthCheck)
 
 	tenantHandler := &tenants.TenantHandler{
 		Vsock:  vsock,

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
-	"github.com/gin-gonic/gin"
 	"github.com/mdlayher/vsock"
 )
 
@@ -74,26 +73,4 @@ func (v *Vsock) SendToEnclave(req enclaveproto.Request, timeout time.Duration) (
 	}
 
 	return scanner.Bytes(), nil
-}
-
-func (v *Vsock) HandleHealth(c *gin.Context) {
-	req := enclaveproto.Request{
-		Type:    "health",
-		Payload: nil,
-	}
-	resBytes, err := v.SendToEnclave(req, 5*time.Second)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	var res enclaveproto.Response[json.RawMessage]
-	if err := json.Unmarshal(resBytes, &res); err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal health response: %v", err)})
-		return
-	}
-	if !res.Success {
-		c.JSON(500, gin.H{"error": res.Error})
-		return
-	}
-	c.JSON(200, res)
 }

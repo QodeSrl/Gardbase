@@ -36,6 +36,13 @@ func NewKMSService(ctx context.Context, cfg aws.Config, keyID string, useLocalst
 	}
 }
 
+func (k *KMS) TestConnectivity(ctx context.Context) error {
+	_, err := k.Client.DescribeKey(ctx, &kms.DescribeKeyInput{
+		KeyId: aws.String(k.KeyID),
+	})
+	return err
+}
+
 func (k *KMS) GenerateDataKey(ctx context.Context, attestationDocument []byte, tenantID string, purpose string) (*kms.GenerateDataKeyOutput, error) {
 	return k.Client.GenerateDataKey(ctx, &kms.GenerateDataKeyInput{
 		KeyId:   aws.String(k.KeyID),
