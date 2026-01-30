@@ -1,4 +1,4 @@
-package encryption
+package handlers
 
 import (
 	"encoding/base64"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
+	"github.com/QodeSrl/gardbase/pkg/api/encryption"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/gin-gonic/gin"
 )
@@ -20,7 +21,7 @@ type EncryptionHandler struct {
 }
 
 func (e *EncryptionHandler) HandleSessionInit(c *gin.Context) {
-	var req SessionInitRequest
+	var req encryption.SessionInitRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
 		return
@@ -54,7 +55,7 @@ func (e *EncryptionHandler) HandleSessionInit(c *gin.Context) {
 
 func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 	// Validate request (SessionUnwrapRequest)
-	var req SessionUnwrapRequest
+	var req encryption.SessionUnwrapRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
 		return
@@ -134,7 +135,7 @@ func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 
 func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 	// Validate request (SessionGenerateDEKRequest)
-	var req SessionGenerateDEKRequest
+	var req encryption.SessionGenerateDEKRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
 		return
@@ -229,7 +230,7 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 
 func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 	// Validate request (DecryptRequest)
-	var decryptReq DecryptRequest
+	var decryptReq encryption.DecryptRequest
 	if err := c.BindJSON(&decryptReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid decrypt request: %v", err)})
 		return

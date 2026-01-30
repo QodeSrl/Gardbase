@@ -18,6 +18,11 @@ type APIKey struct {
 	ExpiresAt   *time.Time `dynamodbav:"expires_at" json:"expires_at"`
 }
 
+const (
+	PermissionRead  = "read"
+	PermissionWrite = "write"
+)
+
 func NewAPIKey(tenantId string, keyId string, hashedKey string, permissions []string, expiresAt *time.Time) *APIKey {
 	return &APIKey{
 		PK:          "TENANT#" + tenantId,

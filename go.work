@@ -7,4 +7,5 @@ use (
     "./pkg/models"
     "./pkg/crypto"
     "./pkg/enclaveproto"
+    "./pkg/api"
 )
