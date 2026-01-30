@@ -3,7 +3,7 @@ module github.com/QodeSrl/gardbase/apps/lambdas/upload-processor
 go 1.24.4
 
 require (
-	github.com/QodeSrl/gardbase/pkg/models v0.0.5
+	github.com/QodeSrl/gardbase/pkg/models v0.0.6
 	github.com/aws/aws-lambda-go v1.49.0
 	github.com/aws/aws-sdk-go-v2 v1.38.3
 	github.com/aws/aws-sdk-go-v2/config v1.31.6

@@ -11,7 +11,9 @@ require (
 
 require (
 	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
+	github.com/QodeSrl/gardbase/pkg/api v0.0.1
 	golang.org/x/crypto v0.46.0
 )
 
 replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../enclaveproto
+replace github.com/QodeSrl/gardbase/pkg/api => ../api

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QodeSrl/gardbase/pkg/api/encryption"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/nacl/box"
@@ -67,7 +68,7 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 	}
 	nonceB64 := base64.StdEncoding.EncodeToString(nonce)
 
-	reqBody := enclaveproto.SessionInitRequest{
+	reqBody := encryption.SessionInitRequest{
 		ClientEphemeralPublicKey: clientPubB64,
 		Nonce:                    nonceB64,
 	}
@@ -94,7 +95,7 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
-	var resBody enclaveproto.SessionInitResponse
+	var resBody encryption.SessionInitResponse
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 		return nil, errors.New("attestation not verified")
 	}
 
-	body := enclaveproto.SessionUnwrapRequest{
+	body := encryption.SessionUnwrapRequest{
 		SessionId: ess.SessionId,
 		Items:     items,
 	}
@@ -175,7 +176,7 @@ func (ess *EnclaveSecureSession) SessionUnwrap(ctx context.Context, items []encl
 		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
-	var resBody enclaveproto.SessionUnwrapResponse
+	var resBody encryption.SessionUnwrapResponse
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
@@ -189,11 +190,6 @@ type GeneratedDEK struct {
 	MasterKeyNonce        []byte
 }
 
-type SessionGenerateDEKRequest struct {
-	SessionId string `json:"session_id"`
-	Count     int    `json:"count"`
-}
-
 func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (generatedDEKs []GeneratedDEK, err error) {
 	if time.Now().After(ess.ExpiresAt) {
 		return nil, errors.New("decrypt session has expired")
@@ -202,7 +198,7 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (ge
 		return nil, errors.New("attestation not verified")
 	}
 
-	body := SessionGenerateDEKRequest{
+	body := encryption.SessionGenerateDEKRequest{
 		SessionId: ess.SessionId,
 		Count:     count,
 	}
@@ -228,7 +224,7 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (ge
 		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
-	var resBody enclaveproto.PrepareDEKResponse
+	var resBody encryption.SessionGenerateDEKResponse
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
@@ -303,7 +299,7 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 	}
 	clientPubB64 := base64.StdEncoding.EncodeToString(clientPub[:])
 
-	body := enclaveproto.DecryptRequest{
+	body := encryption.DecryptRequest{
 		Ciphertext:               wrappedDEKB64,
 		Nonce:                    nonceB64,
 		ClientEphemeralPublicKey: clientPubB64,
@@ -329,7 +325,7 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 		}
 		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
-	var resBody enclaveproto.DecryptResponse
+	var resBody encryption.DecryptResponse
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
