@@ -12,7 +12,6 @@ import (
 )
 
 var config SessionConfig
-var keyID string
 
 // Note: These tests assume that there is a running enclave proxy at the specified endpoint.
 // Other untested functions (e.g., SessionUnwrap, UnsealDEK) would require more complex setup and are to be tested separately in SDKs, possibly with integration tests.
@@ -26,7 +25,6 @@ func TestMain(m *testing.M) {
 		VerifyPCRs:        false,
 		HTTPTimeout:       10 * time.Second,
 	}
-	flag.StringVar(&keyID, "key-id", "", "Key ID for KMS")
 	flag.Parse()
 	os.Exit(m.Run())
 }
@@ -46,7 +44,7 @@ func TestGenerateDEK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start decrypt session: %v", err)
 	}
-	DEKs, err := sess.GenerateDEK(ctx, keyID, 3)
+	DEKs, err := sess.GenerateDEK(ctx, 3)
 	if err != nil {
 		t.Fatalf("Failed to generate DEK: %v", err)
 	}
@@ -62,7 +60,7 @@ func TestUnwrapSingleDEK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start decrypt session: %v", err)
 	}
-	DEKs, err := sess.GenerateDEK(ctx, keyID, 1)
+	DEKs, err := sess.GenerateDEK(ctx, 1)
 	if err != nil {
 		t.Fatalf("Failed to generate DEK: %v", err)
 	}
@@ -70,7 +68,7 @@ func TestUnwrapSingleDEK(t *testing.T) {
 	if _, err := rand.Read(nonce); err != nil {
 		t.Fatalf("Failed to generate nonce: %v", err)
 	}
-	unwrappedDEK, err := UnwrapSingleDEK(ctx, config.Endpoint, base64.StdEncoding.EncodeToString(DEKs[0].EncryptedDEK), base64.StdEncoding.EncodeToString(nonce), keyID)
+	unwrappedDEK, err := UnwrapSingleDEK(ctx, config.Endpoint, base64.StdEncoding.EncodeToString(DEKs[0].KMSEncryptedDEK), base64.StdEncoding.EncodeToString(nonce))
 	if err != nil {
 		t.Fatalf("Failed to unwrap DEK: %v", err)
 	}

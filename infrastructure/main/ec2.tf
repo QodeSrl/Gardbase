@@ -217,6 +217,8 @@ resource "aws_instance" "api" {
     s3_bucket                   = aws_s3_bucket.uploads.bucket
     dynamo_objects_table        = aws_dynamodb_table.objects.name
     dynamo_indexes_table        = aws_dynamodb_table.indexes.name
+    dynamo_tenant_configs_table = aws_dynamodb_table.tenant_configs.name
+    dynamo_api_keys_table       = aws_dynamodb_table.api_keys.name
     kms_key_id                  = aws_kms_key.enclave_key.id
     enclave_cpus                = var.enclave_cpus
     enclave_memory_mib          = var.enclave_memory_mib

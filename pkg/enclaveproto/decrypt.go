@@ -7,8 +7,6 @@ type DecryptRequest struct {
 	ClientEphemeralPublicKey string `json:"client_ephemeral_public_key"`
 	// Request nonce, Base64-encoded
 	Nonce string `json:"nonce"`
-	// KMS Key ID
-	KeyID string `json:"key_id"`
 }
 
 type DecryptResponse struct {

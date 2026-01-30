@@ -168,8 +168,13 @@ func handleConnection(conn net.Conn) {
 		switch req.Type {
 		case "health":
 			handlers.HandleHealth(encoder, startTime)
+		case "prepare_kek":
+			// currently unused, will be implemented later on with advanced self-managed keys
+			handlers.HandlePrepareKEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
 		case "get_attestation":
 			handlers.HandleGetAttestation(encoder, &attestation)
+		case "session_generate_table_hash":
+			handlers.HandleSessionGenerateTableHash(encoder, req.Payload)
 		case "session_init":
 			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
 		case "session_unwrap":
