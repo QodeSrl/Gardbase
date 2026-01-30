@@ -120,7 +120,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 		PresignTTL: 15 * time.Minute,
 	}
 	objects := api.Group("/objects")
-	objects.Use(middleware.TenantMiddleware())
+	objects.Use(middleware.TenantMiddleware(dynamoClient))
 	objects.POST("/table-hash", objectHandler.GetTableHash)
 	objects.GET("/:table-hash/:id", objectHandler.Get)
 	objects.POST("/:table-hash", objectHandler.Create)
@@ -131,7 +131,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 		KMS:    kmsService,
 	}
 	encryption := api.Group("/encryption")
-	encryption.Use(middleware.TenantMiddleware())
+	encryption.Use(middleware.TenantMiddleware(dynamoClient))
 	encryption.POST("/secure-session/init", encryptionHandler.HandleSessionInit)
 	encryption.POST("/secure-session/unwrap", encryptionHandler.HandleSessionUnwrap)
 	encryption.POST("/secure-session/generate-deks", encryptionHandler.HandleSessionGenerateDEK)
