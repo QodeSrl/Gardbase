@@ -5,6 +5,7 @@ go 1.24.4
 require (
 	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
 	github.com/QodeSrl/gardbase/pkg/models v0.0.5
+	github.com/QodeSrl/gardbase/pkg/api v0.0.1
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.5
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.29
@@ -78,3 +79,5 @@ require (
 replace github.com/QodeSrl/gardbase/pkg/models => ../../pkg/models
 
 replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../../pkg/enclaveproto
+
+replace github.com/QodeSrl/gardbase/pkg/api => ../../pkg/api

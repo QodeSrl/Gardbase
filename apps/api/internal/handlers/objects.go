@@ -1,4 +1,4 @@
-package objects
+package handlers
 
 import (
 	"encoding/base64"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
+	"github.com/QodeSrl/gardbase/pkg/api/objects"
 	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,7 @@ type ObjectHandler struct {
 
 func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 	tenantId := c.GetString("tenantId")
-	var req GetTableHashRequest
+	var req objects.GetTableHashRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -86,7 +87,7 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
-	resp := GetTableHashResponse{
+	resp := objects.GetTableHashResponse{
 		TableHash: res.Data.TableHash,
 	}
 	c.JSON(http.StatusOK, resp)
@@ -101,7 +102,7 @@ Finally, it responds with the object ID, S3 key, upload URL, and expiration time
 */
 func (h *ObjectHandler) Create(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req CreateObjectRequest
+	var req objects.CreateObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -134,7 +135,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		return
 	}
 
-	resp := CreateObjectResponse{
+	resp := objects.CreateObjectResponse{
 		ObjectID:  objectId,
 		UploadURL: uploadUrl,
 		ExpiresIn: int64(h.PresignTTL.Seconds()),
@@ -169,7 +170,7 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		return
 	}
 
-	resp := GetObjectResponse{
+	resp := objects.GetObjectResponse{
 		ObjectID:  id,
 		GetURL:    getUrl,
 		CreatedAt: obj.CreatedAt,

@@ -9,10 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/QodeSrl/gardbase/apps/api/internal/handlers/encryption"
-	"github.com/QodeSrl/gardbase/apps/api/internal/handlers/healthCheck"
-	"github.com/QodeSrl/gardbase/apps/api/internal/handlers/objects"
-	"github.com/QodeSrl/gardbase/apps/api/internal/handlers/tenants"
+	"github.com/QodeSrl/gardbase/apps/api/internal/handlers"
 	"github.com/QodeSrl/gardbase/apps/api/internal/middleware"
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
@@ -95,7 +92,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 
 	api := s.router.Group("/api")
 
-	healthCheckHandler := &healthCheck.HealthCheckHandler{
+	healthCheckHandler := &handlers.HealthCheckHandler{
 		Vsock:    vsock,
 		KMS:      kmsService,
 		Dynamo:   dynamoClient,
@@ -107,7 +104,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	health.GET("/storage", healthCheckHandler.HandleStorageHealthCheck)
 	health.GET("/kms", healthCheckHandler.HandleKMSHealthCheck)
 
-	tenantHandler := &tenants.TenantHandler{
+	tenantHandler := &handlers.TenantHandler{
 		Vsock:  vsock,
 		Dynamo: dynamoClient,
 		KMS:    kmsService,
@@ -115,7 +112,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	tenants := api.Group("/tenants")
 	tenants.POST("/", tenantHandler.HandleCreateTenant)
 
-	objectHandler := &objects.ObjectHandler{
+	objectHandler := &handlers.ObjectHandler{
 		Vsock:      vsock,
 		S3Client:   s3Client,
 		Dynamo:     dynamoClient,
@@ -128,7 +125,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	objects.GET("/:table-hash/:id", objectHandler.Get)
 	objects.POST("/:table-hash", objectHandler.Create)
 
-	encryptionHandler := &encryption.EncryptionHandler{
+	encryptionHandler := &handlers.EncryptionHandler{
 		Vsock:  vsock,
 		Dynamo: dynamoClient,
 		KMS:    kmsService,
