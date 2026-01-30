@@ -32,23 +32,8 @@ resource "aws_kms_key" "enclave_key" {
         Resource = "*"
         Condition = {
           StringEqualsIgnoreCase = {
+            // Unless debug mode is enabled, restrict KMS access to specific enclave image for zero-trust
             "kms:RecipientAttestation:ImageSha384" = var.enable_debug_mode ? "*" : var.enclave_pcr0_sha384
-          }
-        }
-      },
-      {
-        Sid    = "Allow API to Read Encrypted Tenant Keys"
-        Effect = "Allow"
-        Principal = {
-          AWS = aws_iam_role.api_role.arn
-        }
-        Action = [
-          "kms:Decrypt"
-        ]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "kms:EncryptionContext:Purpose" = "tenant-master-key"
           }
         }
       }
