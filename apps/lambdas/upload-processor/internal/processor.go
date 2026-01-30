@@ -26,16 +26,16 @@ func init() {
 }
 
 func UpdateStatus(ctx context.Context, bucket string, key string) error {
-	var tenantId, objectId string
+	var tenantId, tableHash, objectId string
 	// extract tenantId and objectId from key
-	err := extractFromKey(key, &tenantId, &objectId)
+	err := extractFromKey(key, &tenantId, &tableHash, &objectId)
 	if err != nil {
 		return err
 	}
 	_, err = dynamoClient.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &tableName,
 		Key: map[string]ddbTypes.AttributeValue{
-			"pk": &ddbTypes.AttributeValueMemberS{Value: "TENANT#" + tenantId},
+			"pk": &ddbTypes.AttributeValueMemberS{Value: "TENANT#" + tenantId + "#TABLE#" + tableHash},
 			"sk": &ddbTypes.AttributeValueMemberS{Value: "OBJ#" + objectId},
 		},
 		UpdateExpression: aws.String("SET #status = :ready REMOVE #ttl"),
@@ -50,14 +50,15 @@ func UpdateStatus(ctx context.Context, bucket string, key string) error {
 	return err
 }
 
-func extractFromKey(key string, tenantId *string, objectId *string) error {
-	// key format: tenant-<tenant_id>/objects/<object_id>/v{n}
+func extractFromKey(key string, tenantId *string, tableHash *string, objectId *string) error {
+	// key format: tenant-<tenant_id>/<table_hash>/<object_id>/v{n}
 	parts := strings.Split(key, "/")
-	if len(parts) != 4 || parts[1] != "objects" || !strings.HasPrefix(parts[0], "tenant-") || !strings.HasPrefix(parts[3], "v") {
+	if len(parts) != 4 || !strings.HasPrefix(parts[0], "tenant-") || !strings.HasPrefix(parts[3], "v") {
 		return fmt.Errorf("invalid S3 key format: %s", key)
 	}
 
 	*tenantId = strings.TrimPrefix(parts[0], "tenant-")
+	*tableHash = parts[1]
 	*objectId = parts[2]
 	return nil
 }

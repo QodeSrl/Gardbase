@@ -112,7 +112,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 
 	// Generate object ID and S3 key
 	objectId := uuid.NewString()
-	s3Key := generateS3Key(tenantId, objectId, 1)
+	s3Key := generateS3Key(tenantId, tableHash, objectId, 1)
 
 	obj := models.NewObject(tenantId, tableHash, objectId, s3Key, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
 	if req.Sensitivity != "" {
@@ -181,6 +181,6 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 }
 
 // Helper function to generate S3 key
-func generateS3Key(tenantId string, objectId string, version int32) string {
-	return "tenant-" + tenantId + "/objects/" + objectId + "/v" + fmt.Sprintf("%d", version)
+func generateS3Key(tenantId string, tableHash string, objectId string, version int32) string {
+	return "tenant-" + tenantId + "/" + tableHash + "/" + objectId + "/v" + fmt.Sprintf("%d", version)
 }
