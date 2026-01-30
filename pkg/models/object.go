@@ -50,38 +50,3 @@ func NewObject(tenantId string, tableHash string, objectId string, s3Key string,
 		Version:          1,
 	}
 }
-
-type GetTableHashRequest struct {
-	SessionID                 string `json:"session_id" binding:"required"` // Base64-encoded session ID
-	SessionEncryptedTableName string `json:"encrypted_table_name,omitempty"`
-	SessionTableNameNonce     string `json:"table_name_nonce,omitempty"`
-}
-
-type GetTableHashResponse struct {
-	TableHash string `json:"table_hash"`
-}
-
-type CreateObjectRequest struct {
-	KMSEncryptedDEK    string            `json:"encrypted_dek" binding:"required"`
-	MasterEncryptedDEK string            `json:"master_encrypted_dek" binding:"required"`
-	DEKNonce           string            `json:"dek_nonce" binding:"required"`
-	TableHash          string            `json:"table_hash" binding:"required"`
-	Indexes            map[string]string `json:"indexes,omitempty"`
-	Sensitivity        string            `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
-}
-
-type CreateObjectResponse struct {
-	ObjectID  string    `json:"object_id"`
-	UploadURL string    `json:"upload_url"`
-	ExpiresIn int64     `json:"expires_in_seconds"`
-	CreatedAt time.Time `json:"created_at"`
-	TableHash string    `json:"table_hash"`
-}
-
-type GetObjectResponse struct {
-	ObjectID  string    `json:"object_id"`
-	GetURL    string    `json:"get_url"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Version   int32     `json:"version"`
-}

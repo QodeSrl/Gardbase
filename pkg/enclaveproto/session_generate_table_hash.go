@@ -1,6 +1,6 @@
 package enclaveproto
 
-type EnclaveSessionGenerateTableHashRequest struct {
+type SessionGenerateTableHashRequest struct {
 	// Session ID, Base64-encoded
 	SessionID string `json:"session_id"`
 	// Session encrypted table name to decrypt and re-encrypt Base64-encoded
@@ -11,7 +11,7 @@ type EnclaveSessionGenerateTableHashRequest struct {
 	TableSalt string `json:"table_salt"`
 }
 
-type EnclaveSessionGenerateTableHashResponse struct {
+type SessionGenerateTableHashResponse struct {
 	// New table hash
 	TableHash string `json:"table_hash"`
 }

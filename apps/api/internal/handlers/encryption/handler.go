@@ -1,4 +1,4 @@
-package handlers
+package encryption
 
 import (
 	"encoding/base64"
@@ -20,21 +20,22 @@ type EncryptionHandler struct {
 }
 
 func (e *EncryptionHandler) HandleSessionInit(c *gin.Context) {
-	var initReq enclaveproto.SessionInitRequest
-	if err := c.BindJSON(&initReq); err != nil {
+	var req SessionInitRequest
+	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
 		return
 	}
-	payloadBytes, err := json.Marshal(initReq)
+	// SessionInitRequest = enclaveproto.SessionInitRequest
+	payloadBytes, err := json.Marshal(req)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session init request: %v", err)})
 		return
 	}
-	req := enclaveproto.Request{
+	enclaveReq := enclaveproto.Request{
 		Type:    "session_init",
 		Payload: json.RawMessage(payloadBytes),
 	}
-	resBytes, err := e.Vsock.SendToEnclave(req, 10*time.Second)
+	resBytes, err := e.Vsock.SendToEnclave(enclaveReq, 10*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -48,19 +49,19 @@ func (e *EncryptionHandler) HandleSessionInit(c *gin.Context) {
 		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
-	c.JSON(200, res)
+	c.JSON(200, res.Data)
 }
 
 func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 	// Validate request (SessionUnwrapRequest)
-	var unwrapReq enclaveproto.SessionUnwrapRequest
-	if err := c.BindJSON(&unwrapReq); err != nil {
+	var req SessionUnwrapRequest
+	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
 		return
 	}
 
 	// Build items for enclave request
-	items := make([]enclaveproto.EnclaveSessionUnwrapItem, 0, len(unwrapReq.Items))
+	items := make([]enclaveproto.SessionUnwrapItem, 0, len(req.Items))
 
 	// Request attestation document from enclave (GetAttestationRequest)
 	att, err := e.Vsock.RequestAttestationDocument()
@@ -69,7 +70,7 @@ func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 	}
 
 	// Unwrap data keys with KMS using attestation document
-	for _, it := range unwrapReq.Items {
+	for _, it := range req.Items {
 		objId := it.ObjectId
 		if objId == "" {
 			c.JSON(400, gin.H{"error": "missing object_id for one of the items"})
@@ -85,63 +86,64 @@ func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 			return
 		}
 		tenantId := c.GetString("tenantId")
-		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, "dek")
+		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, services.PurposeDataKey)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("KMS decrypt failed for object_id %s: %v", objId, err)})
 			return
 		}
 		// append item for enclave unwrap request
-		items = append(items, enclaveproto.EnclaveSessionUnwrapItem{
+		items = append(items, enclaveproto.SessionUnwrapItem{
 			ObjectId:   objId,
 			Ciphertext: base64.StdEncoding.EncodeToString(out.CiphertextForRecipient),
 		})
 	}
 
 	// Prepare enclave unwrap request
-	unwrapEnclaveReq := enclaveproto.EnclaveSessionUnwrapRequest{
-		SessionId: unwrapReq.SessionId,
+	enclaveReqBody := enclaveproto.SessionUnwrapRequest{
+		SessionId: req.SessionId,
 		Items:     items,
 	}
-	payloadBytes, err := json.Marshal(unwrapEnclaveReq)
+	payloadBytes, err := json.Marshal(enclaveReqBody)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
 		return
 	}
-	req := enclaveproto.Request{
+	enclaveReq := enclaveproto.Request{
 		Type:    "session_unwrap",
 		Payload: json.RawMessage(payloadBytes),
 	}
 
 	// Send unwrap request to enclave
-	resBytes, err := e.Vsock.SendToEnclave(req, 30*time.Second)
+	resBytes, err := e.Vsock.SendToEnclave(enclaveReq, 30*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	var res enclaveproto.Response[enclaveproto.EnclaveSessionUnwrapResponse]
-	if err := json.Unmarshal(resBytes, &res); err != nil {
+	var enclaveRes enclaveproto.Response[enclaveproto.SessionUnwrapResponse]
+	if err := json.Unmarshal(resBytes, &enclaveRes); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session unwrap response: %v", err)})
 		return
 	}
-	if !res.Success {
-		c.JSON(500, gin.H{"error": res.Error})
+	if !enclaveRes.Success {
+		c.JSON(500, gin.H{"error": enclaveRes.Error})
 		return
 	}
-	c.JSON(200, res)
+
+	c.JSON(200, enclaveRes.Data)
 }
 
 func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 	// Validate request (SessionGenerateDEKRequest)
-	var generateDEKReq enclaveproto.SessionGenerateDEKRequest
-	if err := c.BindJSON(&generateDEKReq); err != nil {
+	var req SessionGenerateDEKRequest
+	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session unwrap request: %v", err)})
 		return
 	}
-	if generateDEKReq.Count <= 0 || generateDEKReq.Count > 100 {
+	if req.Count <= 0 || req.Count > 100 {
 		c.JSON(400, gin.H{"error": "Count must be between 1 and 100"})
 		return
 	}
-	payloadBytes, err := json.Marshal(generateDEKReq)
+	payloadBytes, err := json.Marshal(req)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
 		return
@@ -162,9 +164,9 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 	}
 
 	// Generate data keys with KMS using attestation document
-	deks := make([]enclaveproto.EnclaveDEKToPrepare, generateDEKReq.Count)
-	for i := 0; i < generateDEKReq.Count; i++ {
-		out, err := e.KMS.GenerateDataKey(c.Request.Context(), att, tenantId, "dek")
+	deks := make([]enclaveproto.DEKToPrepare, req.Count)
+	for i := 0; i < req.Count; i++ {
+		out, err := e.KMS.GenerateDataKey(c.Request.Context(), att, tenantId, services.PurposeDataKey)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate data key: %v", err)})
 			return
@@ -173,7 +175,7 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 			c.JSON(500, gin.H{"error": "No CiphertextForRecipient in KMS response"})
 			return
 		}
-		deks[i] = enclaveproto.EnclaveDEKToPrepare{
+		deks[i] = enclaveproto.DEKToPrepare{
 			CiphertextBlob:         base64.StdEncoding.EncodeToString(out.CiphertextBlob),
 			CiphertextForRecipient: base64.StdEncoding.EncodeToString(out.CiphertextForRecipient),
 		}
@@ -186,33 +188,33 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 		return
 	}
 
-	wrappedMasterkeyOut, err := e.KMS.Decrypt(c.Request.Context(), KMSWrappedMasterKey, att, tenantId, "master_key")
+	wrappedMasterkeyOut, err := e.KMS.Decrypt(c.Request.Context(), KMSWrappedMasterKey, att, tenantId, services.PurposeMasterKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped master key: %v", err)})
 		return
 	}
 
-	// Prepare DEK in enclave (EnclavePrepareDEKRequest)
-	prepareDEKReq := enclaveproto.EnclavePrepareDEKRequest{
+	// Prepare DEK in enclave (PrepareDEKRequest)
+	prepareDEKReq := enclaveproto.PrepareDEKRequest{
 		DEKs:             deks,
 		WrappedMasterKey: base64.StdEncoding.EncodeToString(wrappedMasterkeyOut.CiphertextForRecipient),
-		SessionId:        generateDEKReq.SessionId,
+		SessionId:        req.SessionId,
 	}
 	payloadBytes, err = json.Marshal(prepareDEKReq)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
 		return
 	}
-	req := enclaveproto.Request{
+	enclaveReq := enclaveproto.Request{
 		Type:    "session_prepare_dek",
 		Payload: json.RawMessage(payloadBytes),
 	}
-	resBytes, err := e.Vsock.SendToEnclave(req, 30*time.Second)
+	resBytes, err := e.Vsock.SendToEnclave(enclaveReq, 30*time.Second)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	var prepRes enclaveproto.Response[enclaveproto.EnclavePrepareDEKResponse]
+	var prepRes enclaveproto.Response[enclaveproto.PrepareDEKResponse]
 	if err := json.Unmarshal(resBytes, &prepRes); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session unwrap response: %v", err)})
 		return
@@ -222,20 +224,12 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 		return
 	}
 
-	// Build response
-	res := enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]{
-		Success: true,
-		Data: enclaveproto.SessionGenerateDEKResponse{
-			DEKs: prepRes.Data.DEKs,
-		},
-	}
-
-	c.JSON(200, res)
+	c.JSON(200, prepRes.Data)
 }
 
 func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 	// Validate request (DecryptRequest)
-	var decryptReq enclaveproto.DecryptRequest
+	var decryptReq DecryptRequest
 	if err := c.BindJSON(&decryptReq); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid decrypt request: %v", err)})
 		return
@@ -256,7 +250,7 @@ func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 	}
 
 	// Unwrap data key with KMS using attestation document
-	out, err := e.KMS.Decrypt(c.Request.Context(), ciphertext, att, tenantId, "dek")
+	out, err := e.KMS.Decrypt(c.Request.Context(), ciphertext, att, tenantId, services.PurposeDataKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("KMS decrypt failed: %v", err)})
 		return
@@ -280,14 +274,14 @@ func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	var res enclaveproto.Response[enclaveproto.DecryptResponse]
-	if err := json.Unmarshal(resBytes, &res); err != nil {
+	var enclaveRes enclaveproto.Response[enclaveproto.DecryptResponse]
+	if err := json.Unmarshal(resBytes, &enclaveRes); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal decrypt response: %v", err)})
 		return
 	}
-	if !res.Success {
-		c.JSON(500, gin.H{"error": res.Error})
+	if !enclaveRes.Success {
+		c.JSON(500, gin.H{"error": enclaveRes.Error})
 		return
 	}
-	c.JSON(200, res)
+	c.JSON(200, enclaveRes.Data)
 }

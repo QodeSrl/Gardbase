@@ -1,4 +1,4 @@
-package handlers
+package objects
 
 import (
 	"encoding/base64"
@@ -25,7 +25,7 @@ type ObjectHandler struct {
 
 func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 	tenantId := c.GetString("tenantId")
-	var req models.GetTableHashRequest
+	var req GetTableHashRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -46,13 +46,13 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		return
 	}
 	// Decrypt table salt using KMS
-	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), wrappedTableSalt, attDoc, tenantId, "table_salt")
+	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), wrappedTableSalt, attDoc, tenantId, services.PurposeTableSalt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt table salt: " + err.Error()})
 		return
 	}
 	// Build enclave request
-	enclaveReqBody := enclaveproto.EnclaveSessionGenerateTableHashRequest{
+	enclaveReqBody := enclaveproto.SessionGenerateTableHashRequest{
 		SessionID:                 req.SessionID,
 		SessionEncryptedTableName: req.SessionEncryptedTableName,
 		SessionTableNameNonce:     req.SessionTableNameNonce,
@@ -77,7 +77,7 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		return
 	}
 	// Generate table hash from tenant table salt
-	var res enclaveproto.Response[enclaveproto.EnclaveSessionGenerateTableHashResponse]
+	var res enclaveproto.Response[enclaveproto.SessionGenerateTableHashResponse]
 	if err := json.Unmarshal(resBytes, &res); err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session init response: %v", err)})
 		return
@@ -86,7 +86,7 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		c.JSON(500, gin.H{"error": res.Error})
 		return
 	}
-	resp := models.GetTableHashResponse{
+	resp := GetTableHashResponse{
 		TableHash: res.Data.TableHash,
 	}
 	c.JSON(http.StatusOK, resp)
@@ -101,7 +101,7 @@ Finally, it responds with the object ID, S3 key, upload URL, and expiration time
 */
 func (h *ObjectHandler) Create(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req models.CreateObjectRequest
+	var req CreateObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -134,7 +134,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 		return
 	}
 
-	resp := models.CreateObjectResponse{
+	resp := CreateObjectResponse{
 		ObjectID:  objectId,
 		UploadURL: uploadUrl,
 		ExpiresIn: int64(h.PresignTTL.Seconds()),
@@ -169,7 +169,7 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		return
 	}
 
-	resp := models.GetObjectResponse{
+	resp := GetObjectResponse{
 		ObjectID:  id,
 		GetURL:    getUrl,
 		CreatedAt: obj.CreatedAt,

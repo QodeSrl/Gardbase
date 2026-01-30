@@ -14,7 +14,7 @@ import (
 )
 
 func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
-	var req enclaveproto.EnclaveSessionUnwrapRequest
+	var req enclaveproto.SessionUnwrapRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid session unwrap request: %v", err))
 		return
@@ -80,7 +80,7 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		})
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.EnclaveSessionUnwrapResponse]{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionUnwrapResponse]{
 		Success: true,
 		Data:    results,
 	})

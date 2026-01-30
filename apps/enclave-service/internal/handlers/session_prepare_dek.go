@@ -14,7 +14,7 @@ import (
 )
 
 func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
-	var req enclaveproto.EnclavePrepareDEKRequest
+	var req enclaveproto.PrepareDEKRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid session generate DEK request: %v", err))
 		return
@@ -94,11 +94,11 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 
 	utils.Zero(masterKey)
 
-	res := enclaveproto.SessionGenerateDEKResponse{
+	res := enclaveproto.PrepareDEKResponse{
 		DEKs: results,
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionGenerateDEKResponse]{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.PrepareDEKResponse]{
 		Success: true,
 		Data:    res,
 	})

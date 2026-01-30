@@ -13,6 +13,12 @@ type KMS struct {
 	KeyID  string
 }
 
+const (
+	PurposeMasterKey = "MASTER_KEY"
+	PurposeDataKey   = "DATA_KEY"
+	PurposeTableSalt = "TABLE_SALT"
+)
+
 func NewKMSService(ctx context.Context, cfg aws.Config, keyID string, useLocalstack bool, localstackUrl string) *KMS {
 	var kmsClient *kms.Client
 	if useLocalstack {

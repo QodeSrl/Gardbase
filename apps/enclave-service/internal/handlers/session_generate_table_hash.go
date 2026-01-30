@@ -12,7 +12,7 @@ import (
 )
 
 func HandleSessionGenerateTableHash(encoder *json.Encoder, payload json.RawMessage) {
-	var req enclaveproto.EnclaveSessionGenerateTableHashRequest
+	var req enclaveproto.SessionGenerateTableHashRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Invalid generate table hash request: %v", err))
 		return
@@ -54,10 +54,10 @@ func HandleSessionGenerateTableHash(encoder *json.Encoder, payload json.RawMessa
 	}
 
 	tableHash := utils.Hash(tableName, tableSalt)
-	res := enclaveproto.EnclaveSessionGenerateTableHashResponse{
+	res := enclaveproto.SessionGenerateTableHashResponse{
 		TableHash: tableHash,
 	}
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.EnclaveSessionGenerateTableHashResponse]{
+	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionGenerateTableHashResponse]{
 		Success: true,
 		Data:    res,
 	})

@@ -1,4 +1,4 @@
-package handlers
+package tenants
 
 import (
 	"encoding/base64"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
-	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -19,7 +18,7 @@ type TenantHandler struct {
 
 func (t *TenantHandler) HandleCreateTenant(c *gin.Context) {
 	tenantID := uuid.NewString()
-	var req models.CreateTenantRequest
+	var req CreateTenantRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid create tenant request: %v", err)})
 		return
@@ -32,13 +31,13 @@ func (t *TenantHandler) HandleCreateTenant(c *gin.Context) {
 	}
 
 	// TODO: implement master key recovery mechanism
-	masterKeyRes, err := t.KMS.GenerateDataKey(c.Request.Context(), att, tenantID, "master_key")
+	masterKeyRes, err := t.KMS.GenerateDataKey(c.Request.Context(), att, tenantID, services.PurposeMasterKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate master key: %v", err)})
 		return
 	}
 
-	tableSaltRes, err := t.KMS.GenerateDataKey(c.Request.Context(), att, tenantID, "table_salt")
+	tableSaltRes, err := t.KMS.GenerateDataKey(c.Request.Context(), att, tenantID, services.PurposeTableSalt)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate table salt: %v", err)})
 		return
@@ -87,7 +86,7 @@ func (t *TenantHandler) HandleCreateTenant(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, models.CreateTenantResponse{
+	c.JSON(200, CreateTenantResponse{
 		TenantID: tenantID,
 		// TODO: later on, implement advanced self-managed keys
 		// EncryptedMasterKey:  res.Data.MasterKey,
