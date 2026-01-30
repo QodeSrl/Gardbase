@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -10,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type DynamoClient struct {
@@ -236,7 +238,7 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 	if err != nil {
 		return "", err
 	}
-	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, []string{"read", "write"}, nil)
+	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, []string{models.PermissionRead, models.PermissionWrite}, nil)
 	item, err := attributevalue.MarshalMap(apiKeyModel)
 	if err != nil {
 		return "", err
@@ -246,6 +248,41 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 		Item:      item,
 	})
 	return apiKey, err
+}
+
+func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, providedKey string) (*models.APIKey, error) {
+	pk := fmt.Sprintf("TENANT#%s", tenantID)
+	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName: aws.String(d.APIKeysTable),
+		KeyConditions: map[string]ddbtypes.Condition{
+			"pk": {
+				ComparisonOperator: ddbtypes.ComparisonOperatorEq,
+				AttributeValueList: []ddbtypes.AttributeValue{
+					&ddbtypes.AttributeValueMemberS{Value: pk},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(out.Items) == 0 {
+		return nil, nil
+	}
+	for _, item := range out.Items {
+		var apiKey models.APIKey
+		if err := attributevalue.UnmarshalMap(item, &apiKey); err != nil {
+			return nil, err
+		}
+		err := bcrypt.CompareHashAndPassword([]byte(apiKey.HashedKey), []byte(providedKey))
+		if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
+			return nil, fmt.Errorf("API key expired")
+		}
+		if err == nil {
+			return &apiKey, nil
+		}
+	}
+	return nil, nil
 }
 
 // Helper function to extract tenant from PK of format "TENANT#<tenant_id>#TABLE#<table_hash>"

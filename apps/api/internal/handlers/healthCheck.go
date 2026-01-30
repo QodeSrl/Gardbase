@@ -1,4 +1,4 @@
-package healthCheck
+package handlers
 
 import (
 	"encoding/json"

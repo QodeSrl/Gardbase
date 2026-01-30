@@ -3,8 +3,9 @@ module github.com/QodeSrl/gardbase/apps/api
 go 1.24.4
 
 require (
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.3
-	github.com/QodeSrl/gardbase/pkg/models v0.0.4
+	github.com/QodeSrl/gardbase/pkg/api v0.0.1
+	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
+	github.com/QodeSrl/gardbase/pkg/models v0.0.6
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.5
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.29
@@ -68,7 +69,7 @@ require (
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.23.0 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/crypto v0.46.0
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
@@ -78,3 +79,5 @@ require (
 replace github.com/QodeSrl/gardbase/pkg/models => ../../pkg/models
 
 replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../../pkg/enclaveproto
+
+replace github.com/QodeSrl/gardbase/pkg/api => ../../pkg/api
