@@ -58,3 +58,46 @@ resource "aws_dynamodb_table" "indexes" {
     Project     = var.project_name
   }
 }
+
+resource "aws_dynamodb_table" "tenant_configs" {
+  name           = "${var.project_name}-tenant-configs-${var.environment}"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = var.environment == "production" ? 5 : 1
+  write_capacity = var.environment == "production" ? 5 : 1
+  hash_key       = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-tenant-configs-${var.environment}"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_dynamodb_table" "api_keys" {
+  name           = "${var.project_name}-api-keys-${var.environment}"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = var.environment == "production" ? 5 : 1
+  write_capacity = var.environment == "production" ? 5 : 1
+  hash_key       = "pk"
+  range_key      = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-api-keys-${var.environment}"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
