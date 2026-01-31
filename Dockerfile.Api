@@ -11,6 +11,7 @@ WORKDIR /root
 COPY apps/api/go.mod apps/api/go.sum ./apps/api/
 COPY pkg/models/go.mod ./pkg/models/
 COPY pkg/enclaveproto/go.mod ./pkg/enclaveproto/
+COPY pkg/api/go.mod ./pkg/api/
 
 WORKDIR /root/apps/api
 ENV GOWORK=off
@@ -20,6 +21,7 @@ WORKDIR /root
 COPY apps/api ./apps/api
 COPY pkg/models ./pkg/models
 COPY pkg/enclaveproto ./pkg/enclaveproto
+COPY pkg/api ./pkg/api
 
 # CGO_ENABLED=1 is required for vsock support
 WORKDIR /root/apps/api

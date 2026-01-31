@@ -15,9 +15,12 @@ type CreateObjectResponse struct {
 }
 
 type GetObjectResponse struct {
-	ObjectID  string    `json:"object_id"`
-	GetURL    string    `json:"get_url"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Version   int32     `json:"version"`
+	ObjectID         string    `json:"object_id"`
+	GetURL           string    `json:"get_url"`
+	KMSWrappedDEK    string    `json:"kms_wrapped_dek,omitempty"`
+	MasterWrappedDEK string    `json:"master_wrapped_dek,omitempty"`
+	DEKNonce         string    `json:"dek_nonce,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	Version          int32     `json:"version"`
 }

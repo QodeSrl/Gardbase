@@ -6,14 +6,15 @@ require github.com/fxamacker/cbor/v2 v2.9.0
 
 require (
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 )
 
 require (
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
 	github.com/QodeSrl/gardbase/pkg/api v0.0.1
-	golang.org/x/crypto v0.46.0
+	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
+	golang.org/x/crypto v0.47.0
 )
 
 replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../enclaveproto
+
 replace github.com/QodeSrl/gardbase/pkg/api => ../api

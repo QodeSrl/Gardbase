@@ -171,11 +171,14 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	}
 
 	resp := objects.GetObjectResponse{
-		ObjectID:  id,
-		GetURL:    getUrl,
-		CreatedAt: obj.CreatedAt,
-		UpdatedAt: obj.UpdatedAt,
-		Version:   obj.Version,
+		ObjectID:         id,
+		GetURL:           getUrl,
+		KMSWrappedDEK:    obj.KMSWrappedDEK,
+		MasterWrappedDEK: obj.MasterWrappedDEK,
+		DEKNonce:         obj.DEKNonce,
+		CreatedAt:        obj.CreatedAt,
+		UpdatedAt:        obj.UpdatedAt,
+		Version:          obj.Version,
 	}
 
 	c.JSON(http.StatusOK, resp)
