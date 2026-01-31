@@ -291,7 +291,7 @@ echo "Creating health check script..."
 cat > /opt/gardbase/health-check.sh <<EOF
 #!/bin/bash
 # Check if parent application is responding
-if ! curl -f http://localhost/health > /dev/null 2>&1; then
+if ! curl -f http://localhost/api/health > /dev/null 2>&1; then
     echo "Parent application health check failed"
     exit 1
 fi
