@@ -38,6 +38,10 @@ type EnclaveSecureSession struct {
 type SessionConfig struct {
 	// base URL of the proxy server
 	Endpoint string
+	// Tenant ID for authentication
+	TenantID string
+	// API Key for authentication
+	APIKey string
 	// PCR values you expect from the enclave
 	// Key: PCR index; Value: hex-encoded PCR hash
 	// Note: use "nitro-cli describe-eif --eif-path enclave.eif" to get these
@@ -57,6 +61,26 @@ type errBody struct {
 	Error string `json:"error"`
 }
 
+type tenantRoundTripper struct {
+	Base     http.RoundTripper
+	TenantID string
+	APIKey   string
+}
+
+func (t tenantRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("X-Tenant-ID", t.TenantID)
+	req.Header.Set("X-API-Key", t.APIKey)
+	return t.base().RoundTrip(req)
+}
+
+func (t tenantRoundTripper) base() http.RoundTripper {
+	if t.Base != nil {
+		return t.Base
+	}
+	return http.DefaultTransport
+}
+
 func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*EnclaveSecureSession, error) {
 	clientPriv, clientPub, clientPubB64, err := GenerateEphemeralKeypair()
 	if err != nil {
@@ -73,7 +97,7 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 		Nonce:                    nonceB64,
 	}
 	reqBytes, _ := json.Marshal(reqBody)
-	httpClient := &http.Client{Timeout: 15 * time.Second}
+	httpClient := &http.Client{Timeout: 15 * time.Second, Transport: tenantRoundTripper{TenantID: config.TenantID, APIKey: config.APIKey}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.Endpoint+"/secure-session/init", strings.NewReader(string(reqBytes)))
 	if err != nil {
 		return nil, err
@@ -292,7 +316,7 @@ func (ess *EnclaveSecureSession) GetAttestationInfo() map[string]any {
 	}
 }
 
-func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string, nonceB64 string) ([]byte, error) {
+func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiKey string, wrappedDEKB64 string, nonceB64 string) ([]byte, error) {
 	clientPub, clientPriv, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -306,7 +330,7 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, wrappedDEKB64 string,
 	}
 
 	reqBytes, _ := json.Marshal(body)
-	httpClient := &http.Client{Timeout: 15 * time.Second}
+	httpClient := &http.Client{Timeout: 15 * time.Second, Transport: tenantRoundTripper{TenantID: tenantID, APIKey: apiKey}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/decrypt", strings.NewReader(string(reqBytes)))
 	if err != nil {
 		return nil, err
