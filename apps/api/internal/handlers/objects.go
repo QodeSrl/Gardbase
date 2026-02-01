@@ -59,10 +59,6 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		SessionTableNameNonce:     req.SessionTableNameNonce,
 		TableSalt:                 base64.StdEncoding.EncodeToString(tableSalt.CiphertextForRecipient),
 	}
-	if err := c.BindJSON(&enclaveReqBody); err != nil {
-		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session init request: %v", err)})
-		return
-	}
 	payloadBytes, err := json.Marshal(enclaveReqBody)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session init request: %v", err)})
