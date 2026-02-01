@@ -214,7 +214,7 @@ func (d *DynamoClient) GetTenant(ctx context.Context, tenantID string) (*models.
 	pk := fmt.Sprintf("TENANT#%s", tenantID)
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: &d.TenantConfigTable,
+		TableName: aws.String(d.TenantConfigTable),
 		Key: map[string]ddbtypes.AttributeValue{
 			"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
 		},
@@ -244,7 +244,7 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 		return "", err
 	}
 	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(d.TenantConfigTable),
+		TableName: aws.String(d.APIKeysTable),
 		Item:      item,
 	})
 	return apiKey, err
