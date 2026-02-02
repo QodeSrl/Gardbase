@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	ddbTypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -56,7 +56,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 		return err
 	}
 
-	indexItems := make([]map[string]ddbtypes.AttributeValue, 0, len(indexes))
+	indexItems := make([]map[string]ddbTypes.AttributeValue, 0, len(indexes))
 	for idxName, token := range indexes {
 		index := models.NewIndex(idxName, extractTenantFromPK(obj.PK), tableHash, token, extractObjectIdFromSK(obj.SK), obj.S3Key)
 		av, err := attributevalue.MarshalMap(index)
@@ -68,11 +68,11 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 
 	// if total items to put is <= 25, use a single transact write
 	if len(indexItems) <= 25 {
-		twrite := make([]ddbtypes.TransactWriteItem, 0, len(indexItems)+1)
+		twrite := make([]ddbTypes.TransactWriteItem, 0, len(indexItems)+1)
 
 		// obj put
-		twrite = append(twrite, ddbtypes.TransactWriteItem{
-			Put: &ddbtypes.Put{
+		twrite = append(twrite, ddbTypes.TransactWriteItem{
+			Put: &ddbTypes.Put{
 				TableName: aws.String(d.ObjectsTable),
 				Item:      objMap,
 			},
@@ -80,8 +80,8 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 
 		// indexes puts
 		for _, item := range indexItems {
-			twrite = append(twrite, ddbtypes.TransactWriteItem{
-				Put: &ddbtypes.Put{
+			twrite = append(twrite, ddbTypes.TransactWriteItem{
+				Put: &ddbTypes.Put{
 					TableName: aws.String(d.IndexesTable),
 					Item:      item,
 				},
@@ -106,17 +106,17 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 	for i := 0; i < len(indexItems); i += batchSize {
 		end := min(i+batchSize, len(indexItems))
 
-		writeRequests := make([]ddbtypes.WriteRequest, 0, end-i)
+		writeRequests := make([]ddbTypes.WriteRequest, 0, end-i)
 		for _, item := range indexItems[i:end] {
-			writeRequests = append(writeRequests, ddbtypes.WriteRequest{
-				PutRequest: &ddbtypes.PutRequest{
+			writeRequests = append(writeRequests, ddbTypes.WriteRequest{
+				PutRequest: &ddbTypes.PutRequest{
 					Item: item,
 				},
 			})
 		}
 
 		_, err = d.Client.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
-			RequestItems: map[string][]ddbtypes.WriteRequest{
+			RequestItems: map[string][]ddbTypes.WriteRequest{
 				d.IndexesTable: writeRequests,
 			},
 		})
@@ -128,6 +128,27 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 	return nil
 }
 
+func (d *DynamoClient) UpdateObjectInlineBlob(ctx context.Context, tenantId string, tableHash string, objectId string, inlineBlob string) error {
+	_, err := d.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(d.ObjectsTable),
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: "TENANT#" + tenantId + "#TABLE#" + tableHash},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: "OBJ#" + objectId},
+		},
+		UpdateExpression: aws.String("SET #status = :ready, #blob = :blob REMOVE #ttl"),
+		ExpressionAttributeNames: map[string]string{
+			"#status": "status",
+			"#ttl":    "TTL",
+			"#blob":   "encrypted_blob",
+		},
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":ready": &ddbTypes.AttributeValueMemberS{Value: models.StatusReady},
+			":blob":  &ddbTypes.AttributeValueMemberS{Value: inlineBlob},
+		},
+	})
+	return err
+}
+
 /*
 GetObject retrieves an object by tenant ID and object ID from DynamoDB.
 */
@@ -137,9 +158,9 @@ func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, tableHash
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &d.ObjectsTable,
-		Key: map[string]ddbtypes.AttributeValue{
-			"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
-			"sk": &ddbtypes.AttributeValueMemberS{Value: sk},
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
 		},
 	})
 
@@ -162,18 +183,18 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 	if len(objectsIds) == 0 {
 		return map[string]string{}, nil
 	}
-	keys := make([]map[string]ddbtypes.AttributeValue, 0, len(objectsIds))
+	keys := make([]map[string]ddbTypes.AttributeValue, 0, len(objectsIds))
 	for _, objectId := range objectsIds {
 		pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash)
 		sk := fmt.Sprintf("OBJ#%s", objectId)
-		keys = append(keys, map[string]ddbtypes.AttributeValue{
-			"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
-			"sk": &ddbtypes.AttributeValueMemberS{Value: sk},
+		keys = append(keys, map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
 		})
 	}
 
 	out, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
-		RequestItems: map[string]ddbtypes.KeysAndAttributes{
+		RequestItems: map[string]ddbTypes.KeysAndAttributes{
 			d.ObjectsTable: {
 				Keys:                 keys,
 				ProjectionExpression: aws.String("sk, kms_wrapped_dek"),
@@ -214,9 +235,9 @@ func (d *DynamoClient) GetTenant(ctx context.Context, tenantID string) (*models.
 	pk := fmt.Sprintf("TENANT#%s", tenantID)
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: &d.TenantConfigTable,
-		Key: map[string]ddbtypes.AttributeValue{
-			"pk": &ddbtypes.AttributeValueMemberS{Value: pk},
+		TableName: aws.String(d.TenantConfigTable),
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 		},
 	})
 	if err != nil {
@@ -244,7 +265,7 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 		return "", err
 	}
 	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(d.TenantConfigTable),
+		TableName: aws.String(d.APIKeysTable),
 		Item:      item,
 	})
 	return apiKey, err
@@ -254,11 +275,11 @@ func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, provided
 	pk := fmt.Sprintf("TENANT#%s", tenantID)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName: aws.String(d.APIKeysTable),
-		KeyConditions: map[string]ddbtypes.Condition{
+		KeyConditions: map[string]ddbTypes.Condition{
 			"pk": {
-				ComparisonOperator: ddbtypes.ComparisonOperatorEq,
-				AttributeValueList: []ddbtypes.AttributeValue{
-					&ddbtypes.AttributeValueMemberS{Value: pk},
+				ComparisonOperator: ddbTypes.ComparisonOperatorEq,
+				AttributeValueList: []ddbTypes.AttributeValue{
+					&ddbTypes.AttributeValueMemberS{Value: pk},
 				},
 			},
 		},

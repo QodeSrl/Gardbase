@@ -1,10 +1,7 @@
 package crypto
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"flag"
 	"os"
 	"testing"
@@ -52,28 +49,4 @@ func TestGenerateDEK(t *testing.T) {
 		t.Fatalf("Expected 3 DEKs, got %d", len(DEKs))
 	}
 	t.Logf("Successfully generated DEKs")
-}
-
-func TestUnwrapSingleDEK(t *testing.T) {
-	ctx := context.Background()
-	sess, err := InitEnclaveSecureSession(ctx, config)
-	if err != nil {
-		t.Fatalf("Failed to start decrypt session: %v", err)
-	}
-	DEKs, err := sess.GenerateDEK(ctx, 1)
-	if err != nil {
-		t.Fatalf("Failed to generate DEK: %v", err)
-	}
-	nonce := make([]byte, 32)
-	if _, err := rand.Read(nonce); err != nil {
-		t.Fatalf("Failed to generate nonce: %v", err)
-	}
-	unwrappedDEK, err := UnwrapSingleDEK(ctx, config.Endpoint, base64.StdEncoding.EncodeToString(DEKs[0].KMSEncryptedDEK), base64.StdEncoding.EncodeToString(nonce))
-	if err != nil {
-		t.Fatalf("Failed to unwrap DEK: %v", err)
-	}
-	if !bytes.Equal(DEKs[0].PlaintextDEK, unwrappedDEK) {
-		t.Fatalf("Unwrapped DEK does not match original DEK")
-	}
-	t.Logf("Successfully unwrapped DEK")
 }

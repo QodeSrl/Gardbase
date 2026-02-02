@@ -1,8 +1,13 @@
 package utils
 
-import "golang.org/x/crypto/bcrypt"
+import (
+	"crypto/sha256"
+	"encoding/base64"
+)
 
 func Hash(data []byte, salt []byte) string {
-	hashedData, _ := bcrypt.GenerateFromPassword(append(data, salt...), bcrypt.DefaultCost)
-	return string(hashedData)
+	h := sha256.New()
+	h.Write(data)
+	h.Write(salt)
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
