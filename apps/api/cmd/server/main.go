@@ -113,6 +113,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	tenants.POST("/", tenantHandler.HandleCreateTenant)
 
 	objectHandler := &handlers.ObjectHandler{
+		BaseURL:    getEnv("BASE_URL", "https://api.gardbase.com") + "/api",
 		Vsock:      vsock,
 		S3Client:   s3Client,
 		Dynamo:     dynamoClient,
