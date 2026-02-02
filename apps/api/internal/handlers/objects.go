@@ -22,6 +22,7 @@ type ObjectHandler struct {
 	Dynamo     *storage.DynamoClient
 	KMS        *services.KMS
 	PresignTTL time.Duration
+	BaseURL    string
 }
 
 func (h *ObjectHandler) GetTableHash(c *gin.Context) {
@@ -107,11 +108,28 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	// Get tenant ID from context
 	tenantId := c.GetString("tenantId")
 
-	// Generate object ID and S3 key
+	// Generate object ID
 	objectId := uuid.NewString()
-	s3Key := generateS3Key(tenantId, tableHash, objectId, 1)
 
-	obj := models.NewObject(tenantId, tableHash, objectId, s3Key, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
+	obj := models.NewObject(tenantId, tableHash, objectId, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
+	var uploadUrl string
+
+	if req.BlobSize > 100*1024 {
+		// If blob size > 100KB, use S3 for storage and generate presigned URL
+		s3Key := generateS3Key(tenantId, tableHash, objectId, 1)
+		obj.S3Key = s3Key
+		presignedUrl, err := h.S3Client.PresignPutObjectUrl(ctx, s3Key, h.PresignTTL)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL: " + err.Error()})
+			return
+		}
+		uploadUrl = presignedUrl
+	} else {
+		// If blob size <= 100KB, use inline storage in DynamoDB
+		obj.EncryptedBlob = "" // Will be filled later
+		uploadUrl = fmt.Sprintf("%s/objects/%s/%s/upload-inline", h.BaseURL, tableHash, objectId)
+	}
+
 	if req.Sensitivity != "" {
 		obj.Sensitivity = req.Sensitivity
 	} else {
@@ -119,12 +137,6 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	}
 	obj.Status = models.StatusPending
 	obj.TTL = time.Now().Add(h.PresignTTL).Unix()
-
-	uploadUrl, err := h.S3Client.PresignPutObjectUrl(ctx, s3Key, h.PresignTTL)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL: " + err.Error()})
-		return
-	}
 
 	if err := h.Dynamo.CreateObjectWithIndexes(ctx, tableHash, obj, req.Indexes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
@@ -139,6 +151,43 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, resp)
+}
+
+func (h *ObjectHandler) UploadInline(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+	id := c.Param("id")
+	tableHash := c.Param("table-hash")
+
+	body, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body: " + err.Error()})
+		return
+	}
+	if len(body) > 100*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Inline blob size exceeds 100KB limit"})
+		return
+	}
+
+	obj, err := h.Dynamo.GetObject(ctx, tenantId, tableHash, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get object from DynamoDB: " + err.Error()})
+		return
+	}
+	if obj == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
+		return
+	}
+	if obj.S3Key != "" || obj.EncryptedBlob != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Object is not eligible for inline upload"})
+		return
+	}
+
+	if err := h.Dynamo.UpdateObjectInlineBlob(ctx, tenantId, tableHash, id, base64.StdEncoding.EncodeToString(body)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update object inline blob in DynamoDB: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Inline blob uploaded successfully"})
 }
 
 /*
@@ -159,16 +208,26 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
 		return
 	}
-
-	getUrl, err := h.S3Client.PresignGetObjectUrl(ctx, obj.S3Key, h.PresignTTL)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned GET URL: " + err.Error()})
+	if obj.Status != models.StatusReady {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Object is not in READY status"})
 		return
+	}
+
+	getUrl := ""
+	encryptedBlob := obj.EncryptedBlob
+
+	if obj.S3Key != "" {
+		getUrl, err = h.S3Client.PresignGetObjectUrl(ctx, obj.S3Key, h.PresignTTL)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned GET URL: " + err.Error()})
+			return
+		}
 	}
 
 	resp := objects.GetObjectResponse{
 		ObjectID:         id,
 		GetURL:           getUrl,
+		EncryptedBlob:    encryptedBlob,
 		KMSWrappedDEK:    obj.KMSWrappedDEK,
 		MasterWrappedDEK: obj.MasterWrappedDEK,
 		DEKNonce:         obj.DEKNonce,
