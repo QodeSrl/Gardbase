@@ -9,7 +9,8 @@ type Object struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>"
 	SK string `dynamodbav:"sk" json:"sk"` // format: "OBJ#<object_id>"
 
-	S3Key string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`
+	EncryptedBlob string `dynamodbav:"encrypted_blob,omitempty" json:"encrypted_blob,omitempty"` // < 100KB blobs stored inline
+	S3Key         string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`                 // S3 object key for larger blobs
 
 	KMSWrappedDEK    string `dynamodbav:"kms_wrapped_dek,omitempty" json:"kms_wrapped_dek,omitempty"`       // DEK wrapped with KMS
 	MasterWrappedDEK string `dynamodbav:"master_wrapped_dek,omitempty" json:"master_wrapped_dek,omitempty"` // DEK wrapped with tenant master key
@@ -36,11 +37,10 @@ const (
 	SensitivityHigh   = "high"
 )
 
-func NewObject(tenantId string, tableHash string, objectId string, s3Key string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string) *Object {
+func NewObject(tenantId string, tableHash string, objectId string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string) *Object {
 	return &Object{
 		PK:               fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash),
 		SK:               fmt.Sprintf("OBJ#%s", objectId),
-		S3Key:            s3Key,
 		KMSWrappedDEK:    kmsWrappedDEK,
 		MasterWrappedDEK: masterWrappedDEK,
 		DEKNonce:         dekNonce,
