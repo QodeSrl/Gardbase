@@ -125,6 +125,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	objects.POST("/table-hash", objectHandler.GetTableHash)
 	objects.GET("/:table-hash/:id", objectHandler.Get)
 	objects.POST("/:table-hash", objectHandler.Create)
+	objects.POST("/:table-hash/scan", objectHandler.Scan)
 	objects.PUT("/:table-hash/:id/upload-inline", objectHandler.UploadInline)
 
 	encryptionHandler := &handlers.EncryptionHandler{

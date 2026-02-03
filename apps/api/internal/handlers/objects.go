@@ -239,6 +239,41 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *ObjectHandler) Scan(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+	tableHash := c.Param("table-hash")
+
+	var req objects.ScanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	objs, err := h.Dynamo.ScanTable(ctx, tenantId, tableHash, req.Limit, *req.NextToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
+		return
+	}
+
+	var resp objects.ScanResponse
+	for _, obj := range objs {
+		resp.Objects = append(resp.Objects, objects.ResultObject{
+			ObjectID:         obj.SK[len("OBJ#"):],
+			GetURL:           obj.S3Key,
+			EncryptedBlob:    obj.EncryptedBlob,
+			KMSWrappedDEK:    obj.KMSWrappedDEK,
+			MasterWrappedDEK: obj.MasterWrappedDEK,
+			DEKNonce:         obj.DEKNonce,
+			CreatedAt:        obj.CreatedAt,
+			UpdatedAt:        obj.UpdatedAt,
+			Version:          obj.Version,
+		})
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // Helper function to generate S3 key
 func generateS3Key(tenantId string, tableHash string, objectId string, version int32) string {
 	return "tenant-" + tenantId + "/" + tableHash + "/" + objectId + "/v" + fmt.Sprintf("%d", version)
