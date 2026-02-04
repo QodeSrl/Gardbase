@@ -6,7 +6,7 @@ type GetTableHashResponse struct {
 	TableHash string `json:"table_hash"`
 }
 
-type CreateObjectResponse struct {
+type PutObjectResponse struct {
 	ObjectID  string    `json:"object_id"`
 	UploadURL string    `json:"upload_url"`
 	ExpiresIn int64     `json:"expires_in_seconds"`
