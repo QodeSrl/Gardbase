@@ -270,7 +270,12 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 		return
 	}
 
-	objs, err := h.Dynamo.ScanTable(ctx, tenantId, req.TableHash, req.Limit, *req.NextToken)
+	nextToken := ""
+	if req.NextToken != nil {
+		nextToken = *req.NextToken
+	}
+
+	objs, err := h.Dynamo.ScanTable(ctx, tenantId, req.TableHash, req.Limit, nextToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
 		return
