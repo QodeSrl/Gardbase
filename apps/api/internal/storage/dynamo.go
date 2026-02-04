@@ -306,6 +306,43 @@ func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, provided
 	return nil, nil
 }
 
+func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash string, limit int, nextToken string) ([]models.Object, error) {
+	pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantID, tableHash)
+	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName: aws.String(d.ObjectsTable),
+		KeyConditions: map[string]ddbTypes.Condition{
+			"pk": {
+				ComparisonOperator: ddbTypes.ComparisonOperatorEq,
+				AttributeValueList: []ddbTypes.AttributeValue{
+					&ddbTypes.AttributeValueMemberS{Value: pk},
+				},
+			},
+		},
+		Limit: aws.Int32(int32(limit)),
+		ExclusiveStartKey: func() map[string]ddbTypes.AttributeValue {
+			if nextToken == "" {
+				return nil
+			}
+			return map[string]ddbTypes.AttributeValue{
+				"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+				"sk": &ddbTypes.AttributeValueMemberS{Value: nextToken},
+			}
+		}(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	objects := make([]models.Object, 0, len(out.Items))
+	for _, item := range out.Items {
+		var obj models.Object
+		if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
+			return nil, err
+		}
+		objects = append(objects, obj)
+	}
+	return objects, nil
+}
+
 // Helper function to extract tenant from PK of format "TENANT#<tenant_id>#TABLE#<table_hash>"
 func extractTenantFromPK(pk string) string {
 	var tenantId string

@@ -29,6 +29,10 @@ ENCLAVE_MEMORY_MIB="${enclave_memory_mib}"
 ENABLE_DEBUG_MODE="${enable_debug_mode}"
 MAX_ATTESTATION_AGE_MINUTES="${max_attestation_age_minutes}"
 
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+PUBLIC_DNS=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/public-hostname)
+echo "Public DNS: '$PUBLIC_DNS'"
+
 echo "Configuration:"
 echo "  Region: $REGION"
 echo "  Environment: $ENVIRONMENT"
@@ -127,6 +131,7 @@ ExecStart=/usr/bin/docker run --rm --name gardbase-parent \\
     -e DYNAMO_API_KEYS_TABLE="$DYNAMO_API_KEYS_TABLE" \\
     -e AWS_REGION="$REGION" \\
     -e KMS_KEY_ID="$KMS_KEY_ID" \\
+    -e BASE_URL="http://$PUBLIC_DNS" \\
     -e AWS_MAX_RETRIES="3" \\
     -e AWS_REQUEST_TIMEOUT="10" \\
     -e USE_LOCALSTACK="false" \\
