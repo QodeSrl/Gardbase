@@ -113,6 +113,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	tenants.POST("/", tenantHandler.HandleCreateTenant)
 
 	objectHandler := &handlers.ObjectHandler{
+		BaseURL:    getEnv("BASE_URL", "https://api.gardbase.com") + "/api",
 		Vsock:      vsock,
 		S3Client:   s3Client,
 		Dynamo:     dynamoClient,
@@ -121,9 +122,12 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	}
 	objects := api.Group("/objects")
 	objects.Use(middleware.TenantMiddleware(dynamoClient))
-	objects.POST("/table-hash", objectHandler.GetTableHash)
-	objects.GET("/:table-hash/:id", objectHandler.Get)
-	objects.POST("/:table-hash", objectHandler.Create)
+	objects.POST("/get-table-hash", objectHandler.GetTableHash)
+
+	objects.POST("/put", objectHandler.Put)
+	objects.POST("/get", objectHandler.Get)
+	objects.POST("/scan", objectHandler.Scan)
+
 	objects.PUT("/:table-hash/:id/upload-inline", objectHandler.UploadInline)
 
 	encryptionHandler := &handlers.EncryptionHandler{

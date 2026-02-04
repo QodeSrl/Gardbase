@@ -25,6 +25,11 @@ type ObjectHandler struct {
 	BaseURL    string
 }
 
+/*
+The GetTableHash method handles the generation of a table hash for a session. It expects a JSON payload with tenant ID, session ID, optional encrypted table name, and optional table name nonce.
+It retrieves the tenant information from DynamoDB and decrypts the table salt using KMS. It then builds a request to the enclave to generate the table hash using the session information and decrypted table salt.
+Finally, it responds with the generated table hash or an error if any step fails.
+*/
 func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 	tenantId := c.GetString("tenantId")
 	var req objects.GetTableHashRequest
@@ -91,32 +96,31 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 }
 
 /*
-The Create method handles the creation of a new object. It expects a JSON payload with tenant ID, encrypted DEK, optional sensitivity, and indexes.
+The Put method handles the creation of a new object. It expects a JSON payload with tenant ID, encrypted DEK, optional sensitivity, and indexes.
 It generates a unique object ID and S3 key, sets the object's status to pending, and calculates a TTL.
 It then generates a presigned URL for uploading the object to S3.
 The object metadata and indexes are stored in DynamoDB using the CreateObjectWithIndexes method.
 Finally, it responds with the object ID, S3 key, upload URL, and expiration time.
 */
-func (h *ObjectHandler) Create(c *gin.Context) {
+func (h *ObjectHandler) Put(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req objects.CreateObjectRequest
+	var req objects.PutObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	tableHash := c.Param("table-hash")
 	// Get tenant ID from context
 	tenantId := c.GetString("tenantId")
 
 	// Generate object ID
 	objectId := uuid.NewString()
 
-	obj := models.NewObject(tenantId, tableHash, objectId, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
+	obj := models.NewObject(tenantId, req.TableHash, objectId, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
 	var uploadUrl string
 
 	if req.BlobSize > 100*1024 {
 		// If blob size > 100KB, use S3 for storage and generate presigned URL
-		s3Key := generateS3Key(tenantId, tableHash, objectId, 1)
+		s3Key := generateS3Key(tenantId, req.TableHash, objectId, 1)
 		obj.S3Key = s3Key
 		presignedUrl, err := h.S3Client.PresignPutObjectUrl(ctx, s3Key, h.PresignTTL)
 		if err != nil {
@@ -127,7 +131,7 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	} else {
 		// If blob size <= 100KB, use inline storage in DynamoDB
 		obj.EncryptedBlob = "" // Will be filled later
-		uploadUrl = fmt.Sprintf("%s/objects/%s/%s/upload-inline", h.BaseURL, tableHash, objectId)
+		uploadUrl = fmt.Sprintf("%s/objects/%s/%s/upload-inline", h.BaseURL, req.TableHash, objectId)
 	}
 
 	if req.Sensitivity != "" {
@@ -138,12 +142,12 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	obj.Status = models.StatusPending
 	obj.TTL = time.Now().Add(h.PresignTTL).Unix()
 
-	if err := h.Dynamo.CreateObjectWithIndexes(ctx, tableHash, obj, req.Indexes); err != nil {
+	if err := h.Dynamo.CreateObjectWithIndexes(ctx, req.TableHash, obj, req.Indexes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
 		return
 	}
 
-	resp := objects.CreateObjectResponse{
+	resp := objects.PutObjectResponse{
 		ObjectID:  objectId,
 		UploadURL: uploadUrl,
 		ExpiresIn: int64(h.PresignTTL.Seconds()),
@@ -153,6 +157,11 @@ func (h *ObjectHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
+/*
+The UploadInline method handles the uploading of an encrypted blob directly in DynamoDB for objects that are eligible for inline storage. It expects the table hash and object ID as URL parameters and the encrypted blob in the request body.
+It first retrieves the object from DynamoDB to verify its existence and eligibility for inline upload. If the object is valid, it updates the object's EncryptedBlob field in DynamoDB with the provided blob.
+Finally, it responds with a success message.
+*/
 func (h *ObjectHandler) UploadInline(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantId := c.GetString("tenantId")
@@ -192,14 +201,20 @@ func (h *ObjectHandler) UploadInline(c *gin.Context) {
 
 /*
 The Get method handles the retrieval of an object through its ID.
+It expects a JSON payload with tenant ID, table hash, and object ID. It retrieves the object from DynamoDB using the GetObject method.
+If the object is found and is in READY status, it generates a presigned GET URL if the object is stored in S3.
+Finally, it responds with the object ID, presigned GET URL (if applicable), encrypted blob (if inline), KMS-wrapped DEK, master-wrapped DEK, DEK nonce, and timestamps.
 */
 func (h *ObjectHandler) Get(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantId := c.GetString("tenantId")
-	id := c.Param("id")
-	tableHash := c.Param("table-hash")
+	var req objects.GetObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-	obj, err := h.Dynamo.GetObject(ctx, tenantId, tableHash, id)
+	obj, err := h.Dynamo.GetObject(ctx, tenantId, req.TableHash, req.ObjectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get object from DynamoDB: " + err.Error()})
 		return
@@ -225,7 +240,7 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	}
 
 	resp := objects.GetObjectResponse{
-		ObjectID:         id,
+		ObjectID:         req.ObjectID,
 		GetURL:           getUrl,
 		EncryptedBlob:    encryptedBlob,
 		KMSWrappedDEK:    obj.KMSWrappedDEK,
@@ -234,6 +249,46 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		CreatedAt:        obj.CreatedAt,
 		UpdatedAt:        obj.UpdatedAt,
 		Version:          obj.Version,
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+/*
+The Scan method handles scanning objects in a table with pagination support. It expects a JSON payload with tenant ID, table hash, optional limit, and next token.
+It retrieves the objects from DynamoDB using the ScanTable method, which returns a list of objects and a next token for pagination.
+For each object, it generates a presigned GET URL if the object is stored in S3.
+Finally, it responds with a list of objects and the next token for pagination.
+*/
+func (h *ObjectHandler) Scan(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+
+	var req objects.ScanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	objs, err := h.Dynamo.ScanTable(ctx, tenantId, req.TableHash, req.Limit, *req.NextToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
+		return
+	}
+
+	var resp objects.ScanResponse
+	for _, obj := range objs {
+		resp.Objects = append(resp.Objects, objects.ResultObject{
+			ObjectID:         obj.SK[len("OBJ#"):],
+			GetURL:           obj.S3Key,
+			EncryptedBlob:    obj.EncryptedBlob,
+			KMSWrappedDEK:    obj.KMSWrappedDEK,
+			MasterWrappedDEK: obj.MasterWrappedDEK,
+			DEKNonce:         obj.DEKNonce,
+			CreatedAt:        obj.CreatedAt,
+			UpdatedAt:        obj.UpdatedAt,
+			Version:          obj.Version,
+		})
 	}
 
 	c.JSON(http.StatusOK, resp)
