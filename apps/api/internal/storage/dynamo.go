@@ -274,14 +274,10 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, providedKey string) (*models.APIKey, error) {
 	pk := fmt.Sprintf("TENANT#%s", tenantID)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
-		TableName: aws.String(d.APIKeysTable),
-		KeyConditions: map[string]ddbTypes.Condition{
-			"pk": {
-				ComparisonOperator: ddbTypes.ComparisonOperatorEq,
-				AttributeValueList: []ddbTypes.AttributeValue{
-					&ddbTypes.AttributeValueMemberS{Value: pk},
-				},
-			},
+		TableName:              aws.String(d.APIKeysTable),
+		KeyConditionExpression: aws.String("pk = :pk"),
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 		},
 	})
 	if err != nil {
@@ -306,19 +302,25 @@ func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, provided
 	return nil, nil
 }
 
-func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash string, limit int, nextToken string) ([]models.Object, error) {
+type ScanResult struct {
+	Objects   []models.Object
+	NextToken *string
+}
+
+func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash string, limit int, nextToken string) (*ScanResult, error) {
+	var dynamoLimit *int32
+	if limit > 0 {
+		l := int32(limit)
+		dynamoLimit = &l
+	}
 	pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantID, tableHash)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
-		TableName: aws.String(d.ObjectsTable),
-		KeyConditions: map[string]ddbTypes.Condition{
-			"pk": {
-				ComparisonOperator: ddbTypes.ComparisonOperatorEq,
-				AttributeValueList: []ddbTypes.AttributeValue{
-					&ddbTypes.AttributeValueMemberS{Value: pk},
-				},
-			},
+		TableName:              aws.String(d.ObjectsTable),
+		KeyConditionExpression: aws.String("pk = :pk"),
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 		},
-		Limit: aws.Int32(int32(limit)),
+		Limit: dynamoLimit,
 		ExclusiveStartKey: func() map[string]ddbTypes.AttributeValue {
 			if nextToken == "" {
 				return nil
@@ -340,7 +342,16 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 		}
 		objects = append(objects, obj)
 	}
-	return objects, nil
+	var lastEvalKey *string
+	if out.LastEvaluatedKey != nil {
+		if sk, ok := out.LastEvaluatedKey["sk"].(*ddbTypes.AttributeValueMemberS); ok {
+			lastEvalKey = &sk.Value
+		}
+	}
+	return &ScanResult{
+		Objects:   objects,
+		NextToken: lastEvalKey,
+	}, nil
 }
 
 // Helper function to extract tenant from PK of format "TENANT#<tenant_id>#TABLE#<table_hash>"
