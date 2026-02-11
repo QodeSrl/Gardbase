@@ -3,7 +3,7 @@ module github.com/QodeSrl/gardbase/apps/api
 go 1.24.4
 
 require (
-	github.com/QodeSrl/gardbase/pkg/api v0.0.1
+	github.com/QodeSrl/gardbase/pkg/api v0.0.5
 	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
 	github.com/QodeSrl/gardbase/pkg/models v0.0.6
 	github.com/aws/aws-sdk-go-v2 v1.41.0

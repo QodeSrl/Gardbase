@@ -270,14 +270,19 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 		return
 	}
 
-	objs, err := h.Dynamo.ScanTable(ctx, tenantId, req.TableHash, req.Limit, *req.NextToken)
+	nextToken := ""
+	if req.NextToken != nil {
+		nextToken = *req.NextToken
+	}
+
+	result, err := h.Dynamo.ScanTable(ctx, tenantId, req.TableHash, req.Limit, nextToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
 		return
 	}
 
 	var resp objects.ScanResponse
-	for _, obj := range objs {
+	for _, obj := range result.Objects {
 		resp.Objects = append(resp.Objects, objects.ResultObject{
 			ObjectID:         obj.SK[len("OBJ#"):],
 			GetURL:           obj.S3Key,
@@ -290,6 +295,7 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 			Version:          obj.Version,
 		})
 	}
+	resp.NextToken = result.NextToken
 
 	c.JSON(http.StatusOK, resp)
 }

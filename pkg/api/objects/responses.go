@@ -29,5 +29,6 @@ type ResultObject struct {
 type GetObjectResponse = ResultObject
 
 type ScanResponse struct {
-	Objects []ResultObject `json:"objects"`
+	Objects   []ResultObject `json:"objects"`
+	NextToken *string        `json:"next_token,omitempty"`
 }
