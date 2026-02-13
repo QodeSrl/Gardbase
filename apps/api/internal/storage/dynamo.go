@@ -58,7 +58,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 
 	indexItems := make([]map[string]ddbTypes.AttributeValue, 0, len(indexes))
 	for idxName, token := range indexes {
-		index := models.NewIndex(idxName, extractTenantFromPK(obj.PK), tableHash, token, extractObjectIdFromSK(obj.SK), obj.S3Key)
+		index := models.NewIndex(idxName, obj.GetTenantID(), tableHash, token, obj.GetObjectID(), obj.S3Key)
 		av, err := attributevalue.MarshalMap(index)
 		if err != nil {
 			return err
@@ -75,6 +75,9 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 			Put: &ddbTypes.Put{
 				TableName: aws.String(d.ObjectsTable),
 				Item:      objMap,
+ConditionExpression: aws.String(
+					"attribute_not_exists(pk) AND attribute_not_exists(sk)",
+				),
 			},
 		})
 
@@ -84,6 +87,9 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 				Put: &ddbTypes.Put{
 					TableName: aws.String(d.IndexesTable),
 					Item:      item,
+ConditionExpression: aws.String(
+						"attribute_not_exists(pk) AND attribute_not_exists(sk)",
+					),
 				},
 			})
 		}
@@ -91,14 +97,29 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 		_, err = d.Client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
 			TransactItems: twrite,
 		})
+if err != nil {
+			var condErr *ddbTypes.ConditionalCheckFailedException
+			if errors.As(err, &condErr) {
+				return fmt.Errorf("object with the same ID already exists")
+			}
+		}
 		return err
 	}
+
+	// if more than 25 items, write the object first, then batch write the indexes
 
 	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(d.ObjectsTable),
 		Item:      objMap,
+ConditionExpression: aws.String(
+			"attribute_not_exists(pk) AND attribute_not_exists(sk)",
+		),
 	})
 	if err != nil {
+var condErr *ddbTypes.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return fmt.Errorf("object with the same ID already exists")
+		}
 		return err
 	}
 
@@ -153,8 +174,8 @@ func (d *DynamoClient) UpdateObjectInlineBlob(ctx context.Context, tenantId stri
 GetObject retrieves an object by tenant ID and object ID from DynamoDB.
 */
 func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, tableHash string, objectId string) (*models.Object, error) {
-	pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash)
-	sk := fmt.Sprintf("OBJ#%s", objectId)
+	pk := models.GenerateObjectPK(tenantId, tableHash)
+	sk := models.GenerateObjectSK(objectId)
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &d.ObjectsTable,
@@ -185,8 +206,8 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 	}
 	keys := make([]map[string]ddbTypes.AttributeValue, 0, len(objectsIds))
 	for _, objectId := range objectsIds {
-		pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash)
-		sk := fmt.Sprintf("OBJ#%s", objectId)
+		pk := models.GenerateObjectPK(tenantId, tableHash)
+		sk := models.GenerateObjectSK(objectId)
 		keys = append(keys, map[string]ddbTypes.AttributeValue{
 			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
@@ -213,7 +234,7 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 		if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
 			return nil, err
 		}
-		result[extractObjectIdFromSK(obj.SK)] = obj.KMSWrappedDEK
+		result[obj.GetObjectID()] = obj.KMSWrappedDEK
 	}
 	return result, nil
 }
@@ -232,7 +253,7 @@ func (d *DynamoClient) CreateTenant(ctx context.Context, tenantID string, wrappe
 }
 
 func (d *DynamoClient) GetTenant(ctx context.Context, tenantID string) (*models.TenantConfig, error) {
-	pk := fmt.Sprintf("TENANT#%s", tenantID)
+	pk := models.GenerateTenantConfigPK(tenantID)
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(d.TenantConfigTable),
@@ -271,8 +292,8 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 	return apiKey, err
 }
 
-func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, providedKey string) (*models.APIKey, error) {
-	pk := fmt.Sprintf("TENANT#%s", tenantID)
+func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantId string, providedKey string) (*models.APIKey, error) {
+	pk := models.GenerateAPIKeyPK(tenantId)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(d.APIKeysTable),
 		KeyConditionExpression: aws.String("pk = :pk"),
@@ -313,7 +334,7 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 		l := int32(limit)
 		dynamoLimit = &l
 	}
-	pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantID, tableHash)
+	pk := models.GenerateObjectPK(tenantID, tableHash)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(d.ObjectsTable),
 		KeyConditionExpression: aws.String("pk = :pk"),
@@ -352,18 +373,4 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 		Objects:   objects,
 		NextToken: lastEvalKey,
 	}, nil
-}
-
-// Helper function to extract tenant from PK of format "TENANT#<tenant_id>#TABLE#<table_hash>"
-func extractTenantFromPK(pk string) string {
-	var tenantId string
-	fmt.Sscanf(pk, "TENANT#%s#TABLE#", &tenantId)
-	return tenantId
-}
-
-// Helper function to extract object ID from SK of format "OBJ#<object_id>"
-func extractObjectIdFromSK(sk string) string {
-	var objectId string
-	fmt.Sscanf(sk, "OBJ#%s", &objectId)
-	return objectId
 }
