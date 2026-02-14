@@ -10,6 +10,9 @@ type Index struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>#IDX#<index_name>"
 	SK []byte `dynamodbav:"sk" json:"sk"` // format: "<index_token>"
 
+	GSI1PK string `dynamodbav:"gsi1pk,omitempty" json:"gsi1pk,omitempty"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>#OBJ#<object_id>"
+	GSI1SK string `dynamodbav:"gsi1sk,omitempty" json:"gsi1sk,omitempty"` // format: "IDX#<index_name>"
+
 	S3Key     string    `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"` // Duplicated S3 key for quick access (larger blobs)
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at"`
 	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at"`
@@ -18,6 +21,9 @@ type Index struct {
 func NewIndex(indexName string, tenantId string, tableHash string, indexToken []byte, objectId string, s3Key string) *Index {
 	return &Index{
 		PK:        GenerateIndexPK(tenantId, tableHash, indexName),
+		SK:        indexToken,
+		GSI1PK:    GenerateGSI1PK(tenantId, tableHash, objectId),
+		GSI1SK:    GenerateGSI1SK(indexName),
 		S3Key:     s3Key,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -57,4 +63,12 @@ func (i *Index) GetObjectID() string {
 
 func (i *Index) GetToken() []byte {
 	return i.SK
+}
+
+func GenerateGSI1PK(tenantId string, tableHash string, objectId string) string {
+	return fmt.Sprintf("TENANT#%s#TABLE#%s#OBJ#%s", tenantId, tableHash, objectId)
+}
+
+func GenerateGSI1SK(indexName string) string {
+	return fmt.Sprintf("IDX#%s", indexName)
 }
