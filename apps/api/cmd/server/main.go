@@ -36,6 +36,7 @@ type AWSConfig struct {
 	S3Bucket                 string
 	DynamoObjectsTable       string
 	DynamoIndexesTable       string
+	DynamoTableConfigsTable  string
 	DynamoTenantConfigsTable string
 	DynamoAPIKeysTable       string
 	KMSKeyID                 string
@@ -125,10 +126,10 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	objects.POST("/get-table-hash", objectHandler.GetTableHash)
 
 	objects.POST("/put", objectHandler.Put)
+	objects.POST("/request-put-large", objectHandler.RequestPutLarge)
+	objects.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
 	objects.POST("/get", objectHandler.Get)
 	objects.POST("/scan", objectHandler.Scan)
-
-	objects.PUT("/:table-hash/:id/upload-inline", objectHandler.UploadInline)
 
 	encryptionHandler := &handlers.EncryptionHandler{
 		Vsock:  vsock,
@@ -140,6 +141,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	encryption.POST("/secure-session/init", encryptionHandler.HandleSessionInit)
 	encryption.POST("/secure-session/unwrap", encryptionHandler.HandleSessionUnwrap)
 	encryption.POST("/secure-session/generate-deks", encryptionHandler.HandleSessionGenerateDEK)
+	encryption.POST("/secure-session/get-table-iek", encryptionHandler.HandleSessionGetTableIEK)
 	encryption.POST("/decrypt", encryptionHandler.HandleDecrypt)
 }
 
@@ -186,7 +188,7 @@ func initAWSServices(ctx context.Context, logger *zap.Logger) (*storage.S3Client
 	}
 
 	s3Client := storage.NewS3Client(ctx, awsConfig.S3Bucket, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
-	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTenantConfigsTable, awsConfig.DynamoAPIKeysTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
+	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTableConfigsTable, awsConfig.DynamoTenantConfigsTable, awsConfig.DynamoAPIKeysTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 	kmsService := services.NewKMSService(ctx, cfg, awsConfig.KMSKeyID, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 
 	if err := testAWSConnectivity(ctx, s3Client, dynamoClient, logger); err != nil {
@@ -211,6 +213,7 @@ func loadAWSConfig() *AWSConfig {
 		S3Bucket:                 getEnvOrPanic("S3_BUCKET"),
 		DynamoObjectsTable:       getEnvOrPanic("DYNAMO_OBJECTS_TABLE"),
 		DynamoIndexesTable:       getEnvOrPanic("DYNAMO_INDEXES_TABLE"),
+		DynamoTableConfigsTable:  getEnvOrPanic("DYNAMO_TABLE_CONFIGS_TABLE"),
 		DynamoTenantConfigsTable: getEnvOrPanic("DYNAMO_TENANT_CONFIGS_TABLE"),
 		DynamoAPIKeysTable:       getEnvOrPanic("DYNAMO_API_KEYS_TABLE"),
 		KMSKeyID:                 getEnvOrPanic("KMS_KEY_ID"),

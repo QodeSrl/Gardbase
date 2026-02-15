@@ -95,16 +95,9 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-/*
-The Put method handles the creation of a new object. It expects a JSON payload with tenant ID, encrypted DEK, optional sensitivity, and indexes.
-It generates a unique object ID and S3 key, sets the object's status to pending, and calculates a TTL.
-It then generates a presigned URL for uploading the object to S3.
-The object metadata and indexes are stored in DynamoDB using the CreateObjectWithIndexes method.
-Finally, it responds with the object ID, S3 key, upload URL, and expiration time.
-*/
-func (h *ObjectHandler) Put(c *gin.Context) {
+func (h *ObjectHandler) RequestPutLarge(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req objects.PutObjectRequest
+	var req objects.RequestPutLargeObjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -112,91 +105,224 @@ func (h *ObjectHandler) Put(c *gin.Context) {
 	// Get tenant ID from context
 	tenantId := c.GetString("tenantId")
 
-	// Generate object ID
-	objectId := uuid.NewString()
+	// ObjectID and Version must be consistent
+	if req.ObjectID != "" && req.Version == 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Version must be provided for updates"})
+		return
+	}
+	if req.ObjectID == "" && req.Version != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Version should not be provided for new objects"})
+		return
+	}
 
-	obj := models.NewObject(tenantId, req.TableHash, objectId, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
-	var uploadUrl string
+	if req.BlobSize <= 100*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Blob size must be greater than 100KB for large object upload"})
+		return
+	}
 
-	if req.BlobSize > 100*1024 {
-		// If blob size > 100KB, use S3 for storage and generate presigned URL
-		s3Key := generateS3Key(tenantId, req.TableHash, objectId, 1)
-		obj.S3Key = s3Key
-		presignedUrl, err := h.S3Client.PresignPutObjectUrl(ctx, s3Key, h.PresignTTL)
+	var objectId string
+	var expectedVersion int32
+
+	if req.ObjectID == "" {
+		// Create
+		objectId = uuid.NewString()
+		expectedVersion = 1
+	} else {
+		objectId = req.ObjectID
+		// Update - check if object exists
+		obj, err := h.Dynamo.GetObject(ctx, tenantId, req.TableHash, req.ObjectID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned URL: " + err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get object from DynamoDB: " + err.Error()})
 			return
 		}
-		uploadUrl = presignedUrl
-	} else {
-		// If blob size <= 100KB, use inline storage in DynamoDB
-		obj.EncryptedBlob = "" // Will be filled later
-		uploadUrl = fmt.Sprintf("%s/objects/%s/%s/upload-inline", h.BaseURL, req.TableHash, objectId)
+		if obj == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
+			return
+		}
+		if obj.Status == models.StatusDeleted {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot update a deleted object"})
+			return
+		}
+		if obj.Version != req.Version-1 {
+			c.JSON(http.StatusConflict, gin.H{"error": "Version mismatch. Current version is " + fmt.Sprintf("%d", obj.Version)})
+			return
+		}
+		expectedVersion = obj.Version + 1
 	}
 
-	if req.Sensitivity != "" {
-		obj.Sensitivity = req.Sensitivity
-	} else {
-		obj.Sensitivity = models.SensitivityLow
-	}
-	obj.Status = models.StatusPending
-	obj.TTL = time.Now().Add(h.PresignTTL).Unix()
+	s3Key := generateS3Key(tenantId, req.TableHash, objectId, expectedVersion)
 
-	if err := h.Dynamo.CreateObjectWithIndexes(ctx, req.TableHash, obj, req.Indexes); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
+	uploadUrl, err := h.S3Client.PresignPutObjectUrl(ctx, s3Key, h.PresignTTL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate presigned PUT URL: " + err.Error()})
+		return
+	}
+
+	resp := objects.RequestPutLargeObjectResponse{
+		ObjectID:        objectId,
+		UploadURL:       uploadUrl,
+		ExpectedVersion: expectedVersion,
+		ExpiresIn:       int64(h.PresignTTL.Seconds()),
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ObjectHandler) ConfirmPutLarge(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req objects.ConfirmPutLargeObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Get tenant ID from context
+	tenantId := c.GetString("tenantId")
+
+	// Verify uploaded object exists in S3
+	s3Key := generateS3Key(tenantId, req.TableHash, req.ObjectID, req.Version)
+	exists, err := h.S3Client.CheckObjectExists(ctx, s3Key)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check object in S3: " + err.Error()})
+		return
+	}
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Uploaded object not found in S3"})
+		return
+	}
+
+	now := time.Now().UTC()
+
+	if req.Version == 1 {
+		// Create
+		obj := models.NewObject(tenantId, req.TableHash, req.ObjectID, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
+		obj.S3Key = s3Key
+		obj.Version = 1
+		obj.Status = models.StatusReady
+		obj.CreatedAt = now
+		obj.UpdatedAt = now
+
+		if err := h.Dynamo.CreateObjectWithIndexes(ctx, req.TableHash, obj, req.Indexes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to put object in DynamoDB: " + err.Error()})
+			return
+		}
+
+		resp := objects.ConfirmPutLargeObjectResponse{
+			ObjectID:  req.ObjectID,
+			CreatedAt: obj.CreatedAt,
+			UpdatedAt: obj.UpdatedAt,
+			TableHash: req.TableHash,
+			Version:   obj.Version,
+		}
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	// Update
+	obj, err := h.Dynamo.UpdateObjectWithIndexes(ctx, tenantId, req.TableHash, req.ObjectID, req.Version-1, func(obj *models.Object) {
+		obj.S3Key = s3Key
+		obj.KMSWrappedDEK = req.KMSEncryptedDEK
+		obj.MasterWrappedDEK = req.MasterEncryptedDEK
+		obj.DEKNonce = req.DEKNonce
+		obj.UpdatedAt = now
+		obj.Version = req.Version
+		if req.Sensitivity != "" {
+			obj.Sensitivity = req.Sensitivity
+		}
+	}, req.Indexes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update object in DynamoDB: " + err.Error()})
+		return
+	}
+
+	resp := objects.ConfirmPutLargeObjectResponse{
+		ObjectID:  req.ObjectID,
+		CreatedAt: obj.CreatedAt,
+		UpdatedAt: obj.UpdatedAt,
+		TableHash: req.TableHash,
+		Version:   req.Version,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ObjectHandler) Put(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req objects.PutObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate: version and ID must be consistent
+	if req.ObjectID != "" && req.Version == 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Version must be provided for updates"})
+		return
+	}
+	if req.ObjectID == "" && req.Version != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Version should not be provided for new objects"})
+		return
+	}
+
+	// Get tenant ID from context
+	tenantId := c.GetString("tenantId")
+	now := time.Now().UTC()
+
+	if req.ObjectID == "" {
+		// Create
+		objectId := uuid.NewString()
+		obj := models.NewObject(tenantId, req.TableHash, objectId, req.KMSEncryptedDEK, req.MasterEncryptedDEK, req.DEKNonce)
+		obj.EncryptedBlob = req.EncryptedBlob
+		obj.Version = 1
+		obj.CreatedAt = now
+		obj.UpdatedAt = now
+		obj.Status = models.StatusReady
+		if req.Sensitivity != "" {
+			obj.Sensitivity = req.Sensitivity
+		} else {
+			obj.Sensitivity = models.SensitivityLow
+		}
+		if err := h.Dynamo.CreateObjectWithIndexes(ctx, req.TableHash, obj, req.Indexes); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create object in DynamoDB: " + err.Error()})
+			return
+		}
+
+		resp := objects.PutObjectResponse{
+			ObjectID:  objectId,
+			CreatedAt: obj.CreatedAt,
+			UpdatedAt: obj.UpdatedAt,
+			TableHash: req.TableHash,
+			Version:   obj.Version,
+		}
+
+		c.JSON(http.StatusCreated, resp)
+		return
+	}
+
+	// Update
+	obj, err := h.Dynamo.UpdateObjectWithIndexes(ctx, tenantId, req.TableHash, req.ObjectID, req.Version, func(obj *models.Object) {
+		obj.EncryptedBlob = req.EncryptedBlob
+		obj.S3Key = "" // clear s3key if switching from large object to inline
+		obj.KMSWrappedDEK = req.KMSEncryptedDEK
+		obj.MasterWrappedDEK = req.MasterEncryptedDEK
+		obj.DEKNonce = req.DEKNonce
+		obj.UpdatedAt = now
+		obj.Version = req.Version + 1
+		if req.Sensitivity != "" {
+			obj.Sensitivity = req.Sensitivity
+		}
+	}, req.Indexes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update object in DynamoDB: " + err.Error()})
 		return
 	}
 
 	resp := objects.PutObjectResponse{
-		ObjectID:  objectId,
-		UploadURL: uploadUrl,
-		ExpiresIn: int64(h.PresignTTL.Seconds()),
+		ObjectID:  req.ObjectID,
 		CreatedAt: obj.CreatedAt,
+		UpdatedAt: obj.UpdatedAt,
+		TableHash: req.TableHash,
+		Version:   obj.Version,
 	}
 
 	c.JSON(http.StatusCreated, resp)
-}
-
-/*
-The UploadInline method handles the uploading of an encrypted blob directly in DynamoDB for objects that are eligible for inline storage. It expects the table hash and object ID as URL parameters and the encrypted blob in the request body.
-It first retrieves the object from DynamoDB to verify its existence and eligibility for inline upload. If the object is valid, it updates the object's EncryptedBlob field in DynamoDB with the provided blob.
-Finally, it responds with a success message.
-*/
-func (h *ObjectHandler) UploadInline(c *gin.Context) {
-	ctx := c.Request.Context()
-	tenantId := c.GetString("tenantId")
-	id := c.Param("id")
-	tableHash := c.Param("table-hash")
-
-	body, err := c.GetRawData()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body: " + err.Error()})
-		return
-	}
-	if len(body) > 100*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Inline blob size exceeds 100KB limit"})
-		return
-	}
-
-	obj, err := h.Dynamo.GetObject(ctx, tenantId, tableHash, id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get object from DynamoDB: " + err.Error()})
-		return
-	}
-	if obj == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
-		return
-	}
-	if obj.S3Key != "" || obj.EncryptedBlob != "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Object is not eligible for inline upload"})
-		return
-	}
-
-	if err := h.Dynamo.UpdateObjectInlineBlob(ctx, tenantId, tableHash, id, base64.StdEncoding.EncodeToString(body)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update object inline blob in DynamoDB: " + err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Inline blob uploaded successfully"})
 }
 
 /*

@@ -49,11 +49,49 @@ resource "aws_dynamodb_table" "indexes" {
   }
   attribute {
     name = "sk"
+    type = "B"
+  }
+
+  attribute {
+    name = "gsi1pk"
     type = "S"
+  }
+  attribute {
+    name = "gsi1sk"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "gsi1"
+    hash_key        = "gsi1pk"
+    range_key       = "gsi1sk"
+    projection_type = "ALL"
+
+    read_capacity  = var.environment == "production" ? 5 : 1
+    write_capacity = var.environment == "production" ? 5 : 1
   }
 
   tags = {
     Name        = "${var.project_name}-indexes-${var.environment}"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_dynamodb_table" "table_configs" {
+  name           = "${var.project_name}-table-configs-${var.environment}"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = var.environment == "production" ? 5 : 1
+  write_capacity = var.environment == "production" ? 5 : 1
+  hash_key       = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "${var.project_name}-table-configs-${var.environment}"
     Environment = var.environment
     Project     = var.project_name
   }

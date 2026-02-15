@@ -10,8 +10,8 @@ require (
 )
 
 require (
-	github.com/QodeSrl/gardbase/pkg/api v0.0.5
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.4
+	github.com/QodeSrl/gardbase/pkg/api v0.0.6
+	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.0.5
 	golang.org/x/crypto v0.47.0
 )
 

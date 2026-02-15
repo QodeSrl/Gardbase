@@ -21,11 +21,15 @@ type TenantConfig struct {
 
 func NewTenantConfig(tenantID string, wrappedMasterKKey []byte, wrappedTableSalt []byte, masterKeyVersion int) *TenantConfig {
 	return &TenantConfig{
-		PK:               "TENANT#" + tenantID,
+		PK:               GenerateTenantConfigPK(tenantID),
 		WrappedMasterKey: base64.StdEncoding.EncodeToString(wrappedMasterKKey),
 		WrappedTableSalt: base64.StdEncoding.EncodeToString(wrappedTableSalt),
 		MasterKeyVersion: masterKeyVersion,
 		CreatedAt:        time.Now().UTC(),
 		UpdatedAt:        time.Now().UTC(),
 	}
+}
+
+func GenerateTenantConfigPK(tenantID string) string {
+	return "TENANT#" + tenantID
 }

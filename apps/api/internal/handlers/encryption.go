@@ -195,11 +195,54 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 		return
 	}
 
+	// wrapped with kms
+	wrappedIEK, err := e.Dynamo.GetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to get table IEK: %v", err)})
+		return
+	}
+	if wrappedIEK == "" {
+		// generate new IEK and persist it
+		out, err := e.KMS.GenerateDataKey(c.Request.Context(), att, tenantId, services.PurposeIndexKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate index key: %v", err)})
+			return
+		}
+		// send ciphertextforrecipient IEK to enclave to be sealed with session key, and get back sealed IEK
+		// now wrapped with attestation
+		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+		// save kms wrapped IEK in Dynamo
+		err = e.Dynamo.SetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash, base64.StdEncoding.EncodeToString(out.CiphertextBlob))
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to set table IEK: %v", err)})
+			return
+		}
+	} else {
+		// unwrap IEK with KMS
+		ctBytes, err := base64.StdEncoding.DecodeString(wrappedIEK)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode wrapped IEK: %v", err)})
+			return
+		}
+		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, services.PurposeIndexKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped IEK: %v", err)})
+			return
+		}
+		if out.CiphertextForRecipient == nil {
+			c.JSON(500, gin.H{"error": "No CiphertextForRecipient in KMS response"})
+			return
+		}
+		// now wrapped with attestation
+		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+	}
+
 	// Prepare DEK in enclave (PrepareDEKRequest)
 	prepareDEKReq := enclaveproto.PrepareDEKRequest{
 		DEKs:             deks,
 		WrappedMasterKey: base64.StdEncoding.EncodeToString(wrappedMasterkeyOut.CiphertextForRecipient),
 		SessionId:        req.SessionId,
+		IEK:              wrappedIEK,
 	}
 	payloadBytes, err = json.Marshal(prepareDEKReq)
 	if err != nil {
@@ -225,7 +268,112 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, prepRes.Data)
+	resp := encryption.SessionGenerateDEKResponse{
+		DEKs:      prepRes.Data.DEKs,
+		SealedIEK: prepRes.Data.SealedIEK,
+		IEKNonce:  prepRes.Data.IEKNonce,
+	}
+
+	c.JSON(200, resp)
+}
+
+func (e *EncryptionHandler) HandleSessionGetTableIEK(c *gin.Context) {
+	var req encryption.SessionGetTableIEKRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid session get table IEK request: %v", err)})
+		return
+	}
+	payloadBytes, err := json.Marshal(req)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
+		return
+	}
+
+	// Request attestation document from enclave (GetAttestationRequest)
+	att, err := e.Vsock.RequestAttestationDocument()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	tenantId := c.GetString("tenantId")
+
+	// wrapped with kms
+	wrappedIEK, err := e.Dynamo.GetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to get table IEK: %v", err)})
+		return
+	}
+	if wrappedIEK == "" {
+		// generate new IEK and persist it
+		out, err := e.KMS.GenerateDataKey(c.Request.Context(), att, tenantId, services.PurposeIndexKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to generate index key: %v", err)})
+			return
+		}
+		// send ciphertextforrecipient IEK to enclave to be sealed with session key, and get back sealed IEK
+		// now wrapped with attestation
+		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+		// save kms wrapped IEK in Dynamo
+		err = e.Dynamo.SetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash, base64.StdEncoding.EncodeToString(out.CiphertextBlob))
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to set table IEK: %v", err)})
+			return
+		}
+	} else {
+		// unwrap IEK with KMS
+		ctBytes, err := base64.StdEncoding.DecodeString(wrappedIEK)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode wrapped IEK: %v", err)})
+			return
+		}
+		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, services.PurposeIndexKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped IEK: %v", err)})
+			return
+		}
+		if out.CiphertextForRecipient == nil {
+			c.JSON(500, gin.H{"error": "No CiphertextForRecipient in KMS response"})
+			return
+		}
+		// now wrapped with attestation
+		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+	}
+
+	prepareDEKReq := enclaveproto.PrepareIEKRequest{
+		SessionId: req.SessionId,
+		IEK:       wrappedIEK,
+	}
+	payloadBytes, err = json.Marshal(prepareDEKReq)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal session unwrap request: %v", err)})
+		return
+	}
+	enclaveReq := enclaveproto.Request{
+		Type:    "session_prepare_iek",
+		Payload: json.RawMessage(payloadBytes),
+	}
+	resBytes, err := e.Vsock.SendToEnclave(enclaveReq, 30*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	var prepRes enclaveproto.Response[enclaveproto.PrepareIEKResponse]
+	if err := json.Unmarshal(resBytes, &prepRes); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to unmarshal session prepare IEK response: %v", err)})
+		return
+	}
+	if !prepRes.Success {
+		c.JSON(500, gin.H{"error": prepRes.Error})
+		return
+	}
+
+	resp := encryption.SessionGetTableIEKResponse{
+		SealedIEK: prepRes.Data.SealedIEK,
+		IEKNonce:  prepRes.Data.IEKNonce,
+	}
+
+	c.JSON(200, resp)
 }
 
 func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {

@@ -25,8 +25,8 @@ const (
 
 func NewAPIKey(tenantId string, keyId string, hashedKey string, permissions []string, expiresAt *time.Time) *APIKey {
 	return &APIKey{
-		PK:          "TENANT#" + tenantId,
-		SK:          "APIKEY#" + keyId,
+		PK:          GenerateAPIKeyPK(tenantId),
+		SK:          GenerateAPIKeySK(keyId),
 		HashedKey:   hashedKey,
 		Permissions: permissions,
 		CreatedAt:   time.Now().UTC(),
@@ -44,4 +44,12 @@ func GenerateAPIKey() string {
 func HashAPIKey(apiKey string) (string, error) {
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(apiKey), bcrypt.DefaultCost)
 	return string(hashedBytes), err
+}
+
+func GenerateAPIKeyPK(tenantId string) string {
+	return "TENANT#" + tenantId
+}
+
+func GenerateAPIKeySK(keyId string) string {
+	return "APIKEY#" + keyId
 }

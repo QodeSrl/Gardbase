@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -39,8 +40,8 @@ const (
 
 func NewObject(tenantId string, tableHash string, objectId string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string) *Object {
 	return &Object{
-		PK:               fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash),
-		SK:               fmt.Sprintf("OBJ#%s", objectId),
+		PK:               GenerateObjectPK(tenantId, tableHash),
+		SK:               GenerateObjectSK(objectId),
 		KMSWrappedDEK:    kmsWrappedDEK,
 		MasterWrappedDEK: masterWrappedDEK,
 		DEKNonce:         dekNonce,
@@ -49,4 +50,39 @@ func NewObject(tenantId string, tableHash string, objectId string, kmsWrappedDEK
 		UpdatedAt:        time.Now().UTC(),
 		Version:          1,
 	}
+}
+
+func GenerateObjectPK(tenantId string, tableHash string) string {
+	return fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash)
+}
+
+func GenerateObjectSK(objectId string) string {
+	return fmt.Sprintf("OBJ#%s", objectId)
+}
+
+func (o *Object) GetObjectID() string {
+	// SK format: "OBJ#<object_id>"
+	parts := strings.SplitN(o.SK, "#", 2)
+	if len(parts) == 2 && parts[0] == "OBJ" {
+		return parts[1]
+	}
+	return ""
+}
+
+func (o *Object) GetTableHash() string {
+	// PK format: "TENANT#<tenant_id>#TABLE#<table_hash>"
+	parts := strings.SplitN(o.PK, "#", 4)
+	if len(parts) == 4 && parts[2] == "TABLE" {
+		return parts[3]
+	}
+	return ""
+}
+
+func (o *Object) GetTenantID() string {
+	// PK format: "TENANT#<tenant_id>#TABLE#<table_hash>"
+	parts := strings.SplitN(o.PK, "#", 4)
+	if len(parts) == 4 && parts[0] == "TENANT" {
+		return parts[1]
+	}
+	return ""
 }
