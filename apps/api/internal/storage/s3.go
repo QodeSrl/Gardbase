@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type S3Client struct {
@@ -71,4 +72,19 @@ func (s *S3Client) PresignGetObjectUrl(ctx context.Context, key string, lifetime
 		return "", errors.New("failed to generate presigned URL")
 	}
 	return request.URL, nil
+}
+
+func (s *S3Client) CheckObjectExists(ctx context.Context, key string) (bool, error) {
+	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var notFoundErr *s3Types.NotFound
+		if errors.As(err, &notFoundErr) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

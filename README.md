@@ -38,16 +38,6 @@ terraform plan -var="environment=dev"
 terraform apply -var="environment=dev"
 ```
 
-### Build & Deploy Lambda
-
-```bash
-nx run @gardbase/lambdas/upload-processor:build
-nx run @gardbase/lambdas/upload-processor:package
-nx run @gardbase/lambdas/upload-processor:push --bucket=<s3-bucket-name>
-# Or
-nx run @gardbase/lambdas/upload-processor:build-and-push --bucket=<s3-bucket-name>
-```
-
 ### Build & Push API Docker Image
 
 ```bash
@@ -149,8 +139,6 @@ Key Features:
 - No network access, no persistent storage, memory isolation
 
 #### Lambdas
-
-- Upload Processor: Processes file uploads, extracts metadata, and stores information in DynamoDB.
 
 ### Packages
 

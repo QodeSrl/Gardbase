@@ -16,6 +16,7 @@ type KMS struct {
 const (
 	PurposeMasterKey = "MASTER_KEY"
 	PurposeDataKey   = "DATA_KEY"
+	PurposeIndexKey  = "INDEX_KEY"
 	PurposeTableSalt = "TABLE_SALT"
 )
 

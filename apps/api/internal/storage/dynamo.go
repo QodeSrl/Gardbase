@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,11 +20,12 @@ type DynamoClient struct {
 	Client            *dynamodb.Client
 	ObjectsTable      string
 	IndexesTable      string
+	TableConfigTable  string
 	TenantConfigTable string
 	APIKeysTable      string
 }
 
-func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, tenantConfigTable string, apiKeysTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
+func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, tableConfigTable string, tenantConfigTable string, apiKeysTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
 	return &DynamoClient{
 		Client: dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
 			if useLocalstack {
@@ -31,6 +34,7 @@ func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable stri
 		}),
 		ObjectsTable:      objectsTable,
 		IndexesTable:      indexesTable,
+		TableConfigTable:  tableConfigTable,
 		TenantConfigTable: tenantConfigTable,
 		APIKeysTable:      apiKeysTable,
 	}
@@ -43,6 +47,39 @@ func (d *DynamoClient) TestConnnectivity(ctx context.Context) error {
 	return err
 }
 
+func (d *DynamoClient) GetWrappedTableIEK(ctx context.Context, tenantId string, tableHash string) (string, error) {
+	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(d.TableConfigTable),
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateTableConfigPK(tenantId, tableHash)},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if out.Item == nil {
+		return "", nil
+	}
+	var tableConfig models.TableConfig
+	if err := attributevalue.UnmarshalMap(out.Item, &tableConfig); err != nil {
+		return "", err
+	}
+	return tableConfig.KMSWrappedIEK, nil
+}
+
+func (d *DynamoClient) SetWrappedTableIEK(ctx context.Context, tenantId string, tableHash string, kmsWrappedIEK string) error {
+	tableConfig := models.NewTableConfig(tenantId, tableHash, kmsWrappedIEK)
+	item, err := attributevalue.MarshalMap(tableConfig)
+	if err != nil {
+		return err
+	}
+	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(d.TableConfigTable),
+		Item:      item,
+	})
+	return err
+}
+
 /*
 CreateObjectWithIndexes stores the given object in DynamoDB and creates associated index entries.
 It first marshals the object and index data into DynamoDB attribute maps.
@@ -50,7 +87,7 @@ If the total number of items to write (object + indexes) is 25 or fewer, it perf
 Otherwise, it writes the object separately and batches the index writes in groups of 25 using BatchWriteItem.
 Returns an error if any DynamoDB operation fails.
 */
-func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash string, obj *models.Object, indexes map[string]string) error {
+func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash string, obj *models.Object, indexes map[string][]byte) error {
 	objMap, err := attributevalue.MarshalMap(obj)
 	if err != nil {
 		return err
@@ -58,7 +95,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 
 	indexItems := make([]map[string]ddbTypes.AttributeValue, 0, len(indexes))
 	for idxName, token := range indexes {
-		index := models.NewIndex(idxName, extractTenantFromPK(obj.PK), tableHash, token, extractObjectIdFromSK(obj.SK), obj.S3Key)
+		index := models.NewIndex(idxName, obj.GetTenantID(), tableHash, token, obj.GetObjectID(), obj.S3Key)
 		av, err := attributevalue.MarshalMap(index)
 		if err != nil {
 			return err
@@ -75,6 +112,9 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 			Put: &ddbTypes.Put{
 				TableName: aws.String(d.ObjectsTable),
 				Item:      objMap,
+				ConditionExpression: aws.String(
+					"attribute_not_exists(pk) AND attribute_not_exists(sk)",
+				),
 			},
 		})
 
@@ -84,6 +124,9 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 				Put: &ddbTypes.Put{
 					TableName: aws.String(d.IndexesTable),
 					Item:      item,
+					ConditionExpression: aws.String(
+						"attribute_not_exists(pk) AND attribute_not_exists(sk)",
+					),
 				},
 			})
 		}
@@ -91,14 +134,29 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 		_, err = d.Client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
 			TransactItems: twrite,
 		})
+		if err != nil {
+			var condErr *ddbTypes.ConditionalCheckFailedException
+			if errors.As(err, &condErr) {
+				return fmt.Errorf("object with the same ID already exists")
+			}
+		}
 		return err
 	}
+
+	// if more than 25 items, write the object first, then batch write the indexes
 
 	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(d.ObjectsTable),
 		Item:      objMap,
+		ConditionExpression: aws.String(
+			"attribute_not_exists(pk) AND attribute_not_exists(sk)",
+		),
 	})
 	if err != nil {
+		var condErr *ddbTypes.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return fmt.Errorf("object with the same ID already exists")
+		}
 		return err
 	}
 
@@ -128,33 +186,157 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 	return nil
 }
 
-func (d *DynamoClient) UpdateObjectInlineBlob(ctx context.Context, tenantId string, tableHash string, objectId string, inlineBlob string) error {
-	_, err := d.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, currentVersion int32, applyFn func(*models.Object), indexes map[string][]byte) (*models.Object, error) {
+	existing, err := d.GetObject(ctx, tenantId, tableHash, objectId)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("object not found")
+	}
+	if existing.Status == models.StatusDeleted {
+		return nil, fmt.Errorf("object is deleted")
+	}
+	if existing.Version != currentVersion {
+		return nil, fmt.Errorf("version mismatch. Current version is %s", fmt.Sprintf("%d", existing.Version))
+	}
+
+	applyFn(existing)
+
+	item, _ := attributevalue.MarshalMap(existing)
+	out, err := d.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(d.ObjectsTable),
-		Key: map[string]ddbTypes.AttributeValue{
-			"pk": &ddbTypes.AttributeValueMemberS{Value: "TENANT#" + tenantId + "#TABLE#" + tableHash},
-			"sk": &ddbTypes.AttributeValueMemberS{Value: "OBJ#" + objectId},
-		},
-		UpdateExpression: aws.String("SET #status = :ready, #blob = :blob REMOVE #ttl"),
+		Item:      item,
+		ConditionExpression: aws.String(
+			"attribute_exists(pk) AND attribute_exists(sk) AND #v = :current AND #s <> :deleted",
+		),
 		ExpressionAttributeNames: map[string]string{
-			"#status": "status",
-			"#ttl":    "TTL",
-			"#blob":   "encrypted_blob",
+			"#v": "version",
+			"#s": "status",
 		},
 		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
-			":ready": &ddbTypes.AttributeValueMemberS{Value: models.StatusReady},
-			":blob":  &ddbTypes.AttributeValueMemberS{Value: inlineBlob},
+			":current": &ddbTypes.AttributeValueMemberN{
+				Value: fmt.Sprintf("%d", currentVersion),
+			},
+			":deleted": &ddbTypes.AttributeValueMemberS{Value: models.StatusDeleted},
 		},
 	})
-	return err
+	if err != nil {
+		var condErr *ddbTypes.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, fmt.Errorf("object was modified by another process, please retry")
+		}
+		return nil, err
+	}
+
+	var updatedObj models.Object
+	if err := attributevalue.UnmarshalMap(out.Attributes, &updatedObj); err != nil {
+		return nil, err
+	}
+
+	if err := d.updateIndexes(ctx, tenantId, tableHash, objectId, indexes, updatedObj.S3Key); err != nil {
+		return nil, err
+	}
+
+	return &updatedObj, nil
+}
+
+func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, indexes map[string][]byte, s3Key string) error {
+	currentIndexes, err := d.GetIndexesByObjectID(ctx, tenantId, tableHash, objectId)
+	if err != nil {
+		return err
+	}
+
+	for _, idx := range currentIndexes {
+		newIdx, exists := indexes[idx.GetIndexName()]
+
+		// if index doesn't exist in the new set, delete it
+		if !exists {
+			_, err := d.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+				TableName: aws.String(d.IndexesTable),
+				Key: map[string]ddbTypes.AttributeValue{
+					"pk": &ddbTypes.AttributeValueMemberS{Value: idx.PK},
+					"sk": &ddbTypes.AttributeValueMemberB{Value: idx.SK},
+				},
+			})
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// if index exists but token has changed, update it
+		if !bytes.Equal(newIdx, idx.GetToken()) {
+			_, err := d.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+				TableName: aws.String(d.IndexesTable),
+				Key: map[string]ddbTypes.AttributeValue{
+					"pk": &ddbTypes.AttributeValueMemberS{Value: idx.PK},
+					"sk": &ddbTypes.AttributeValueMemberB{Value: idx.SK},
+				},
+				UpdateExpression: aws.String("SET sk = :newToken, updated_at = :updatedAt"),
+				ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+					":newToken":  &ddbTypes.AttributeValueMemberB{Value: newIdx},
+					":updatedAt": &ddbTypes.AttributeValueMemberS{Value: time.Now().UTC().Format(time.RFC3339)},
+				},
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// add new indexes that didn't exist before
+	for idxName, token := range indexes {
+		if _, exists := currentIndexes[idxName]; exists {
+			continue
+		}
+		newIndex := models.NewIndex(idxName, tenantId, tableHash, token, objectId, s3Key)
+		item, err := attributevalue.MarshalMap(newIndex)
+		if err != nil {
+			return err
+		}
+		_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
+			TableName: aws.String(d.IndexesTable),
+			Item:      item,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *DynamoClient) GetIndexesByObjectID(ctx context.Context, tenantId string, tableHash string, objectId string) (map[string]models.Index, error) {
+	pk := models.GenerateGSI1PK(tenantId, tableHash, objectId)
+	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(d.IndexesTable),
+		IndexName:              aws.String("gsi1"),
+		KeyConditionExpression: aws.String("pk = :pk"),
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	indexes := make(map[string]models.Index, len(out.Items))
+	for _, item := range out.Items {
+		var index models.Index
+		if err := attributevalue.UnmarshalMap(item, &index); err != nil {
+			return nil, err
+		}
+		indexes[index.GetIndexName()] = index
+	}
+	return indexes, nil
 }
 
 /*
 GetObject retrieves an object by tenant ID and object ID from DynamoDB.
 */
 func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, tableHash string, objectId string) (*models.Object, error) {
-	pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash)
-	sk := fmt.Sprintf("OBJ#%s", objectId)
+	pk := models.GenerateObjectPK(tenantId, tableHash)
+	sk := models.GenerateObjectSK(objectId)
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &d.ObjectsTable,
@@ -185,8 +367,8 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 	}
 	keys := make([]map[string]ddbTypes.AttributeValue, 0, len(objectsIds))
 	for _, objectId := range objectsIds {
-		pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantId, tableHash)
-		sk := fmt.Sprintf("OBJ#%s", objectId)
+		pk := models.GenerateObjectPK(tenantId, tableHash)
+		sk := models.GenerateObjectSK(objectId)
 		keys = append(keys, map[string]ddbTypes.AttributeValue{
 			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
@@ -213,7 +395,7 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 		if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
 			return nil, err
 		}
-		result[extractObjectIdFromSK(obj.SK)] = obj.KMSWrappedDEK
+		result[obj.GetObjectID()] = obj.KMSWrappedDEK
 	}
 	return result, nil
 }
@@ -232,7 +414,7 @@ func (d *DynamoClient) CreateTenant(ctx context.Context, tenantID string, wrappe
 }
 
 func (d *DynamoClient) GetTenant(ctx context.Context, tenantID string) (*models.TenantConfig, error) {
-	pk := fmt.Sprintf("TENANT#%s", tenantID)
+	pk := models.GenerateTenantConfigPK(tenantID)
 
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(d.TenantConfigTable),
@@ -271,8 +453,8 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 	return apiKey, err
 }
 
-func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantID string, providedKey string) (*models.APIKey, error) {
-	pk := fmt.Sprintf("TENANT#%s", tenantID)
+func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantId string, providedKey string) (*models.APIKey, error) {
+	pk := models.GenerateAPIKeyPK(tenantId)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(d.APIKeysTable),
 		KeyConditionExpression: aws.String("pk = :pk"),
@@ -313,7 +495,7 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 		l := int32(limit)
 		dynamoLimit = &l
 	}
-	pk := fmt.Sprintf("TENANT#%s#TABLE#%s", tenantID, tableHash)
+	pk := models.GenerateObjectPK(tenantID, tableHash)
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(d.ObjectsTable),
 		KeyConditionExpression: aws.String("pk = :pk"),
@@ -352,18 +534,4 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 		Objects:   objects,
 		NextToken: lastEvalKey,
 	}, nil
-}
-
-// Helper function to extract tenant from PK of format "TENANT#<tenant_id>#TABLE#<table_hash>"
-func extractTenantFromPK(pk string) string {
-	var tenantId string
-	fmt.Sscanf(pk, "TENANT#%s#TABLE#", &tenantId)
-	return tenantId
-}
-
-// Helper function to extract object ID from SK of format "OBJ#<object_id>"
-func extractObjectIdFromSK(sk string) string {
-	var objectId string
-	fmt.Sscanf(sk, "OBJ#%s", &objectId)
-	return objectId
 }

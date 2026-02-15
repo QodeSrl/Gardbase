@@ -6,12 +6,31 @@ type GetTableHashResponse struct {
 	TableHash string `json:"table_hash"`
 }
 
+type GetTableIEKResponse struct {
+	IEK string `json:"iek"` // Base64-encoded Index Encryption Key
+}
+
 type PutObjectResponse struct {
 	ObjectID  string    `json:"object_id"`
-	UploadURL string    `json:"upload_url"`
-	ExpiresIn int64     `json:"expires_in_seconds"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 	TableHash string    `json:"table_hash"`
+	Version   int32     `json:"version"`
+}
+
+type RequestPutLargeObjectResponse struct {
+	UploadURL       string `json:"upload_url"`
+	ObjectID        string `json:"object_id"`
+	ExpiresIn       int64  `json:"expires_in_seconds"`
+	ExpectedVersion int32  `json:"expected_version"`
+}
+
+type ConfirmPutLargeObjectResponse struct {
+	ObjectID  string    `json:"object_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	TableHash string    `json:"table_hash"`
+	Version   int32     `json:"version"`
 }
 
 type ResultObject struct {
