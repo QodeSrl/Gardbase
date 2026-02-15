@@ -94,7 +94,9 @@ resource "aws_iam_role_policy" "api_policy" {
           aws_dynamodb_table.tenant_configs.arn,
           "${aws_dynamodb_table.tenant_configs.arn}/index/*",
           aws_dynamodb_table.api_keys.arn,
-          "${aws_dynamodb_table.api_keys.arn}/index/*"
+          "${aws_dynamodb_table.api_keys.arn}/index/*",
+          aws_dynamodb_table.table_configs.arn,
+          "${aws_dynamodb_table.table_configs.arn}/index/*"
         ]
       },
       {
