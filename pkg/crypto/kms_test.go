@@ -41,12 +41,15 @@ func TestGenerateDEK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to start decrypt session: %v", err)
 	}
-	DEKs, err := sess.GenerateDEK(ctx, 3)
+	DEKs, iek, err := sess.GenerateDEK(ctx, "dGVzdC10YWJsZS1oYXNo", 3)
 	if err != nil {
 		t.Fatalf("Failed to generate DEK: %v", err)
 	}
 	if len(DEKs) != 3 {
 		t.Fatalf("Expected 3 DEKs, got %d", len(DEKs))
+	}
+	if len(iek) == 0 {
+		t.Fatal("Expected non-empty IEK")
 	}
 	t.Logf("Successfully generated DEKs")
 }

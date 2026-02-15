@@ -214,28 +214,29 @@ type GeneratedDEK struct {
 	MasterKeyNonce        []byte
 }
 
-func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (generatedDEKs []GeneratedDEK, err error) {
+func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, tableHash string, count int) (generatedDEKs []GeneratedDEK, iek []byte, err error) {
 	if time.Now().After(ess.ExpiresAt) {
-		return nil, errors.New("decrypt session has expired")
+		return nil, nil, errors.New("decrypt session has expired")
 	}
 	if !ess.AttestationVerified {
-		return nil, errors.New("attestation not verified")
+		return nil, nil, errors.New("attestation not verified")
 	}
 
 	body := encryption.SessionGenerateDEKRequest{
 		SessionId: ess.SessionId,
 		Count:     count,
+		TableHash: tableHash,
 	}
 	reqBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ess.endpoint+"/secure-session/generate-deks", strings.NewReader(string(reqBytes)))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := ess.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer res.Body.Close()
 
@@ -243,31 +244,31 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (ge
 		var errBody errBody
 		if err := json.NewDecoder(res.Body).Decode(&errBody); err == nil {
 			bodyBytes, _ := io.ReadAll(res.Body)
-			return nil, fmt.Errorf("failed to start decrypt session: status %d, error: %s", res.StatusCode, string(bodyBytes))
+			return nil, nil, fmt.Errorf("failed to start decrypt session: status %d, error: %s", res.StatusCode, string(bodyBytes))
 		}
-		return nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
+		return nil, nil, fmt.Errorf("failed to start decrypt session: status %d", res.StatusCode)
 	}
 
 	var resBody encryption.SessionGenerateDEKResponse
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, DEK := range resBody.DEKs {
 		dek, err := openDEK(ess.SessionKey, DEK.SealedDEK, DEK.SessionNonce, nil)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		encryptedDEK, err := base64.StdEncoding.DecodeString(DEK.KmsEncryptedDEK)
 		if err != nil {
-			return nil, errors.New("invalid base64 KMS encrypted DEK")
+			return nil, nil, errors.New("invalid base64 KMS encrypted DEK")
 		}
 		masterKeyEncryptedDEK, err := base64.StdEncoding.DecodeString(DEK.MasterEncryptedDEK)
 		if err != nil {
-			return nil, errors.New("invalid base64 Master Key encrypted DEK")
+			return nil, nil, errors.New("invalid base64 Master Key encrypted DEK")
 		}
 		masterKeyNonce, err := base64.StdEncoding.DecodeString(DEK.MasterKeyNonce)
 		if err != nil {
-			return nil, errors.New("invalid base64 Master Key nonce")
+			return nil, nil, errors.New("invalid base64 Master Key nonce")
 		}
 		generatedDEKs = append(generatedDEKs, GeneratedDEK{
 			PlaintextDEK:          dek,
@@ -276,7 +277,54 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, count int) (ge
 			MasterKeyNonce:        masterKeyNonce,
 		})
 	}
-	return generatedDEKs, nil
+	iek, err = openDEK(ess.SessionKey, resBody.SealedIEK, resBody.IEKNonce, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open IEK: %w", err)
+	}
+	return generatedDEKs, iek, nil
+}
+
+func (ess *EnclaveSecureSession) GetTableIEK(ctx context.Context, tableHash string) ([]byte, error) {
+	if time.Now().After(ess.ExpiresAt) {
+		return nil, errors.New("decrypt session has expired")
+	}
+	if !ess.AttestationVerified {
+		return nil, errors.New("attestation not verified")
+	}
+
+	body := encryption.SessionGetTableIEKRequest{
+		SessionId: ess.SessionId,
+		TableHash: tableHash,
+	}
+
+	reqBytes, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ess.endpoint+"/secure-session/get-table-iek", strings.NewReader(string(reqBytes)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := ess.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		var errBody errBody
+		if err := json.NewDecoder(res.Body).Decode(&errBody); err == nil {
+			bodyBytes, _ := io.ReadAll(res.Body)
+			return nil, fmt.Errorf("failed to get table IEK: status %d, error: %s", res.StatusCode, string(bodyBytes))
+		}
+		return nil, fmt.Errorf("failed to get table IEK: status %d", res.StatusCode)
+	}
+	var resBody encryption.SessionGetTableIEKResponse
+	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
+		return nil, err
+	}
+	iek, err := openDEK(ess.SessionKey, resBody.SealedIEK, resBody.IEKNonce, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open IEK: %w", err)
+	}
+	return iek, nil
 }
 
 func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
