@@ -187,24 +187,24 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 }
 
 func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, currentVersion int32, applyFn func(*models.Object), indexes map[string][]byte) (*models.Object, error) {
-	existing, err := d.GetObject(ctx, tenantId, tableHash, objectId)
+	obj, err := d.GetObject(ctx, tenantId, tableHash, objectId)
 	if err != nil {
 		return nil, err
 	}
-	if existing == nil {
+	if obj == nil {
 		return nil, fmt.Errorf("object not found")
 	}
-	if existing.Status == models.StatusDeleted {
+	if obj.Status == models.StatusDeleted {
 		return nil, fmt.Errorf("object is deleted")
 	}
-	if existing.Version != currentVersion {
-		return nil, fmt.Errorf("version mismatch. Current version is %s", fmt.Sprintf("%d", existing.Version))
+	if obj.Version != currentVersion {
+		return nil, fmt.Errorf("version mismatch. Current version is %s", fmt.Sprintf("%d", obj.Version))
 	}
 
-	applyFn(existing)
+	applyFn(obj)
 
-	item, _ := attributevalue.MarshalMap(existing)
-	out, err := d.Client.PutItem(ctx, &dynamodb.PutItemInput{
+	item, _ := attributevalue.MarshalMap(obj)
+	_, err = d.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(d.ObjectsTable),
 		Item:      item,
 		ConditionExpression: aws.String(
@@ -229,16 +229,11 @@ func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId str
 		return nil, err
 	}
 
-	var updatedObj models.Object
-	if err := attributevalue.UnmarshalMap(out.Attributes, &updatedObj); err != nil {
+	if err := d.updateIndexes(ctx, tenantId, tableHash, objectId, indexes, obj.S3Key); err != nil {
 		return nil, err
 	}
 
-	if err := d.updateIndexes(ctx, tenantId, tableHash, objectId, indexes, updatedObj.S3Key); err != nil {
-		return nil, err
-	}
-
-	return &updatedObj, nil
+	return obj, nil
 }
 
 func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, indexes map[string][]byte, s3Key string) error {
@@ -312,7 +307,7 @@ func (d *DynamoClient) GetIndexesByObjectID(ctx context.Context, tenantId string
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(d.IndexesTable),
 		IndexName:              aws.String("gsi1"),
-		KeyConditionExpression: aws.String("pk = :pk"),
+		KeyConditionExpression: aws.String("gsi1pk = :pk"),
 		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
 			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 		},

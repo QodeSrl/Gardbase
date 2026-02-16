@@ -297,14 +297,14 @@ func (h *ObjectHandler) Put(c *gin.Context) {
 	}
 
 	// Update
-	obj, err := h.Dynamo.UpdateObjectWithIndexes(ctx, tenantId, req.TableHash, req.ObjectID, req.Version, func(obj *models.Object) {
+	obj, err := h.Dynamo.UpdateObjectWithIndexes(ctx, tenantId, req.TableHash, req.ObjectID, req.Version-1, func(obj *models.Object) {
 		obj.EncryptedBlob = req.EncryptedBlob
 		obj.S3Key = "" // clear s3key if switching from large object to inline
 		obj.KMSWrappedDEK = req.KMSEncryptedDEK
 		obj.MasterWrappedDEK = req.MasterEncryptedDEK
 		obj.DEKNonce = req.DEKNonce
 		obj.UpdatedAt = now
-		obj.Version = req.Version + 1
+		obj.Version = req.Version
 		if req.Sensitivity != "" {
 			obj.Sensitivity = req.Sensitivity
 		}
