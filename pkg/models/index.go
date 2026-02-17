@@ -37,8 +37,8 @@ func GenerateIndexPK(tenantId string, tableHash string, indexName string) string
 func (i *Index) GetIndexName() string {
 	// PK format: "TENANT#<tenant_id>#TABLE#<table_hash>#IDX#<index_name>"
 	parts := strings.SplitN(i.PK, "#", 5)
-	if len(parts) == 5 && parts[3] == "IDX" {
-		return parts[4]
+	if len(parts) == 5 && parts[4] == "IDX" {
+		return parts[5]
 	}
 	return ""
 }
@@ -47,7 +47,7 @@ func (i *Index) GetTableHash() string {
 	// PK format: "TENANT#<tenant_id>#TABLE#<table_hash>#IDX#<index_name>"
 	parts := strings.SplitN(i.PK, "#", 5)
 	if len(parts) == 5 && parts[2] == "TABLE" {
-		return parts[2]
+		return parts[3]
 	}
 	return ""
 }
