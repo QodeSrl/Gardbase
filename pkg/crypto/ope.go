@@ -12,10 +12,82 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
+	"time"
 )
 
+func NormalizeInt64(v int64) uint64 {
+	// from int64 range [-2^63, 2^63-1] to uint64 range [0, 2^64-1]
+	// XOR with the sign bit to flip the range: negative numbers (sign bit 1) become smaller, positive numbers (sign bit 0) become larger
+	return uint64(v) + (1 << 63)
+}
+
+func DenormalizeInt64(v uint64) int64 {
+	// from uint64 range [0, 2^64-1] back to int64 range [-2^63, 2^63-1]
+	return int64(v - (1 << 63))
+}
+
+func NormalizeInt32(v int32) uint64 {
+	// from int32 range [-2^31, 2^31-1] to uint64 range [0, 2^64-1]
+	// the full uint64 range is not used; values fit in [0, 2^32-1]
+	return uint64(uint32(v) ^ (1 << 31))
+}
+
+func DenormalizeInt32(v uint64) int32 {
+	// from uint64 range [0, 2^64-1] back to int32 range [-2^31, 2^31-1]
+	return int32(uint32(v) ^ (1 << 31))
+}
+
+func NormalizeFloat64(v float64) uint64 {
+	if math.IsNaN(v) {
+		panic("NaN cannot be encrypted with OPE")
+	}
+	bits := math.Float64bits(v)
+	if bits>>63 == 0 {
+		// positive (including +0.0, +Inf): flip sign bit
+		return bits ^ (1 << 63)
+	}
+	// negative (including -0.0, -Inf): flip all bits
+	return ^bits
+}
+
+func DenormalizeFloat64(v uint64) float64 {
+	var bits uint64
+	if v>>63 == 0 {
+		// was positive: flip sign bit back
+		bits = v ^ (1 << 63)
+	} else {
+		// was negative: flip all bits back
+		bits = ^v
+	}
+	return math.Float64frombits(bits)
+}
+
+func NormalizeFloat32(v float32) uint64 {
+	if math.IsNaN(float64(v)) {
+		panic("NaN cannot be encrypted with OPE")
+	}
+	bits := uint64(math.Float32bits(v))
+	if bits>>31 == 0 {
+		return bits ^ (1 << 31)
+	}
+	return uint64(^uint32(bits))
+}
+
+func DenormalizeFloat32(v uint64) float32 {
+	u := uint32(v)
+	var bits uint32
+	if u>>31 == 1 {
+		bits = u ^ (1 << 31)
+	} else {
+		bits = ^u
+	}
+	return math.Float32frombits(bits)
+}
+
 // WARNING: This is trivially breakable with known plaintext attacks
-// TODO: Replace with a more secure OPE scheme
+// TODO: Replace with a more secure OPE scheme (CRITICAL!!!!!)
+// Could replace this algorithm with a ported version of pyope (https://github.com/tonyo/pyope), which implements Boldyreva's symmetric OPE scheme.
 //
 // ct format: encrypted value (8 bytes)
 func EncryptObjectLinearOPE(plaintext uint64, dek []byte) ([]byte, error) {
