@@ -85,6 +85,58 @@ func DenormalizeFloat32(v uint64) float32 {
 	return math.Float32frombits(bits)
 }
 
+// NormalizeTime supports time values from approximately year 1678 to 2262, which should be sufficient for most applications. For dates outside this range, use NormalizeTimeSeconds instead, which has second-level precision but can represent the full int64 range of Unix timestamps.
+func NormalizeTime(t time.Time) uint64 {
+	return NormalizeInt64(t.UTC().UnixNano())
+}
+
+func DenormalizeTime(v uint64) time.Time {
+	return time.Unix(0, DenormalizeInt64(v)).UTC()
+}
+
+// Use NormalizeTimeSeconds for historical dates or far-future timestamps
+func NormalizeTimeSeconds(t time.Time) uint64 {
+	return NormalizeInt64(t.UTC().Unix())
+}
+
+func DenormalizeTimeSeconds(v uint64) time.Time {
+	return time.Unix(DenormalizeInt64(v), 0).UTC()
+}
+
+func NormalizeUint32(v uint32) uint64 {
+	// from uint32 range [0, 2^32-1] to uint64 range [0, 2^64-1]
+	return uint64(v)
+}
+
+func DenormalizeUint32(v uint64) uint32 {
+	// from uint64 range [0, 2^64-1] back to uint32 range [0, 2^32-1]
+	return uint32(v)
+}
+
+func NormalizeValue(v any) (uint64, error) {
+	switch val := v.(type) {
+	case int64:
+		return NormalizeInt64(val), nil
+	case int32:
+		return NormalizeInt32(val), nil
+	case float64:
+		return NormalizeFloat64(val), nil
+	case float32:
+		return NormalizeFloat32(val), nil
+	case time.Time:
+		return NormalizeTime(val), nil
+	case *time.Time:
+		if val == nil {
+			return 0, errors.New("cannot normalize nil time pointer")
+		}
+		return NormalizeTime(*val), nil
+	case uint32:
+		return NormalizeUint32(val), nil
+	default:
+		return 0, fmt.Errorf("unsupported type for normalization: %T", v)
+	}
+}
+
 // WARNING: This is trivially breakable with known plaintext attacks
 // TODO: Replace with a more secure OPE scheme (CRITICAL!!!!!)
 // Could replace this algorithm with a ported version of pyope (https://github.com/tonyo/pyope), which implements Boldyreva's symmetric OPE scheme.
