@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/QodeSrl/gardbase/pkg/api/objects"
 	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -87,15 +88,19 @@ If the total number of items to write (object + indexes) is 25 or fewer, it perf
 Otherwise, it writes the object separately and batches the index writes in groups of 25 using BatchWriteItem.
 Returns an error if any DynamoDB operation fails.
 */
-func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash string, obj *models.Object, indexes map[string][]byte) error {
+func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash string, obj *models.Object, indexes []objects.Index) error {
 	objMap, err := attributevalue.MarshalMap(obj)
 	if err != nil {
 		return err
 	}
 
 	indexItems := make([]map[string]ddbTypes.AttributeValue, 0, len(indexes))
-	for idxName, token := range indexes {
-		index := models.NewIndex(idxName, obj.GetTenantID(), tableHash, token, obj.GetObjectID(), obj.S3Key)
+	for _, idx := range indexes {
+		name := idx.Name.HashField
+		if idx.Name.RangeField != nil {
+			name += ":" + *idx.Name.RangeField
+		}
+		index := models.NewIndex(name, obj.GetTenantID(), tableHash, idx.Token, obj.GetObjectID(), obj.S3Key)
 		av, err := attributevalue.MarshalMap(index)
 		if err != nil {
 			return err
@@ -186,7 +191,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 	return nil
 }
 
-func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, currentVersion int32, applyFn func(*models.Object), indexes map[string][]byte) (*models.Object, error) {
+func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, currentVersion int32, applyFn func(*models.Object), indexes []objects.Index) (*models.Object, error) {
 	obj, err := d.GetObject(ctx, tenantId, tableHash, objectId)
 	if err != nil {
 		return nil, err
@@ -236,14 +241,24 @@ func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId str
 	return obj, nil
 }
 
-func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, indexes map[string][]byte, s3Key string) error {
+func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, tableHash string, objectId string, indexes []objects.Index, s3Key string) error {
 	currentIndexes, err := d.GetIndexesByObjectID(ctx, tenantId, tableHash, objectId)
 	if err != nil {
 		return err
 	}
+	indexMap := make(map[string][]byte)
+	for _, idx := range indexes {
+		var name string
+		if idx.Name.RangeField != nil {
+			name = fmt.Sprintf("%s:%s", idx.Name.HashField, *idx.Name.RangeField)
+		} else {
+			name = idx.Name.HashField
+		}
+		indexMap[name] = idx.Token
+	}
 
 	for _, idx := range currentIndexes {
-		newIdx, exists := indexes[idx.GetIndexName()]
+		newIdx, exists := indexMap[idx.GetIndexName()]
 
 		// if index doesn't exist in the new set, delete it
 		if !exists {
@@ -281,11 +296,17 @@ func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, table
 	}
 
 	// add new indexes that didn't exist before
-	for idxName, token := range indexes {
+	for _, idx := range indexes {
+		var idxName string
+		if idx.Name.RangeField != nil {
+			idxName = fmt.Sprintf("%s:%s", idx.Name.HashField, *idx.Name.RangeField)
+		} else {
+			idxName = idx.Name.HashField
+		}
 		if _, exists := currentIndexes[idxName]; exists {
 			continue
 		}
-		newIndex := models.NewIndex(idxName, tenantId, tableHash, token, objectId, s3Key)
+		newIndex := models.NewIndex(idxName, tenantId, tableHash, idx.Token, objectId, s3Key)
 		item, err := attributevalue.MarshalMap(newIndex)
 		if err != nil {
 			return err
