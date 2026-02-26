@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -47,13 +46,8 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get attestation document: " + err.Error()})
 		return
 	}
-	wrappedTableSalt, err := base64.StdEncoding.DecodeString(tenant.WrappedTableSalt)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode table salt: " + err.Error()})
-		return
-	}
 	// Decrypt table salt using KMS
-	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), wrappedTableSalt, attDoc, tenantId, services.PurposeTableSalt)
+	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), tenant.WrappedTableSalt, attDoc, tenantId, services.PurposeTableSalt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt table salt: " + err.Error()})
 		return
@@ -63,7 +57,7 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		SessionID:                 req.SessionID,
 		SessionEncryptedTableName: req.SessionEncryptedTableName,
 		SessionTableNameNonce:     req.SessionTableNameNonce,
-		TableSalt:                 base64.StdEncoding.EncodeToString(tableSalt.CiphertextForRecipient),
+		TableSalt:                 tableSalt.CiphertextForRecipient,
 	}
 	payloadBytes, err := json.Marshal(enclaveReqBody)
 	if err != nil {

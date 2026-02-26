@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/sha512"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
@@ -71,14 +70,9 @@ func (ess *EnclaveSecureSession) verifyAttestation(config SessionConfig) (*verif
 		VerifiedSteps: make([]string, 0),
 	}
 
-	attDoc, err := base64.StdEncoding.DecodeString(ess.AttestationB64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode attestation document: %w", err)
-	}
-
 	// 1: decode COSE Sign1 structure
 	var cose coseSign1
-	if err := cbor.Unmarshal(attDoc, &cose); err != nil {
+	if err := cbor.Unmarshal(ess.Attestation, &cose); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal COSE Sign1: %w", err)
 	}
 	result.VerifiedSteps = append(result.VerifiedSteps, "COSE_Sign1 decoded")
@@ -131,18 +125,14 @@ func (ess *EnclaveSecureSession) verifyAttestation(config SessionConfig) (*verif
 	result.VerifiedSteps = append(result.VerifiedSteps, "Timestamp verified")
 
 	// 6: verify nonce
-	expectedNonce, err := base64.StdEncoding.DecodeString(ess.ExpectedNonceB64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode expected nonce: %w", err)
-	}
-	if !bytes.Equal(doc.Nonce, expectedNonce) {
-		return nil, fmt.Errorf("nonce verification failed: %w", err)
+	if !bytes.Equal(doc.Nonce, ess.ExpectedNonce) {
+		return nil, fmt.Errorf("nonce verification failed: expected %s, got %s", hex.EncodeToString(ess.ExpectedNonce), hex.EncodeToString(doc.Nonce))
 	}
 	result.VerifiedSteps = append(result.VerifiedSteps, "Nonce verified")
 
 	// 7: verify public key
 	if !bytes.Equal(doc.PublicKey, ess.EnclavePubRaw) {
-		return nil, fmt.Errorf("public key verification failed: %w", err)
+		return nil, fmt.Errorf("public key verification failed: expected %s, got %s", hex.EncodeToString(ess.EnclavePubRaw), hex.EncodeToString(doc.PublicKey))
 	}
 	result.VerifiedSteps = append(result.VerifiedSteps, "Public key verified")
 

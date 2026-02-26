@@ -7,7 +7,7 @@ type GetTableHashResponse struct {
 }
 
 type GetTableIEKResponse struct {
-	IEK string `json:"iek"` // Base64-encoded Index Encryption Key
+	IEK []byte `json:"iek"`
 }
 
 type PutObjectResponse struct {
@@ -36,10 +36,10 @@ type ConfirmPutLargeObjectResponse struct {
 type ResultObject struct {
 	ObjectID         string    `json:"object_id"`
 	GetURL           string    `json:"get_url"`
-	EncryptedBlob    string    `json:"encrypted_blob,omitempty"`
-	KMSWrappedDEK    string    `json:"kms_wrapped_dek,omitempty"`
-	MasterWrappedDEK string    `json:"master_wrapped_dek,omitempty"`
-	DEKNonce         string    `json:"dek_nonce,omitempty"`
+	EncryptedBlob    []byte    `json:"encrypted_blob,omitempty"`
+	KMSWrappedDEK    []byte    `json:"kms_wrapped_dek,omitempty"`
+	MasterWrappedDEK []byte    `json:"master_wrapped_dek,omitempty"`
+	DEKNonce         []byte    `json:"dek_nonce,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	Version          int32     `json:"version"`

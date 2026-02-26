@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,14 +20,14 @@ import (
 )
 
 type EnclaveSecureSession struct {
-	SessionId           string   // Base64-encoded
+	SessionId           string
 	ClientPriv          [32]byte // x25519 private key
 	ClientPub           [32]byte // x25519 public key
 	EnclavePubRaw       []byte   // enclave's ephemeral public key (decoded)
 	SessionKey          []byte   // derived session key
 	ExpiresAt           time.Time
-	AttestationB64      string // Base64-encoded attestation document
-	ExpectedNonceB64    string // Base64-encoded expected nonce for attestation
+	Attestation         []byte
+	ExpectedNonce       []byte
 	AttestationVerified bool
 	AttestationResult   *verificationResult
 	endpoint            string
@@ -82,7 +81,7 @@ func (t tenantRoundTripper) base() http.RoundTripper {
 }
 
 func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*EnclaveSecureSession, error) {
-	clientPriv, clientPub, clientPubB64, err := GenerateEphemeralKeypair()
+	clientPriv, clientPub, err := GenerateEphemeralKeypair()
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +89,9 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	nonceB64 := base64.StdEncoding.EncodeToString(nonce)
-
 	reqBody := encryption.SessionInitRequest{
-		ClientEphemeralPublicKey: clientPubB64,
-		Nonce:                    nonceB64,
+		ClientEphemeralPublicKey: clientPub[:],
+		Nonce:                    nonce,
 	}
 	reqBytes, _ := json.Marshal(reqBody)
 	httpClient := &http.Client{Timeout: 15 * time.Second, Transport: tenantRoundTripper{TenantID: config.TenantID, APIKey: config.APIKey}}
@@ -124,11 +121,7 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 		return nil, err
 	}
 
-	enclavePubRaw, err := base64.StdEncoding.DecodeString(resBody.EnclaveEphemeralPublicKey)
-	if err != nil {
-		return nil, errors.New("invalid enclave ephemeral public key")
-	}
-	if len(enclavePubRaw) != 32 {
+	if len(resBody.EnclaveEphemeralPublicKey) != 32 {
 		return nil, fmt.Errorf("invalid enclave ephemeral public key length")
 	}
 
@@ -137,7 +130,7 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 		return nil, errors.New("invalid session expiration time")
 	}
 
-	sessionKey, err := deriveSessionKey(clientPriv, enclavePubRaw)
+	sessionKey, err := deriveSessionKey(clientPriv, resBody.EnclaveEphemeralPublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -146,11 +139,11 @@ func InitEnclaveSecureSession(ctx context.Context, config SessionConfig) (*Encla
 		SessionId:           resBody.SessionId,
 		ClientPriv:          clientPriv,
 		ClientPub:           clientPub,
-		EnclavePubRaw:       enclavePubRaw,
+		EnclavePubRaw:       resBody.EnclaveEphemeralPublicKey,
 		SessionKey:          sessionKey,
 		ExpiresAt:           expiresAt,
-		AttestationB64:      resBody.Attestation,
-		ExpectedNonceB64:    nonceB64,
+		Attestation:         resBody.Attestation,
+		ExpectedNonce:       nonce,
 		httpClient:          httpClient,
 		endpoint:            config.Endpoint,
 		AttestationVerified: false,
@@ -258,23 +251,11 @@ func (ess *EnclaveSecureSession) GenerateDEK(ctx context.Context, tableHash stri
 		if err != nil {
 			return nil, nil, err
 		}
-		encryptedDEK, err := base64.StdEncoding.DecodeString(DEK.KmsEncryptedDEK)
-		if err != nil {
-			return nil, nil, errors.New("invalid base64 KMS encrypted DEK")
-		}
-		masterKeyEncryptedDEK, err := base64.StdEncoding.DecodeString(DEK.MasterEncryptedDEK)
-		if err != nil {
-			return nil, nil, errors.New("invalid base64 Master Key encrypted DEK")
-		}
-		masterKeyNonce, err := base64.StdEncoding.DecodeString(DEK.MasterKeyNonce)
-		if err != nil {
-			return nil, nil, errors.New("invalid base64 Master Key nonce")
-		}
 		generatedDEKs = append(generatedDEKs, GeneratedDEK{
 			PlaintextDEK:          dek,
-			KMSEncryptedDEK:       encryptedDEK,
-			MasterKeyEncryptedDEK: masterKeyEncryptedDEK,
-			MasterKeyNonce:        masterKeyNonce,
+			KMSEncryptedDEK:       DEK.KmsEncryptedDEK,
+			MasterKeyEncryptedDEK: DEK.MasterEncryptedDEK,
+			MasterKeyNonce:        DEK.MasterKeyNonce,
 		})
 	}
 	iek, err = openDEK(ess.SessionKey, resBody.SealedIEK, resBody.IEKNonce, nil)
@@ -327,12 +308,12 @@ func (ess *EnclaveSecureSession) GetTableIEK(ctx context.Context, tableHash stri
 	return iek, nil
 }
 
-func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEKB64 string, nonceB64 string, objectID string) ([]byte, error) {
+func (ess *EnclaveSecureSession) UnsealDEK(ctx context.Context, encryptedDEK []byte, nonce []byte, objectID string) ([]byte, error) {
 	if ess.SessionKey == nil || len(ess.SessionKey) != chacha20poly1305.KeySize {
 		return nil, errors.New("invalid session key")
 	}
 
-	dek, err := openDEK(ess.SessionKey, encryptedDEKB64, nonceB64, []byte(objectID))
+	dek, err := openDEK(ess.SessionKey, encryptedDEK, nonce, []byte(objectID))
 	if err != nil {
 		return nil, err
 	}
@@ -364,17 +345,16 @@ func (ess *EnclaveSecureSession) GetAttestationInfo() map[string]any {
 	}
 }
 
-func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiKey string, wrappedDEKB64 string, nonceB64 string) ([]byte, error) {
+func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiKey string, wrappedDEK []byte, nonce []byte) ([]byte, error) {
 	clientPub, clientPriv, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	clientPubB64 := base64.StdEncoding.EncodeToString(clientPub[:])
 
 	body := encryption.DecryptRequest{
-		Ciphertext:               wrappedDEKB64,
-		Nonce:                    nonceB64,
-		ClientEphemeralPublicKey: clientPubB64,
+		Ciphertext:               wrappedDEK,
+		Nonce:                    nonce,
+		ClientEphemeralPublicKey: clientPub[:],
 	}
 
 	reqBytes, _ := json.Marshal(body)
@@ -401,23 +381,15 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiK
 	if err := json.NewDecoder(res.Body).Decode(&resBody); err != nil {
 		return nil, err
 	}
-	ciphertextBox, err := base64.StdEncoding.DecodeString(resBody.Ciphertext)
-	if err != nil {
-		return nil, errors.New("invalid base64 ciphertext")
-	}
-	enclavePubRaw, err := base64.StdEncoding.DecodeString(resBody.EnclavePubKey)
-	if err != nil {
-		return nil, errors.New("invalid base64 enclave public key")
-	}
-	if len(enclavePubRaw) != 32 {
+	if len(resBody.EnclavePubKey) != 32 {
 		return nil, errors.New("invalid enclave public key length")
 	}
-	var nonce [24]byte
-	copy(nonce[:], ciphertextBox[:24])
+	var attNonce [24]byte
+	copy(attNonce[:], resBody.Ciphertext[:24])
 
 	// TODO: verify attestation in resBody.Attestation
 
-	dek, ok := box.Open(nil, ciphertextBox[24:], &nonce, (*[32]byte)(enclavePubRaw), clientPriv)
+	dek, ok := box.Open(nil, resBody.Ciphertext[24:], &attNonce, (*[32]byte)(resBody.EnclavePubKey), clientPriv)
 	if !ok {
 		return nil, errors.New("failed to decrypt DEK with NaCl box")
 	}

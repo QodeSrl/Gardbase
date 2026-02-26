@@ -10,13 +10,13 @@ type TableConfig struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>"
 
 	// index encryption key
-	KMSWrappedIEK string `dynamodbav:"wrapped_iek" json:"kms_wrapped_iek"`
+	KMSWrappedIEK []byte `dynamodbav:"wrapped_iek" json:"kms_wrapped_iek"`
 
 	CreatedAt time.Time `dynamodbav:"created_at" json:"created_at"`
 	UpdatedAt time.Time `dynamodbav:"updated_at" json:"updated_at"`
 }
 
-func NewTableConfig(tenantId string, tableHash string, kmsWrappedIEK string) *TableConfig {
+func NewTableConfig(tenantId string, tableHash string, kmsWrappedIEK []byte) *TableConfig {
 	return &TableConfig{
 		PK:            GenerateTableConfigPK(tenantId, tableHash),
 		KMSWrappedIEK: kmsWrappedIEK,

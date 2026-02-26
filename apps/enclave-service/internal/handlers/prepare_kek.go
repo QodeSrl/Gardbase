@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -20,13 +19,12 @@ func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession
 		return
 	}
 
-	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey)
-	if err != nil || len(clientPubKeyBytes) != 32 {
+	if len(req.ClientEphemeralPublicKey) != 32 {
 		utils.SendError(encoder, "Invalid client ephemeral key")
 		return
 	}
 	var clientPubKey [32]byte
-	copy(clientPubKey[:], clientPubKeyBytes)
+	copy(clientPubKey[:], req.ClientEphemeralPublicKey)
 
 	var nonce [24]byte
 	if _, err := nsmSession.Read(nonce[:]); err != nil {
@@ -34,26 +32,14 @@ func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession
 		return
 	}
 
-	wrappedMasterKey, err := base64.StdEncoding.DecodeString(req.MasterKey)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid master key encoding: %v", err))
-		return
-	}
-
-	wrappedTableSalt, err := base64.StdEncoding.DecodeString(req.TableSalt)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid table salt encoding: %v", err))
-		return
-	}
-
 	// decrypt the master key for recipient using NSM private key
-	masterKey, err := utils.DecryptWithOpenSSL(wrappedMasterKey, nsmPrivKey)
+	masterKey, err := utils.DecryptWithOpenSSL(req.MasterKey, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
 		return
 	}
 	// decrypt the table salt for recipient using NSM private key
-	tableSalt, err := utils.DecryptWithOpenSSL(wrappedTableSalt, nsmPrivKey)
+	tableSalt, err := utils.DecryptWithOpenSSL(req.TableSalt, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt table salt for recipient: %v", err))
 		return
@@ -72,10 +58,10 @@ func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession
 	resp := enclaveproto.Response[enclaveproto.PrepareKEKResponse]{
 		Success: true,
 		Data: enclaveproto.PrepareKEKResponse{
-			EnclavePubKey: base64.StdEncoding.EncodeToString(enclavePubKey[:]),
-			MasterKey:     base64.StdEncoding.EncodeToString(encryptedMasterKey),
-			TableSalt:     base64.StdEncoding.EncodeToString(encryptedTableSalt),
-			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
+			EnclavePubKey: enclavePubKey[:],
+			MasterKey:     encryptedMasterKey,
+			TableSalt:     encryptedTableSalt,
+			Nonce:         nonce[:],
 		},
 	}
 

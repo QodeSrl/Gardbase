@@ -48,7 +48,7 @@ func (d *DynamoClient) TestConnnectivity(ctx context.Context) error {
 	return err
 }
 
-func (d *DynamoClient) GetWrappedTableIEK(ctx context.Context, tenantId string, tableHash string) (string, error) {
+func (d *DynamoClient) GetWrappedTableIEK(ctx context.Context, tenantId string, tableHash string) ([]byte, error) {
 	out, err := d.Client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(d.TableConfigTable),
 		Key: map[string]ddbTypes.AttributeValue{
@@ -56,19 +56,19 @@ func (d *DynamoClient) GetWrappedTableIEK(ctx context.Context, tenantId string, 
 		},
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if out.Item == nil {
-		return "", nil
+		return nil, nil
 	}
 	var tableConfig models.TableConfig
 	if err := attributevalue.UnmarshalMap(out.Item, &tableConfig); err != nil {
-		return "", err
+		return nil, err
 	}
 	return tableConfig.KMSWrappedIEK, nil
 }
 
-func (d *DynamoClient) SetWrappedTableIEK(ctx context.Context, tenantId string, tableHash string, kmsWrappedIEK string) error {
+func (d *DynamoClient) SetWrappedTableIEK(ctx context.Context, tenantId string, tableHash string, kmsWrappedIEK []byte) error {
 	tableConfig := models.NewTableConfig(tenantId, tableHash, kmsWrappedIEK)
 	item, err := attributevalue.MarshalMap(tableConfig)
 	if err != nil {
@@ -377,9 +377,9 @@ func (d *DynamoClient) GetObject(ctx context.Context, tenantId string, tableHash
 	return &obj, nil
 }
 
-func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId string, tableHash string, objectsIds []string) (map[string]string, error) {
+func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId string, tableHash string, objectsIds []string) (map[string][]byte, error) {
 	if len(objectsIds) == 0 {
-		return map[string]string{}, nil
+		return map[string][]byte{}, nil
 	}
 	keys := make([]map[string]ddbTypes.AttributeValue, 0, len(objectsIds))
 	for _, objectId := range objectsIds {
@@ -402,7 +402,7 @@ func (d *DynamoClient) BatchGetEncryptedDEKs(ctx context.Context, tenantId strin
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]string, len(objectsIds))
+	result := make(map[string][]byte, len(objectsIds))
 	if out.Responses == nil || out.Responses[d.ObjectsTable] == nil {
 		return result, nil
 	}

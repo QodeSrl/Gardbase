@@ -2,7 +2,6 @@ package services
 
 import (
 	"bufio"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -30,17 +29,13 @@ func (v *Vsock) RequestAttestationDocument() ([]byte, error) {
 	if err := json.Unmarshal(resBytes, &res); err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal get attestation response: %v", err)
 	}
-	att, err := base64.StdEncoding.DecodeString(res.Data.Attestation)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to decode attestation document: %v", err)
-	}
 	if !res.Success {
 		return nil, fmt.Errorf("Enclave returned error: %s", res.Error)
 	}
-	if len(att) == 0 {
+	if len(res.Data.Attestation) == 0 {
 		return nil, fmt.Errorf("Empty attestation document")
 	}
-	return att, nil
+	return res.Data.Attestation, nil
 }
 
 func (v *Vsock) SendToEnclave(req enclaveproto.Request, timeout time.Duration) (json.RawMessage, error) {

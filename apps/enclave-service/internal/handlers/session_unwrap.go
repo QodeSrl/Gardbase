@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -36,17 +35,8 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 
 	for _, it := range req.Items {
 		objId := it.ObjectId
-		ciphertext, err := base64.StdEncoding.DecodeString(it.Ciphertext)
-		if err != nil {
-			results = append(results, enclaveproto.SessionUnwrapItemResult{
-				ObjectId: objId,
-				Success:  false,
-				Error:    fmt.Sprintf("Invalid base64 ciphertext: %v", err),
-			})
-			continue
-		}
 		// note: here nsmSession is used as a rand.Reader
-		plainDEK, err := utils.DecryptWithOpenSSL(ciphertext, nsmPrivKey)
+		plainDEK, err := utils.DecryptWithOpenSSL(it.Ciphertext, nsmPrivKey)
 		if err != nil {
 			results = append(results, enclaveproto.SessionUnwrapItemResult{
 				ObjectId: objId,
@@ -74,8 +64,8 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 
 		results = append(results, enclaveproto.SessionUnwrapItemResult{
 			ObjectId:  objId,
-			SealedDEK: base64.StdEncoding.EncodeToString(sealedDEK),
-			Nonce:     base64.StdEncoding.EncodeToString(nonce),
+			SealedDEK: sealedDEK,
+			Nonce:     nonce,
 			Success:   true,
 		})
 	}

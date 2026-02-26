@@ -1,14 +1,14 @@
 package objects
 
 type GetTableHashRequest struct {
-	SessionID                 string `json:"session_id" binding:"required"` // Base64-encoded session ID
-	SessionEncryptedTableName string `json:"encrypted_table_name,omitempty"`
-	SessionTableNameNonce     string `json:"table_name_nonce,omitempty"`
+	SessionID                 string `json:"session_id" binding:"required"`
+	SessionEncryptedTableName []byte `json:"encrypted_table_name,omitempty"`
+	SessionTableNameNonce     []byte `json:"table_name_nonce,omitempty"`
 }
 
 type GetTableIEKRequest struct {
-	SessionID string `json:"session_id" binding:"required"` // Base64-encoded session ID
-	TableHash string `json:"table_hash" binding:"required"` // Base64-encoded table hash
+	SessionID string `json:"session_id" binding:"required"`
+	TableHash string `json:"table_hash" binding:"required"`
 }
 
 type IndexName struct {
@@ -25,10 +25,10 @@ type Index struct {
 type PutObjectRequest struct {
 	ObjectID           string  `json:"object_id,omitempty"` // Optional for updates, auto-generated for new objects
 	TableHash          string  `json:"table_hash" binding:"required"`
-	EncryptedBlob      string  `json:"encrypted_blob" binding:"required"`
-	KMSEncryptedDEK    string  `json:"encrypted_dek" binding:"required"`
-	MasterEncryptedDEK string  `json:"master_encrypted_dek" binding:"required"`
-	DEKNonce           string  `json:"dek_nonce" binding:"required"`
+	EncryptedBlob      []byte  `json:"encrypted_blob" binding:"required"`
+	KMSEncryptedDEK    []byte  `json:"encrypted_dek" binding:"required"`
+	MasterEncryptedDEK []byte  `json:"master_encrypted_dek" binding:"required"`
+	DEKNonce           []byte  `json:"dek_nonce" binding:"required"`
 	Indexes            []Index `json:"indexes,omitempty"`
 	Sensitivity        string  `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
 	Version            int32   `json:"version,omitempty"` // 1 = new object, >1 = update
@@ -45,9 +45,9 @@ type RequestPutLargeObjectRequest struct {
 type ConfirmPutLargeObjectRequest struct {
 	ObjectID           string  `json:"object_id" binding:"required"`
 	TableHash          string  `json:"table_hash" binding:"required"`
-	KMSEncryptedDEK    string  `json:"encrypted_dek" binding:"required"`
-	MasterEncryptedDEK string  `json:"master_encrypted_dek" binding:"required"`
-	DEKNonce           string  `json:"dek_nonce" binding:"required"`
+	KMSEncryptedDEK    []byte  `json:"encrypted_dek" binding:"required"`
+	MasterEncryptedDEK []byte  `json:"master_encrypted_dek" binding:"required"`
+	DEKNonce           []byte  `json:"dek_nonce" binding:"required"`
 	Indexes            []Index `json:"indexes,omitempty"`
 	Sensitivity        string  `json:"sensitivity,omitempty" binding:"omitempty,oneof=low medium high"`
 	Version            int32   `json:"version,omitempty"` // 1 = new object, >1 = update
