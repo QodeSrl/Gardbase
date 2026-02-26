@@ -85,7 +85,7 @@ resource "aws_iam_role_policy" "api_policy" {
       },
       {
         Effect = "Allow"
-        Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:DescribeTable"]
+        Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:DescribeTable"]
         Resource = [
           aws_dynamodb_table.objects.arn,
           "${aws_dynamodb_table.objects.arn}/index/*",
