@@ -142,7 +142,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 		if err != nil {
 			var condErr *ddbTypes.ConditionalCheckFailedException
 			if errors.As(err, &condErr) {
-				return fmt.Errorf("object with the same ID already exists")
+				return ErrAlreadyExists
 			}
 		}
 		return err
@@ -160,7 +160,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 	if err != nil {
 		var condErr *ddbTypes.ConditionalCheckFailedException
 		if errors.As(err, &condErr) {
-			return fmt.Errorf("object with the same ID already exists")
+			return ErrAlreadyExists
 		}
 		return err
 	}
@@ -197,13 +197,13 @@ func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId str
 		return nil, err
 	}
 	if obj == nil {
-		return nil, fmt.Errorf("object not found")
+		return nil, ErrNotFound
 	}
 	if obj.Status == models.StatusDeleted {
-		return nil, fmt.Errorf("object is deleted")
+		return nil, ErrNotFoundOrDeleted
 	}
 	if obj.Version != currentVersion {
-		return nil, fmt.Errorf("version mismatch. Current version is %s", fmt.Sprintf("%d", obj.Version))
+		return nil, ErrVersionMismatch
 	}
 
 	applyFn(obj)
@@ -229,7 +229,7 @@ func (d *DynamoClient) UpdateObjectWithIndexes(ctx context.Context, tenantId str
 	if err != nil {
 		var condErr *ddbTypes.ConditionalCheckFailedException
 		if errors.As(err, &condErr) {
-			return nil, fmt.Errorf("object was modified by another process, please retry")
+			return nil, ErrVersionMismatch
 		}
 		return nil, err
 	}
@@ -550,4 +550,91 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 		Objects:   objects,
 		NextToken: lastEvalKey,
 	}, nil
+}
+
+func (d *DynamoClient) SoftDeleteObjectAndIndexes(ctx context.Context, tenantId string, tableHash string, objectId string) (*string, error) {
+	pk := models.GenerateObjectPK(tenantId, tableHash)
+	sk := models.GenerateObjectSK(objectId)
+
+	now := time.Now().UTC()
+	ttl := now.Add(30 * 24 * time.Hour).Unix() // delete after 30 days
+
+	out, err := d.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(d.ObjectsTable),
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
+		},
+		UpdateExpression:    aws.String("SET #status = :deleted, updated_at = :now, #v = #v + :inc, #ttl = :ttl"),
+		ConditionExpression: aws.String("attribute_exists(pk) AND #status <> :deleted"),
+		ExpressionAttributeNames: map[string]string{
+			"#status": "status",
+			"#v":      "version",
+			"#ttl":    "ttl",
+		},
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":deleted": &ddbTypes.AttributeValueMemberS{Value: models.StatusDeleted},
+			":now":     &ddbTypes.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
+			":inc":     &ddbTypes.AttributeValueMemberN{Value: "1"},
+			":ttl":     &ddbTypes.AttributeValueMemberN{Value: fmt.Sprintf("%d", ttl)},
+		},
+		ReturnValues: "ALL_NEW",
+	})
+
+	if err != nil {
+		var condErr *ddbTypes.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, ErrNotFoundOrDeleted
+		}
+		return nil, err
+	}
+
+	var obj models.Object
+	err = attributevalue.UnmarshalMap(out.Attributes, &obj)
+	if err != nil {
+		return nil, err
+	}
+
+	go d.deleteIndexesByObject(ctx, tenantId, tableHash, objectId)
+
+	if obj.S3Key != "" {
+		return &obj.S3Key, nil
+	}
+	return nil, nil
+}
+
+func (d *DynamoClient) deleteIndexesByObject(ctx context.Context, tenantId string, tableHash string, objectId string) error {
+	indexes, err := d.GetIndexesByObjectID(ctx, tenantId, tableHash, objectId)
+	if err != nil {
+		return err
+	}
+	idxs := make([]models.Index, 0, len(indexes))
+	for _, idx := range indexes {
+		idxs = append(idxs, idx)
+	}
+
+	for i := 0; i < len(idxs); i += 25 {
+		end := min(i+25, len(idxs))
+		writeRequests := make([]ddbTypes.WriteRequest, 0, end-i)
+		for _, idx := range idxs[i:end] {
+			writeRequests = append(writeRequests, ddbTypes.WriteRequest{
+				DeleteRequest: &ddbTypes.DeleteRequest{
+					Key: map[string]ddbTypes.AttributeValue{
+						"pk": &ddbTypes.AttributeValueMemberS{Value: idx.PK},
+						"sk": &ddbTypes.AttributeValueMemberB{Value: idx.SK},
+					},
+				},
+			})
+		}
+		_, err := d.Client.BatchWriteItem(ctx, &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]ddbTypes.WriteRequest{
+				d.IndexesTable: writeRequests,
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

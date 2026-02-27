@@ -63,3 +63,8 @@ type ScanRequest struct {
 	Limit     int     `json:"limit,omitempty"`
 	NextToken *string `json:"next_token,omitempty"`
 }
+
+type DeleteObjectRequest struct {
+	TableHash string `json:"table_hash" binding:"required"`
+	ObjectID  string `json:"object_id" binding:"required"`
+}

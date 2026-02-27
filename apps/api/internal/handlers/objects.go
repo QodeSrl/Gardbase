@@ -420,6 +420,35 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *ObjectHandler) Delete(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+
+	var req objects.DeleteObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	}
+
+	s3Key, err := h.Dynamo.SoftDeleteObjectAndIndexes(ctx, tenantId, req.TableHash, req.ObjectID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFoundOrDeleted) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Object not found or already deleted"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete object in DynamoDB: " + err.Error()})
+		return
+	}
+
+	if s3Key != nil {
+		if err := h.S3Client.TagForDeletion(ctx, *s3Key); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to tag S3 object for deletion: " + err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Object deleted successfully"})
+}
+
 // Helper function to generate S3 key
 func generateS3Key(tenantId string, tableHash string, objectId string, version int32) string {
 	return "tenant-" + tenantId + "/" + tableHash + "/" + objectId + "/v" + fmt.Sprintf("%d", version)

@@ -7,6 +7,26 @@ resource "aws_s3_bucket" "uploads" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "cleanup" {
+  bucket = aws_s3_bucket.uploads.id
+
+  rule {
+    id     = "delete-tagged-objects"
+    status = "Enabled"
+
+    expiration {
+      days = 30
+    }
+
+    filter {
+      tag {
+        key   = "status"
+        value = "deleted"
+      }
+    }
+  }
+}
+
 // Enable versioning for the S3 bucket
 resource "aws_s3_bucket_versioning" "uploads" {
   bucket = aws_s3_bucket.uploads.id
