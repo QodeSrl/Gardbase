@@ -131,6 +131,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	objects.POST("/get", objectHandler.Get)
 	objects.POST("/scan", objectHandler.Scan)
 	objects.POST("/delete", objectHandler.Delete)
+	objects.POST("/recover", objectHandler.Recover)
 
 	encryptionHandler := &handlers.EncryptionHandler{
 		Vsock:  vsock,

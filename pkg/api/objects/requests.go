@@ -68,3 +68,8 @@ type DeleteObjectRequest struct {
 	TableHash string `json:"table_hash" binding:"required"`
 	ObjectID  string `json:"object_id" binding:"required"`
 }
+
+type RecoverObjectRequest struct {
+	TableHash string `json:"table_hash" binding:"required"`
+	ObjectID  string `json:"object_id" binding:"required"`
+}

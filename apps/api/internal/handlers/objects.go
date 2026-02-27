@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -343,6 +344,10 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
 		return
 	}
+	if obj.Status == models.StatusDeleted {
+		c.JSON(http.StatusGone, gin.H{"error": "Object is deleted"})
+		return
+	}
 	if obj.Status != models.StatusReady {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Object is not in READY status"})
 		return
@@ -447,6 +452,35 @@ func (h *ObjectHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Object deleted successfully"})
+}
+
+func (h *ObjectHandler) Recover(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+	var req objects.RecoverObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s3Key, err := h.Dynamo.UndeleteObject(ctx, tenantId, req.TableHash, req.ObjectID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to recover object in DynamoDB: " + err.Error()})
+		return
+	}
+
+	if s3Key != nil {
+		if err := h.S3Client.UntagForDeletion(ctx, *s3Key); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to untag S3 object for deletion: " + err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Object recovered successfully"})
 }
 
 // Helper function to generate S3 key

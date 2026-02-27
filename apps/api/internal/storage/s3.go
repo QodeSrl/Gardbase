@@ -108,3 +108,11 @@ func (s *S3Client) TagForDeletion(ctx context.Context, key string) error {
 	})
 	return err
 }
+
+func (s *S3Client) UntagForDeletion(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObjectTagging(ctx, &s3.DeleteObjectTaggingInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+	return err
+}

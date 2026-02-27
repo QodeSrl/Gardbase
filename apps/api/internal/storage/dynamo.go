@@ -638,3 +638,46 @@ func (d *DynamoClient) deleteIndexesByObject(ctx context.Context, tenantId strin
 
 	return nil
 }
+
+func (d *DynamoClient) UndeleteObject(ctx context.Context, tenantId string, tableHash string, objectId string) (*string, error) {
+	pk := models.GenerateObjectPK(tenantId, tableHash)
+	sk := models.GenerateObjectSK(objectId)
+
+	out, err := d.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(d.ObjectsTable),
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
+		},
+		UpdateExpression:    aws.String("SET #status = :ready, updated_at = :now, #v = #v + :inc REMOVE #ttl"),
+		ConditionExpression: aws.String("attribute_exists(pk) AND #status = :deleted"),
+		ExpressionAttributeNames: map[string]string{
+			"#status": "status",
+			"#v":      "version",
+			"#ttl":    "ttl",
+		},
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":deleted": &ddbTypes.AttributeValueMemberS{Value: models.StatusDeleted},
+			":ready":   &ddbTypes.AttributeValueMemberS{Value: models.StatusReady},
+			":now":     &ddbTypes.AttributeValueMemberS{Value: time.Now().UTC().Format(time.RFC3339)},
+			":inc":     &ddbTypes.AttributeValueMemberN{Value: "1"},
+		},
+		ReturnValues: "ALL_NEW",
+	})
+	if err != nil {
+		var condErr *ddbTypes.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, ErrNotFoundOrDeleted
+		}
+		return nil, err
+	}
+	var obj models.Object
+	err = attributevalue.UnmarshalMap(out.Attributes, &obj)
+	if err != nil {
+		return nil, err
+	}
+	if obj.S3Key != "" {
+		return &obj.S3Key, nil
+	}
+	return nil, nil
+}
