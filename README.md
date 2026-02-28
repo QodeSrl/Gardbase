@@ -6,7 +6,7 @@
 
 </div>
 
-Gardbase is a secure Database-as-a-Service (DBaaS) that provides client-side encrypted storage with searchable encryption. It stores encrypted data objects in S3 and encrypted, searchable indexes in DynamoDB, using AWS Nitro Enclaves to securely manage encryption keys in a zero-trust architecture: the system ensures that sensitive data is never exposed in plaintext outside of trusted environments, leveraging hardware isolation and attestation to maintain data confidentiality and integrity.
+Gardbase is a zero-trust encrypted NoSQL DBaaS (Database-as-a-Service). Data is encrypted client-side before leaving your application, while searchable encryption enables secure server-side indexing and queries. AWS Nitro Enclaves manage encryption keys in hardware-isolated environments, ensuring the backend never sees plaintext data. Think MongoDB Atlas meets end-to-end encryption! Ideal for healthcare, finance, and any application requiring verifiable data confidentiality.
 
 ## Getting Started
 
@@ -79,12 +79,12 @@ S3 (Objects):
 - Large binary data (documents, files, blobs)
 - Envelope encryption provides key rotation flexibility
 
-DynamoDB (Indexes):
+DynamoDB (Objects & Indexes):
 
+- Lightweight encrypted binary data
 - Searchable fields encrypted with deterministic encryption
 - Enables exact-match queries on encrypted data
 - Sortable fields use order-preserving encryption
-- Metadata and pointers to S3 objects
 
 ### Apps
 
