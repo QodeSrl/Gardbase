@@ -49,5 +49,12 @@ type GetObjectResponse = ResultObject
 
 type ScanResponse struct {
 	Objects   []ResultObject `json:"objects"`
+	Count     int            `json:"count"`
+	NextToken *string        `json:"next_token,omitempty"`
+}
+
+type QueryResponse struct {
+	Objects   []ResultObject `json:"objects"`
+	Count     int            `json:"count"`
 	NextToken *string        `json:"next_token,omitempty"`
 }

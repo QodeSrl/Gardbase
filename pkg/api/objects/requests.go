@@ -73,3 +73,24 @@ type RecoverObjectRequest struct {
 	TableHash string `json:"table_hash" binding:"required"`
 	ObjectID  string `json:"object_id" binding:"required"`
 }
+
+type QueryOperator int
+
+const (
+	QueryEq QueryOperator = iota
+	RangeNone
+	RangeLt
+	RangeLte
+	RangeGt
+	RangeGte
+	RangeBetween
+)
+
+type QueryRequest struct {
+	TableHash   string        `json:"table_hash" binding:"required"`
+	Index       Index         `json:"index" binding:"required"`
+	RangeOp     QueryOperator `json:"range_op,omitempty"`
+	Limit       int           `json:"limit,omitempty"`
+	NextToken   *string       `json:"next_token,omitempty"`
+	ScanForward bool          `json:"scan_forward,omitempty"`
+}
