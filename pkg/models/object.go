@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -36,6 +37,11 @@ const (
 	SensitivityLow    = "low"
 	SensitivityMedium = "medium"
 	SensitivityHigh   = "high"
+)
+
+var (
+	MinObjectID = make([]byte, 16)
+	MaxObjectID = bytes.Repeat([]byte{0xFF}, 16)
 )
 
 func NewObject(tenantId string, tableHash string, objectId string, kmsWrappedDEK []byte, masterWrappedDEK []byte, dekNonce []byte) *Object {

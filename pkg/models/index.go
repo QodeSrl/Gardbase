@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -17,6 +18,19 @@ type Index struct {
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at"`
 	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at"`
 }
+
+const (
+	DETHashValueLength           = 32
+	OPERangeValueLength          = 8 // TODO
+	ObjectIDLength               = 16
+	IndexTokenHashLength         = DETHashValueLength + ObjectIDLength
+	IndexTokenHashAndRangeLength = DETHashValueLength + OPERangeValueLength + ObjectIDLength
+)
+
+var (
+	MinRangeValue = make([]byte, OPERangeValueLength) // assuming 8-byte range values for OPE, adjust if needed (TODO)
+	MaxRangeValue = bytes.Repeat([]byte{0xFF}, OPERangeValueLength)
+)
 
 func NewIndex(indexName string, tenantId string, tableHash string, indexToken []byte, objectId string, s3Key string) *Index {
 	return &Index{
