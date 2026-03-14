@@ -96,11 +96,12 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 
 	indexItems := make([]map[string]ddbTypes.AttributeValue, 0, len(indexes))
 	for _, idx := range indexes {
-		name := idx.Name.HashField
-		if idx.Name.RangeField != nil {
-			name += ":" + *idx.Name.RangeField
+		objIdBytes, err := uuid.Parse(obj.GetObjectID())
+		if err != nil {
+			return fmt.Errorf("failed to parse object ID as UUID: %v", err)
 		}
-		index := models.NewIndex(name, obj.GetTenantID(), tableHash, idx.Token, obj.GetObjectID(), obj.S3Key)
+		token := append(idx.Token, objIdBytes[:16]...) // append object ID to the index token to ensure uniqueness across objects with the same index values
+		index := models.NewIndex(idx.GetIndexName(), obj.GetTenantID(), tableHash, token, obj.GetObjectID(), obj.S3Key)
 		av, err := attributevalue.MarshalMap(index)
 		if err != nil {
 			return err
@@ -254,7 +255,11 @@ func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, table
 		} else {
 			name = idx.Name.HashField
 		}
-		indexMap[name] = idx.Token
+		objIdBytes, err := uuid.Parse(objectId)
+		if err != nil {
+			return fmt.Errorf("failed to parse object ID as UUID: %v", err)
+		}
+		indexMap[name] = append(idx.Token, objIdBytes[:16]...) // append object ID to the index token to ensure uniqueness across objects with the same index values
 	}
 
 	for _, idx := range currentIndexes {
@@ -306,7 +311,11 @@ func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, table
 		if _, exists := currentIndexes[idxName]; exists {
 			continue
 		}
-		newIndex := models.NewIndex(idxName, tenantId, tableHash, idx.Token, objectId, s3Key)
+		objIdBytes, err := uuid.Parse(objectId)
+		if err != nil {
+			return fmt.Errorf("failed to parse object ID as UUID: %v", err)
+		}
+		newIndex := models.NewIndex(idxName, tenantId, tableHash, append(idx.Token, objIdBytes[:16]...), objectId, s3Key)
 		item, err := attributevalue.MarshalMap(newIndex)
 		if err != nil {
 			return err

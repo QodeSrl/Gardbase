@@ -21,6 +21,13 @@ type Index struct {
 	Token []byte    `json:"token" binding:"required"`
 }
 
+func (i *Index) GetIndexName() string {
+	if i.Name.RangeField != nil {
+		return i.Name.HashField + ":" + *i.Name.RangeField
+	}
+	return i.Name.HashField
+}
+
 // If the object is lightweight (e.g. encrypted blob is less than 100KB), the client can include the encrypted blob and DEK in the request body to avoid an extra round trip for uploading the object.
 type PutObjectRequest struct {
 	ObjectID           string  `json:"object_id,omitempty"` // Optional for updates, auto-generated for new objects
