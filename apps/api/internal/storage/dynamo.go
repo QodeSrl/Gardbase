@@ -509,10 +509,13 @@ func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantId string, provided
 	return nil, nil
 }
 
-type ScanResult struct {
+type QueryResult struct {
 	Objects   []models.Object
+	Count     int
 	NextToken *string
 }
+
+type ScanResult = QueryResult
 
 func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash string, limit int, nextToken string) (*ScanResult, error) {
 	var dynamoLimit *int32
@@ -558,6 +561,7 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 	return &ScanResult{
 		Objects:   objects,
 		NextToken: lastEvalKey,
+		Count:     int(out.Count),
 	}, nil
 }
 
