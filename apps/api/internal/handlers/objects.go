@@ -425,6 +425,46 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (h *ObjectHandler) Query(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+
+	var req objects.QueryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	nextToken := ""
+	if req.NextToken != nil {
+		nextToken = *req.NextToken
+	}
+
+	result, err := h.Dynamo.QueryIndexes(ctx, tenantId, req.TableHash, req.Index, req.RangeOp, req.Limit, nextToken, req.ScanForward)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
+		return
+	}
+
+	var resp objects.QueryResponse
+	for _, obj := range result.Objects {
+		resp.Objects = append(resp.Objects, objects.ResultObject{
+			ObjectID:         obj.SK[len("OBJ#"):],
+			GetURL:           obj.S3Key,
+			EncryptedBlob:    obj.EncryptedBlob,
+			KMSWrappedDEK:    obj.KMSWrappedDEK,
+			MasterWrappedDEK: obj.MasterWrappedDEK,
+			DEKNonce:         obj.DEKNonce,
+			CreatedAt:        obj.CreatedAt,
+			UpdatedAt:        obj.UpdatedAt,
+			Version:          obj.Version,
+		})
+	}
+	resp.NextToken = result.NextToken
+
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *ObjectHandler) Delete(c *gin.Context) {
 	ctx := c.Request.Context()
 	tenantId := c.GetString("tenantId")

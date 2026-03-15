@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -693,4 +694,113 @@ func (d *DynamoClient) UndeleteObject(ctx context.Context, tenantId string, tabl
 		return &obj.S3Key, nil
 	}
 	return nil, nil
+}
+
+func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableHash string, index objects.Index, rangeOp objects.QueryOperator, limit int, nextToken string, scanForward bool) (*QueryResult, error) {
+	var dynamoLimit *int32
+	if limit > 0 {
+		l := int32(limit)
+		dynamoLimit = &l
+	}
+	var decodedNextToken []byte
+	if nextToken != "" {
+		var err error
+		decodedNextToken, err = base64.StdEncoding.DecodeString(nextToken)
+		if err != nil {
+			return nil, fmt.Errorf("invalid nextToken format: %w", err)
+		}
+		// validate token length based on index type
+		if index.Name.RangeField != nil && len(decodedNextToken) != models.IndexTokenHashAndRangeLength {
+			return nil, fmt.Errorf("invalid nextToken length for range index: expected %d, got %d", models.IndexTokenHashAndRangeLength, len(decodedNextToken))
+		}
+		if index.Name.RangeField == nil && len(decodedNextToken) != models.IndexTokenHashLength {
+			return nil, fmt.Errorf("invalid nextToken length for hash-only index: expected %d, got %d", models.IndexTokenHashLength, len(decodedNextToken))
+		}
+	}
+
+	// Query index table to get matching object IDs
+	if index.Name.RangeField == nil {
+		// hash-only index, query by pk + token prefix
+		if len(index.Token) != models.IndexTokenHashLength-models.ObjectIDLength {
+			return nil, fmt.Errorf("invalid token prefix length for hash-only index: expected %d, got %d", models.IndexTokenHashLength-models.ObjectIDLength, len(index.Token))
+		}
+		pk := models.GenerateIndexPK(tenantId, tableHash, index.GetIndexName())
+		out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
+			TableName:              aws.String(d.IndexesTable),
+			KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"),
+			ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+				":pk":     &ddbTypes.AttributeValueMemberS{Value: pk},
+				":prefix": &ddbTypes.AttributeValueMemberB{Value: index.Token},
+			},
+			Limit:            dynamoLimit,
+			ScanIndexForward: aws.Bool(scanForward),
+			ExclusiveStartKey: func() map[string]ddbTypes.AttributeValue {
+				if decodedNextToken == nil {
+					return nil
+				}
+				return map[string]ddbTypes.AttributeValue{
+					"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+					"sk": &ddbTypes.AttributeValueMemberB{Value: decodedNextToken},
+				}
+			}(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		objects := make([]models.Object, 0, len(out.Items))
+		// get 100 at a time with BatchGetItem
+		for i := 0; i < len(out.Items); i += 100 {
+			end := min(i+100, len(out.Items))
+			keys := make([]map[string]ddbTypes.AttributeValue, 0, end-i) // pk/sk pairs for BatchGetItem
+			for _, item := range out.Items[i:end] {
+				var idx models.Index
+				if err := attributevalue.UnmarshalMap(item, &idx); err != nil {
+					return nil, err
+				}
+				keys = append(keys, map[string]ddbTypes.AttributeValue{
+					"pk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectPK(tenantId, tableHash)},
+					"sk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectSK(idx.GetObjectID())},
+				})
+			}
+			batchOut, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+				RequestItems: map[string]ddbTypes.KeysAndAttributes{
+					d.ObjectsTable: {
+						Keys: keys,
+					},
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range batchOut.Responses[d.ObjectsTable] {
+				var obj models.Object
+				if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
+					return nil, err
+				}
+				objects = append(objects, obj)
+				if len(objects) == int(*dynamoLimit) {
+					break
+				}
+			}
+		}
+
+		newNextToken := base64.StdEncoding.EncodeToString(func() []byte {
+			if out.LastEvaluatedKey == nil {
+				return nil
+			}
+			if sk, ok := out.LastEvaluatedKey["sk"].(*ddbTypes.AttributeValueMemberB); ok {
+				return sk.Value
+			}
+			return nil
+		}())
+
+		return &QueryResult{
+			Objects:   objects,
+			Count:     int(out.Count),
+			NextToken: &newNextToken,
+		}, nil
+	} else {
+		// hash+range index, handle different range queries by translating to DynamoDB syntax
+		return nil, nil
+	}
 }
