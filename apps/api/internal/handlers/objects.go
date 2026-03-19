@@ -421,6 +421,7 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 		})
 	}
 	resp.NextToken = result.NextToken
+	resp.Count = result.Count
 
 	c.JSON(http.StatusOK, resp)
 }
@@ -461,6 +462,7 @@ func (h *ObjectHandler) Query(c *gin.Context) {
 		})
 	}
 	resp.NextToken = result.NextToken
+	resp.Count = result.Count
 
 	c.JSON(http.StatusOK, resp)
 }
