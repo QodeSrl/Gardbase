@@ -528,8 +528,13 @@ func (d *DynamoClient) ScanTable(ctx context.Context, tenantID string, tableHash
 	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(d.ObjectsTable),
 		KeyConditionExpression: aws.String("pk = :pk"),
+		FilterExpression:       aws.String("#status <> :deleted"),
 		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
-			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+			":pk":      &ddbTypes.AttributeValueMemberS{Value: pk},
+			":deleted": &ddbTypes.AttributeValueMemberS{Value: models.StatusDeleted},
+		},
+		ExpressionAttributeNames: map[string]string{
+			"#status": "status",
 		},
 		Limit: dynamoLimit,
 		ExclusiveStartKey: func() map[string]ddbTypes.AttributeValue {
