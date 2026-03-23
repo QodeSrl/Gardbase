@@ -758,54 +758,169 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		if err != nil {
 			return nil, err
 		}
-		objects := make([]models.Object, 0, len(out.Items))
-		// get 100 at a time with BatchGetItem
-		for i := 0; i < len(out.Items); i += 100 {
-			end := min(i+100, len(out.Items))
-			keys := make([]map[string]ddbTypes.AttributeValue, 0, end-i) // pk/sk pairs for BatchGetItem
-			for _, item := range out.Items[i:end] {
-				var idx models.Index
-				if err := attributevalue.UnmarshalMap(item, &idx); err != nil {
-					return nil, err
-				}
-				keys = append(keys, map[string]ddbTypes.AttributeValue{
-					"pk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectPK(tenantId, tableHash)},
-					"sk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectSK(idx.GetObjectID())},
-				})
+	} else {
+		// hash+range index, handle different range queries by translating to DynamoDB syntax
+		if rangeOp == objects.RangeNone {
+			return nil, fmt.Errorf("range operator is required for range index")
+		}
+		token := make([]byte, models.IndexTokenHashAndRangeLength-models.ObjectIDLength)
+		if rangeOp != objects.RangeBetween {
+			if len(index.Token) != models.IndexTokenHashAndRangeLength-models.ObjectIDLength {
+				return nil, fmt.Errorf("invalid token prefix length for range index: expected %d, got %d", models.IndexTokenHashAndRangeLength-models.ObjectIDLength, len(index.Token))
 			}
-			batchOut, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
-				RequestItems: map[string]ddbTypes.KeysAndAttributes{
-					d.ObjectsTable: {
-						Keys: keys,
-					},
-				},
-			})
-			if err != nil {
+			copy(token, index.Token)
+		} else {
+			if len(betweenRange[0]) != models.IndexTokenHashAndRangeLength-models.ObjectIDLength || len(betweenRange[1]) != models.IndexTokenHashAndRangeLength-models.ObjectIDLength {
+				return nil, fmt.Errorf("invalid betweenRange token length for range index: expected %d, got %d and %d", models.IndexTokenHashAndRangeLength-models.ObjectIDLength, len(betweenRange[0]), len(betweenRange[1]))
+			}
+			copy(token, betweenRange[0])
+		}
+		pk := models.GenerateIndexPK(tenantId, tableHash, index.GetIndexName())
+
+		var keyCondExp string
+		type AttributeValueMap = map[string]ddbTypes.AttributeValue
+		var exprAttrValues AttributeValueMap = map[string]ddbTypes.AttributeValue{
+			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+		}
+
+		hashVal := make([]byte, models.DETHashValueLength)
+		rangeVal := make([]byte, models.OPERangeValueLength)
+
+		copy(hashVal, token[:models.DETHashValueLength])
+		copy(rangeVal, token[models.DETHashValueLength:models.DETHashValueLength+models.OPERangeValueLength])
+
+		lower := make([]byte, len(hashVal), models.IndexTokenHashAndRangeLength)
+		upper := make([]byte, len(hashVal), models.IndexTokenHashAndRangeLength)
+
+		copy(lower, hashVal)
+		copy(upper, hashVal)
+
+		switch rangeOp {
+		case objects.QueryEq:
+			keyCondExp = "pk = :pk AND begins_with(sk, :token)"
+			exprAttrValues[":token"] = &ddbTypes.AttributeValueMemberB{Value: token}
+		case objects.RangeGt:
+			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
+			// lower: hash | rangeVal | max object ID (to exclude value with same rangeVal)
+			// upper: hash | max range value | max object ID
+			lower = append(lower, rangeVal...)
+			lower = append(lower, models.MaxObjectID...)
+			upper = append(upper, models.MaxRangeValue...)
+			upper = append(upper, models.MaxObjectID...)
+			exprAttrValues[":lower"] = &ddbTypes.AttributeValueMemberB{Value: lower}
+			exprAttrValues[":upper"] = &ddbTypes.AttributeValueMemberB{Value: upper}
+		case objects.RangeGte:
+			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
+			// lower: hash | rangeVal | min object ID (to include value with same rangeVal)
+			// upper: hash | max range value | max object ID
+			lower = append(lower, rangeVal...)
+			lower = append(lower, models.MinObjectID...)
+			upper = append(upper, models.MaxRangeValue...)
+			upper = append(upper, models.MaxObjectID...)
+			exprAttrValues[":lower"] = &ddbTypes.AttributeValueMemberB{Value: lower}
+			exprAttrValues[":upper"] = &ddbTypes.AttributeValueMemberB{Value: upper}
+		case objects.RangeLt:
+			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
+			// lower: hash | min range value | min object ID
+			// upper: hash | rangeVal | min object ID (to exclude value with same rangeVal)
+			lower = append(lower, models.MinRangeValue...)
+			lower = append(lower, models.MinObjectID...)
+			upper = append(upper, rangeVal...)
+			upper = append(upper, models.MinObjectID...)
+			exprAttrValues[":lower"] = &ddbTypes.AttributeValueMemberB{Value: lower}
+			exprAttrValues[":upper"] = &ddbTypes.AttributeValueMemberB{Value: upper}
+		case objects.RangeLte:
+			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
+			// lower: hash | min range value | min object ID
+			// upper: hash | rangeVal | max object ID (to include value with same rangeVal)
+			lower = append(lower, models.MinRangeValue...)
+			lower = append(lower, models.MinObjectID...)
+			upper = append(upper, rangeVal...)
+			upper = append(upper, models.MaxObjectID...)
+			exprAttrValues[":lower"] = &ddbTypes.AttributeValueMemberB{Value: lower}
+			exprAttrValues[":upper"] = &ddbTypes.AttributeValueMemberB{Value: upper}
+		case objects.RangeBetween:
+			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
+			// lower: hash | betweenRange[0] | min object ID
+			// upper: hash | betweenRange[1] | max object ID
+			lower = append(lower, betweenRange[0]...)
+			lower = append(lower, models.MinObjectID...)
+			upper = append(upper, betweenRange[1]...)
+			upper = append(upper, models.MaxObjectID...)
+			exprAttrValues[":lower"] = &ddbTypes.AttributeValueMemberB{Value: lower}
+			exprAttrValues[":upper"] = &ddbTypes.AttributeValueMemberB{Value: upper}
+		default:
+			return nil, fmt.Errorf("unsupported range operator: %v", rangeOp)
+		}
+		out, err = d.Client.Query(ctx, &dynamodb.QueryInput{
+			TableName:                 aws.String(d.IndexesTable),
+			KeyConditionExpression:    aws.String(keyCondExp),
+			ExpressionAttributeValues: exprAttrValues,
+			Limit:                     dynamoLimit,
+			ScanIndexForward:          aws.Bool(scanForward),
+			ExclusiveStartKey: func() map[string]ddbTypes.AttributeValue {
+				if decodedNextToken == nil {
+					return nil
+				}
+				return map[string]ddbTypes.AttributeValue{
+					"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+					"sk": &ddbTypes.AttributeValueMemberB{Value: decodedNextToken},
+				}
+			}(),
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	objects := make([]models.Object, 0, len(out.Items))
+	// get 100 at a time with BatchGetItem
+	for i := 0; i < len(out.Items); i += 100 {
+		end := min(i+100, len(out.Items))
+		keys := make([]map[string]ddbTypes.AttributeValue, 0, end-i) // pk/sk pairs for BatchGetItem
+		for _, item := range out.Items[i:end] {
+			var idx models.Index
+			if err := attributevalue.UnmarshalMap(item, &idx); err != nil {
 				return nil, err
 			}
-			for _, item := range batchOut.Responses[d.ObjectsTable] {
-				var obj models.Object
-				if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
-					return nil, err
-				}
-				objects = append(objects, obj)
-				if len(objects) == int(*dynamoLimit) {
-					break
-				}
+			keys = append(keys, map[string]ddbTypes.AttributeValue{
+				"pk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectPK(tenantId, tableHash)},
+				"sk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectSK(idx.GetObjectID())},
+			})
+		}
+		batchOut, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+			RequestItems: map[string]ddbTypes.KeysAndAttributes{
+				d.ObjectsTable: {
+					Keys: keys,
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range batchOut.Responses[d.ObjectsTable] {
+			var obj models.Object
+			if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
+				return nil, err
+			}
+			objects = append(objects, obj)
+			if len(objects) == int(*dynamoLimit) {
+				break
 			}
 		}
+	}
 
 	var newNextToken *string
 	if out.LastEvaluatedKey != nil {
-			if sk, ok := out.LastEvaluatedKey["sk"].(*ddbTypes.AttributeValueMemberB); ok {
+		if sk, ok := out.LastEvaluatedKey["sk"].(*ddbTypes.AttributeValueMemberB); ok {
 			s := base64.StdEncoding.EncodeToString(sk.Value)
 			newNextToken = &s
-			}
+		}
 	}
 
-		return &QueryResult{
-			Objects:   objects,
-			Count:     int(out.Count),
+	return &QueryResult{
+		Objects:   objects,
+		Count:     int(out.Count),
 		NextToken: newNextToken,
-		}, nil
+	}, nil
 }
