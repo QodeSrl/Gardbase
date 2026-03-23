@@ -701,13 +701,16 @@ func (d *DynamoClient) UndeleteObject(ctx context.Context, tenantId string, tabl
 	return nil, nil
 }
 
-func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableHash string, index objects.Index, rangeOp objects.QueryOperator, limit int, nextToken string, scanForward bool) (*QueryResult, error) {
+func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableHash string, index objects.Index, betweenRange [2][]byte, rangeOp objects.QueryOperator, limit int, nextToken string, scanForward bool) (*QueryResult, error) {
 	var dynamoLimit *int32
 	if limit > 0 {
 		l := int32(limit)
 		dynamoLimit = &l
 	}
 	var decodedNextToken []byte
+	if rangeOp == objects.RangeBetween && ((betweenRange[0] == nil || betweenRange[1] == nil) || index.Token != nil) {
+		return nil, fmt.Errorf("invalid range query: for RangeBetween operator, index token must be nil and both betweenRange tokens must be non-nil")
+	}
 	if nextToken != "" {
 		var err error
 		decodedNextToken, err = base64.StdEncoding.DecodeString(nextToken)
@@ -723,6 +726,9 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		}
 	}
 
+	var out *dynamodb.QueryOutput
+	var err error
+
 	// Query index table to get matching object IDs
 	if index.Name.RangeField == nil {
 		// hash-only index, query by pk + token prefix
@@ -730,7 +736,7 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 			return nil, fmt.Errorf("invalid token prefix length for hash-only index: expected %d, got %d", models.IndexTokenHashLength-models.ObjectIDLength, len(index.Token))
 		}
 		pk := models.GenerateIndexPK(tenantId, tableHash, index.GetIndexName())
-		out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
+		out, err = d.Client.Query(ctx, &dynamodb.QueryInput{
 			TableName:              aws.String(d.IndexesTable),
 			KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"),
 			ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
@@ -789,23 +795,17 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 			}
 		}
 
-		newNextToken := base64.StdEncoding.EncodeToString(func() []byte {
-			if out.LastEvaluatedKey == nil {
-				return nil
-			}
+	var newNextToken *string
+	if out.LastEvaluatedKey != nil {
 			if sk, ok := out.LastEvaluatedKey["sk"].(*ddbTypes.AttributeValueMemberB); ok {
-				return sk.Value
+			s := base64.StdEncoding.EncodeToString(sk.Value)
+			newNextToken = &s
 			}
-			return nil
-		}())
+	}
 
 		return &QueryResult{
 			Objects:   objects,
 			Count:     int(out.Count),
-			NextToken: &newNextToken,
+		NextToken: newNextToken,
 		}, nil
-	} else {
-		// hash+range index, handle different range queries by translating to DynamoDB syntax
-		return nil, nil
-	}
 }

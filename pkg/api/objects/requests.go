@@ -94,10 +94,11 @@ const (
 )
 
 type QueryRequest struct {
-	TableHash   string        `json:"table_hash" binding:"required"`
-	Index       Index         `json:"index" binding:"required"`
-	RangeOp     QueryOperator `json:"range_op,omitempty"`
-	Limit       int           `json:"limit,omitempty"`
-	NextToken   *string       `json:"next_token,omitempty"`
-	ScanForward bool          `json:"scan_forward,omitempty"`
+	TableHash    string        `json:"table_hash" binding:"required"`
+	Index        Index         `json:"index" binding:"required"` // If BetweenRange exists, this should conventionally contain the index name but an empty index token
+	BetweenRange [2][]byte     `json:"between_range,omitempty"`  // Used only for RangeBetween operator
+	RangeOp      QueryOperator `json:"range_op,omitempty"`
+	Limit        int           `json:"limit,omitempty"`
+	NextToken    *string       `json:"next_token,omitempty"`
+	ScanForward  bool          `json:"scan_forward,omitempty"`
 }

@@ -441,7 +441,7 @@ func (h *ObjectHandler) Query(c *gin.Context) {
 		nextToken = *req.NextToken
 	}
 
-	result, err := h.Dynamo.QueryIndexes(ctx, tenantId, req.TableHash, req.Index, req.RangeOp, req.Limit, nextToken, req.ScanForward)
+	result, err := h.Dynamo.QueryIndexes(ctx, tenantId, req.TableHash, req.Index, req.BetweenRange, req.RangeOp, req.Limit, nextToken, req.ScanForward)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
 		return
