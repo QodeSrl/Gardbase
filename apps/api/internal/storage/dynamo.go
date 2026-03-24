@@ -792,8 +792,11 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		lower := make([]byte, len(hashVal), models.IndexTokenHashAndRangeLength)
 		upper := make([]byte, len(hashVal), models.IndexTokenHashAndRangeLength)
 
-		copy(lower, hashVal)
-		copy(upper, hashVal)
+		// if rangeOp is RangeBetween, lower and upper will be set based on betweenRange values
+		if rangeOp != objects.RangeBetween {
+			copy(lower, hashVal)
+			copy(upper, hashVal)
+		}
 
 		switch rangeOp {
 		case objects.QueryEq:
@@ -904,7 +907,7 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 				return nil, err
 			}
 			objects = append(objects, obj)
-			if len(objects) == int(*dynamoLimit) {
+			if dynamoLimit != nil && len(objects) == int(*dynamoLimit) {
 				break
 			}
 		}
