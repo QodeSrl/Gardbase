@@ -85,13 +85,13 @@ func DenormalizeFloat32(v uint64) float32 {
 	return math.Float32frombits(bits)
 }
 
-// NormalizeTime supports time values from approximately year 1678 to 2262, which should be sufficient for most applications. For dates outside this range, use NormalizeTimeSeconds instead, which has second-level precision but can represent the full int64 range of Unix timestamps.
+// Second-level normalization for time values to preserve order and allow range queries while encrypting with OPE.
 func NormalizeTime(t time.Time) uint64 {
-	return NormalizeInt64(t.UTC().UnixNano())
+	return NormalizeTimeSeconds(t)
 }
 
 func DenormalizeTime(v uint64) time.Time {
-	return time.Unix(0, DenormalizeInt64(v)).UTC()
+	return DenormalizeTimeSeconds(v)
 }
 
 // Use NormalizeTimeSeconds for historical dates or far-future timestamps
@@ -115,6 +115,13 @@ func DenormalizeUint32(v uint64) uint32 {
 
 func NormalizeValue(v any) (uint64, error) {
 	switch val := v.(type) {
+	case time.Time:
+		return NormalizeTime(val), nil
+	case *time.Time:
+		if val == nil {
+			return 0, errors.New("cannot normalize nil time pointer")
+		}
+		return NormalizeTime(*val), nil
 	case int64:
 		return NormalizeInt64(val), nil
 	case int32:
@@ -123,13 +130,6 @@ func NormalizeValue(v any) (uint64, error) {
 		return NormalizeFloat64(val), nil
 	case float32:
 		return NormalizeFloat32(val), nil
-	case time.Time:
-		return NormalizeTime(val), nil
-	case *time.Time:
-		if val == nil {
-			return 0, errors.New("cannot normalize nil time pointer")
-		}
-		return NormalizeTime(*val), nil
 	case uint32:
 		return NormalizeUint32(val), nil
 	default:
@@ -191,12 +191,12 @@ func deriveLinearParams(key []byte) (a uint64, b uint64) {
 	h := hmac.New(sha256.New, key)
 	h.Write([]byte("linear-ope-slope"))
 	slopeBytes := h.Sum(nil)
-	a = binary.BigEndian.Uint64(slopeBytes[:8]) | 1 // Ensure odd (coprime with 2^64)
+	a = (binary.BigEndian.Uint64(slopeBytes[:8]) >> 48) | 1 // Ensure odd (coprime with 2^64)
 
 	h.Reset()
 	h.Write([]byte("linear-ope-intercept"))
 	interceptBytes := h.Sum(nil)
-	b = binary.BigEndian.Uint64(interceptBytes[:8])
+	b = binary.BigEndian.Uint64(interceptBytes[:8]) >> 16
 
 	return a, b
 }
