@@ -24,8 +24,8 @@ func RateLimitMiddleware(logger *zap.Logger) gin.HandlerFunc {
 			clients[clientIP] = validRequests
 		}
 
-		// limit to 100 reqs per min
-		if len(clients[clientIP]) >= 100 {
+		// limit to 1000 reqs per min
+		if len(clients[clientIP]) >= 1000 {
 			logger.Warn("Rate limit exceeded", zap.String("client_ip", clientIP), zap.Int("requests", len(clients[clientIP])))
 			c.AbortWithStatus(http.StatusTooManyRequests)
 			return
