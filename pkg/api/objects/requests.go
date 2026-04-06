@@ -18,7 +18,7 @@ type IndexName struct {
 
 type Index struct {
 	Name  IndexName `json:"name"`
-	Token []byte    `json:"token" binding:"required"`
+	Token []byte    `json:"token"`
 }
 
 func (i *Index) GetIndexName() string {
