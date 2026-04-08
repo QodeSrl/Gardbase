@@ -101,7 +101,7 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 		if err != nil {
 			return fmt.Errorf("failed to parse object ID as UUID: %v", err)
 		}
-		token := append(idx.Token, objIdBytes[:16]...) // append object ID to the index token to ensure uniqueness across objects with the same index values
+		token := append(idx.GetIndexToken(), objIdBytes[:16]...) // append object ID to the index token to ensure uniqueness across objects with the same index values
 		index := models.NewIndex(idx.GetIndexName(), obj.GetTenantID(), tableHash, token, obj.GetObjectID(), obj.S3Key)
 		av, err := attributevalue.MarshalMap(index)
 		if err != nil {
@@ -260,7 +260,7 @@ func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, table
 		if err != nil {
 			return fmt.Errorf("failed to parse object ID as UUID: %v", err)
 		}
-		indexMap[name] = append(idx.Token, objIdBytes[:16]...) // append object ID to the index token to ensure uniqueness across objects with the same index values
+		indexMap[name] = append(idx.GetIndexToken(), objIdBytes[:16]...) // append object ID to the index token to ensure uniqueness across objects with the same index values
 	}
 
 	for _, idx := range currentIndexes {
@@ -316,7 +316,7 @@ func (d *DynamoClient) updateIndexes(ctx context.Context, tenantId string, table
 		if err != nil {
 			return fmt.Errorf("failed to parse object ID as UUID: %v", err)
 		}
-		newIndex := models.NewIndex(idxName, tenantId, tableHash, append(idx.Token, objIdBytes[:16]...), objectId, s3Key)
+		newIndex := models.NewIndex(idxName, tenantId, tableHash, append(idx.GetIndexToken(), objIdBytes[:16]...), objectId, s3Key)
 		item, err := attributevalue.MarshalMap(newIndex)
 		if err != nil {
 			return err
@@ -708,8 +708,10 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		dynamoLimit = &l
 	}
 	var decodedNextToken []byte
-	if rangeOp == objects.RangeBetween && ((betweenRange[0] == nil || betweenRange[1] == nil) || index.Token != nil) {
-		return nil, fmt.Errorf("invalid range query: for RangeBetween operator, index token must be nil and both betweenRange tokens must be non-nil")
+	if rangeOp == objects.RangeBetween {
+		if (betweenRange[0] == nil || betweenRange[1] == nil) || !index.IsHashOnly() {
+			return nil, fmt.Errorf("invalid range query: for RangeBetween operator, index must be hash-only and both betweenRange tokens must be non-nil")
+		}
 	}
 	if nextToken != "" {
 		var err error
@@ -731,17 +733,17 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 
 	// Query index table to get matching object IDs
 	if index.Name.RangeField == nil {
-		// hash-only index, query by pk + token prefix
-		if len(index.Token) != models.IndexTokenHashLength-models.ObjectIDLength {
-			return nil, fmt.Errorf("invalid token prefix length for hash-only index: expected %d, got %d", models.IndexTokenHashLength-models.ObjectIDLength, len(index.Token))
+		if !index.IsHashOnly() || betweenRange[0] != nil || betweenRange[1] != nil {
+			return nil, fmt.Errorf("invalid index: for hash-only index, token must be non-nil and betweenRange must be nil")
 		}
+		// hash-only index, query by pk + token prefix
 		pk := models.GenerateIndexPK(tenantId, tableHash, index.GetIndexName())
 		out, err = d.Client.Query(ctx, &dynamodb.QueryInput{
 			TableName:              aws.String(d.IndexesTable),
 			KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"),
 			ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
 				":pk":     &ddbTypes.AttributeValueMemberS{Value: pk},
-				":prefix": &ddbTypes.AttributeValueMemberB{Value: index.Token},
+				":prefix": &ddbTypes.AttributeValueMemberB{Value: index.TokenHash},
 			},
 			Limit:            dynamoLimit,
 			ScanIndexForward: aws.Bool(scanForward),
@@ -763,17 +765,17 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		if rangeOp == objects.RangeNone {
 			return nil, fmt.Errorf("range operator is required for range index")
 		}
-		token := make([]byte, models.IndexTokenHashAndRangeLength-models.ObjectIDLength)
-		if rangeOp != objects.RangeBetween {
-			if len(index.Token) != models.IndexTokenHashAndRangeLength-models.ObjectIDLength {
-				return nil, fmt.Errorf("invalid token prefix length for range index: expected %d, got %d", models.IndexTokenHashAndRangeLength-models.ObjectIDLength, len(index.Token))
+		if rangeOp == objects.RangeBetween {
+			if !index.IsHashOnly() {
+				return nil, fmt.Errorf("invalid index: for RangeBetween operator, index must be hash-only and betweenRange must be provided")
 			}
-			copy(token, index.Token)
+			if len(betweenRange[0]) != models.OPERangeValueLength || len(betweenRange[1]) != models.OPERangeValueLength {
+				return nil, fmt.Errorf("invalid betweenRange token length for range index: expected %d, got %d and %d", models.OPERangeValueLength, len(betweenRange[0]), len(betweenRange[1]))
+			}
 		} else {
-			if len(betweenRange[0]) != models.IndexTokenHashAndRangeLength-models.ObjectIDLength || len(betweenRange[1]) != models.IndexTokenHashAndRangeLength-models.ObjectIDLength {
-				return nil, fmt.Errorf("invalid betweenRange token length for range index: expected %d, got %d and %d", models.IndexTokenHashAndRangeLength-models.ObjectIDLength, len(betweenRange[0]), len(betweenRange[1]))
+			if !index.IsHashAndRange() {
+				return nil, fmt.Errorf("invalid index: for range index, token must contain both hash and range values")
 			}
-			copy(token, betweenRange[0])
 		}
 		pk := models.GenerateIndexPK(tenantId, tableHash, index.GetIndexName())
 
@@ -783,25 +785,20 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
 		}
 
-		hashVal := make([]byte, models.DETHashValueLength)
+		lower := make([]byte, models.DETHashValueLength, models.IndexTokenHashAndRangeLength)
+		copy(lower, index.TokenHash[:models.DETHashValueLength])
+		upper := make([]byte, models.DETHashValueLength, models.IndexTokenHashAndRangeLength)
+		copy(upper, index.TokenHash[:models.DETHashValueLength])
+
 		rangeVal := make([]byte, models.OPERangeValueLength)
-
-		copy(hashVal, token[:models.DETHashValueLength])
-		copy(rangeVal, token[models.DETHashValueLength:models.DETHashValueLength+models.OPERangeValueLength])
-
-		lower := make([]byte, len(hashVal), models.IndexTokenHashAndRangeLength)
-		upper := make([]byte, len(hashVal), models.IndexTokenHashAndRangeLength)
-
-		// if rangeOp is RangeBetween, lower and upper will be set based on betweenRange values
 		if rangeOp != objects.RangeBetween {
-			copy(lower, hashVal)
-			copy(upper, hashVal)
+			copy(rangeVal, index.TokenRange[:models.OPERangeValueLength])
 		}
 
 		switch rangeOp {
 		case objects.QueryEq:
 			keyCondExp = "pk = :pk AND begins_with(sk, :token)"
-			exprAttrValues[":token"] = &ddbTypes.AttributeValueMemberB{Value: token}
+			exprAttrValues[":token"] = &ddbTypes.AttributeValueMemberB{Value: index.GetIndexToken()}
 		case objects.RangeGt:
 			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
 			// lower: hash | rangeVal | max object ID (to exclude value with same rangeVal)
@@ -846,9 +843,9 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 			keyCondExp = "pk = :pk AND sk BETWEEN :lower AND :upper"
 			// lower: hash | betweenRange[0] | min object ID
 			// upper: hash | betweenRange[1] | max object ID
-			lower = append(lower, betweenRange[0]...)
+			lower = append(lower, betweenRange[0][:models.OPERangeValueLength]...)
 			lower = append(lower, models.MinObjectID...)
-			upper = append(upper, betweenRange[1]...)
+			upper = append(upper, betweenRange[1][:models.OPERangeValueLength]...)
 			upper = append(upper, models.MaxObjectID...)
 			exprAttrValues[":lower"] = &ddbTypes.AttributeValueMemberB{Value: lower}
 			exprAttrValues[":upper"] = &ddbTypes.AttributeValueMemberB{Value: upper}

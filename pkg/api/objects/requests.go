@@ -17,8 +17,9 @@ type IndexName struct {
 }
 
 type Index struct {
-	Name  IndexName `json:"name"`
-	Token []byte    `json:"token"`
+	Name       IndexName `json:"name"`
+	TokenHash  []byte    `json:"token_hash"`
+	TokenRange []byte    `json:"token_range,omitempty"`
 }
 
 func (i *Index) GetIndexName() string {
@@ -26,6 +27,26 @@ func (i *Index) GetIndexName() string {
 		return i.Name.HashField + ":" + *i.Name.RangeField
 	}
 	return i.Name.HashField
+}
+
+func (i *Index) GetIndexToken() []byte {
+	token := i.TokenHash
+	if i.TokenRange != nil {
+		token = append(token, i.TokenRange...)
+	}
+	return token
+}
+
+func (i *Index) IsNil() bool {
+	return len(i.TokenHash) == 0 && len(i.TokenRange) == 0
+}
+
+func (i *Index) IsHashOnly() bool {
+	return len(i.TokenHash) > 0 && len(i.TokenRange) == 0
+}
+
+func (i *Index) IsHashAndRange() bool {
+	return len(i.TokenHash) > 0 && len(i.TokenRange) > 0
 }
 
 // If the object is lightweight (e.g. encrypted blob is less than 100KB), the client can include the encrypted blob and DEK in the request body to avoid an extra round trip for uploading the object.
