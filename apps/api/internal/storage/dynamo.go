@@ -762,19 +762,12 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		}
 	} else {
 		// hash+range index, handle different range queries by translating to DynamoDB syntax
-		if rangeOp == objects.RangeNone {
-			return nil, fmt.Errorf("range operator is required for range index")
-		}
 		if rangeOp == objects.RangeBetween {
 			if !index.IsHashOnly() {
 				return nil, fmt.Errorf("invalid index: for RangeBetween operator, index must be hash-only and betweenRange must be provided")
 			}
 			if len(betweenRange[0]) != models.OPERangeValueLength || len(betweenRange[1]) != models.OPERangeValueLength {
 				return nil, fmt.Errorf("invalid betweenRange token length for range index: expected %d, got %d and %d", models.OPERangeValueLength, len(betweenRange[0]), len(betweenRange[1]))
-			}
-		} else {
-			if !index.IsHashAndRange() {
-				return nil, fmt.Errorf("invalid index: for range index, token must contain both hash and range values")
 			}
 		}
 		pk := models.GenerateIndexPK(tenantId, tableHash, index.GetIndexName())
@@ -791,7 +784,7 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		copy(upper, index.TokenHash[:models.DETHashValueLength])
 
 		rangeVal := make([]byte, models.OPERangeValueLength)
-		if rangeOp != objects.RangeBetween {
+		if rangeOp != objects.RangeBetween && rangeOp != objects.QueryEq {
 			copy(rangeVal, index.TokenRange[:models.OPERangeValueLength])
 		}
 
