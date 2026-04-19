@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/QodeSrl/gardbase/pkg/api/objects"
@@ -866,40 +867,91 @@ func (d *DynamoClient) QueryIndexes(ctx context.Context, tenantId string, tableH
 		}
 	}
 
-	objects := make([]models.Object, 0, len(out.Items))
-	// get 100 at a time with BatchGetItem
-	for i := 0; i < len(out.Items); i += 100 {
-		end := min(i+100, len(out.Items))
-		keys := make([]map[string]ddbTypes.AttributeValue, 0, end-i) // pk/sk pairs for BatchGetItem
-		for _, item := range out.Items[i:end] {
-			var idx models.Index
-			if err := attributevalue.UnmarshalMap(item, &idx); err != nil {
-				return nil, err
-			}
-			keys = append(keys, map[string]ddbTypes.AttributeValue{
-				"pk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectPK(tenantId, tableHash)},
-				"sk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectSK(idx.GetObjectID())},
-			})
-		}
-		batchOut, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
-			RequestItems: map[string]ddbTypes.KeysAndAttributes{
-				d.ObjectsTable: {
-					Keys: keys,
-				},
-			},
-		})
-		if err != nil {
+	orderedIDs := make([]string, 0, len(out.Items))
+	for _, item := range out.Items {
+		var idx models.Index
+		if err := attributevalue.UnmarshalMap(item, &idx); err != nil {
 			return nil, err
 		}
-		for _, item := range batchOut.Responses[d.ObjectsTable] {
+		orderedIDs = append(orderedIDs, idx.GetObjectID())
+	}
+
+	type batchResult struct {
+		items []map[string]ddbTypes.AttributeValue
+		err   error
+	}
+	batches := make([][]string, 0)
+	for i := 0; i < len(orderedIDs); i += 100 {
+		batches = append(batches, orderedIDs[i:min(i+100, len(orderedIDs))])
+	}
+	results := make([]batchResult, len(batches))
+	var wg sync.WaitGroup
+	for i, batch := range batches {
+		wg.Add(1)
+		go func(i int, batch []string) {
+			defer wg.Done()
+			keys := make([]map[string]ddbTypes.AttributeValue, len(batch))
+			for j, id := range batch {
+				keys[j] = map[string]ddbTypes.AttributeValue{
+					"pk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectPK(tenantId, tableHash)},
+					"sk": &ddbTypes.AttributeValueMemberS{Value: models.GenerateObjectSK(id)},
+				}
+			}
+
+			var allItems []map[string]ddbTypes.AttributeValue
+			remaining := map[string]ddbTypes.KeysAndAttributes{
+				d.ObjectsTable: {Keys: keys, ConsistentRead: aws.Bool(true)},
+			}
+
+			retryDelay := 50 * time.Millisecond
+			for len(remaining) > 0 {
+				batchOut, err := d.Client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+					RequestItems: remaining,
+				})
+				if err != nil {
+					results[i] = batchResult{nil, err}
+					return
+				}
+				allItems = append(allItems, batchOut.Responses[d.ObjectsTable]...)
+				remaining = batchOut.UnprocessedKeys
+
+				if len(remaining) > 0 {
+					select {
+					case <-ctx.Done():
+						results[i] = batchResult{nil, ctx.Err()}
+						return
+					case <-time.After(retryDelay):
+						retryDelay = min(retryDelay*2, 1*time.Second)
+					}
+				}
+			}
+
+			results[i] = batchResult{items: allItems, err: nil}
+		}(i, batch)
+	}
+	wg.Wait()
+
+	objectsByID := make(map[string]models.Object, len(orderedIDs))
+	for _, result := range results {
+		if result.err != nil {
+			return nil, result.err
+		}
+		for _, item := range result.items {
 			var obj models.Object
 			if err := attributevalue.UnmarshalMap(item, &obj); err != nil {
 				return nil, err
 			}
+			objectsByID[obj.GetObjectID()] = obj
+		}
+	}
+
+	objects := make([]models.Object, 0, len(out.Items))
+	for _, id := range orderedIDs {
+		if obj, ok := objectsByID[id]; ok {
 			objects = append(objects, obj)
-			if dynamoLimit != nil && len(objects) == int(*dynamoLimit) {
-				break
-			}
+		}
+		if dynamoLimit != nil && len(objects) == int(*dynamoLimit) {
+			break
 		}
 	}
 
