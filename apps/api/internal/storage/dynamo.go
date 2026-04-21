@@ -143,6 +143,21 @@ func (d *DynamoClient) CreateObjectWithIndexes(ctx context.Context, tableHash st
 			TransactItems: twrite,
 		})
 		if err != nil {
+			var throughputErr *ddbTypes.ProvisionedThroughputExceededException
+			if errors.As(err, &throughputErr) {
+				// retry with backoff
+				const maxRetries = 3
+				var retryCount int
+				for retryCount < maxRetries {
+					time.Sleep(time.Duration(100*(1<<retryCount)) * time.Millisecond) // exponential backoff
+					_, err = d.Client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+						TransactItems: twrite,
+					})
+					if err == nil {
+						return nil
+					}
+				}
+			}
 			var condErr *ddbTypes.ConditionalCheckFailedException
 			if errors.As(err, &condErr) {
 				return ErrAlreadyExists
