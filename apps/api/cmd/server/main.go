@@ -86,10 +86,7 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 }
 
 func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.DynamoClient, kmsService *services.KMS) {
-	vsock := &services.Vsock{
-		EnclaveCID:  getEnvUint32("ENCLAVE_CID", 16),
-		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
-	}
+	vsock := services.NewVsock(getEnvUint32("ENCLAVE_CID", 16), getEnvUint32("ENCLAVE_PORT", 8080))
 
 	api := s.router.Group("/api")
 
