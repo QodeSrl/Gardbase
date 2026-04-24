@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,29 +10,35 @@ import (
 )
 
 func RateLimitMiddleware(logger *zap.Logger) gin.HandlerFunc {
+	var mu sync.Mutex
 	clients := make(map[string][]time.Time)
+
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
 		now := time.Now()
 
-		if requests, exists := clients[clientIP]; exists {
-			validRequests := []time.Time{}
-			for _, t := range requests {
-				if now.Sub(t) < time.Minute {
-					validRequests = append(validRequests, t)
-				}
-			}
-			clients[clientIP] = validRequests
-		}
+		mu.Lock()
 
-		// limit to 1000 reqs per min
-		if len(clients[clientIP]) >= 1000 {
-			logger.Warn("Rate limit exceeded", zap.String("client_ip", clientIP), zap.Int("requests", len(clients[clientIP])))
+		requests := clients[clientIP]
+		valid := requests[:0]
+		for _, t := range requests {
+			if now.Sub(t) < time.Minute {
+				valid = append(valid, t)
+			}
+		}
+		clients[clientIP] = append(valid, now)
+		count := len(clients[clientIP])
+
+		mu.Unlock()
+
+		if count > 1000 {
+			logger.Warn("Rate limit exceeded",
+				zap.String("client_ip", clientIP),
+				zap.Int("requests", count),
+			)
 			c.AbortWithStatus(http.StatusTooManyRequests)
 			return
 		}
-
-		clients[clientIP] = append(clients[clientIP], now)
 
 		c.Next()
 	}
