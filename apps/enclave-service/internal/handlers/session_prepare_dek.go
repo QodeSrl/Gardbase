@@ -64,11 +64,22 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 			return
 		}
 
+		dekSessNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+		if _, err := nsmSession.Read(dekSessNonce); err != nil {
+			utils.SendError(encoder, fmt.Sprintf("Failed to read DEK session nonce: %v", err))
+			return
+		}
+		dekMasterNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+		if _, err := nsmSession.Read(dekMasterNonce); err != nil {
+			utils.SendError(encoder, fmt.Sprintf("Failed to read DEK master nonce: %v", err))
+			return
+		}
+
 		// seal DEK with session key
-		sealedDEK := sessAead.Seal(nil, sessNonce, plainDEK, nil)
+		sealedDEK := sessAead.Seal(nil, dekSessNonce, plainDEK, nil)
 
 		// encrypt DEK with master key
-		masterEncryptedDEK := masterKeyAead.Seal(nil, masterKeyNonce, plainDEK, nil)
+		masterEncryptedDEK := masterKeyAead.Seal(nil, dekMasterNonce, plainDEK, nil)
 
 		utils.Zero(plainDEK)
 
@@ -76,8 +87,8 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 			SealedDEK:          sealedDEK,
 			KmsEncryptedDEK:    dek.CiphertextBlob,
 			MasterEncryptedDEK: masterEncryptedDEK,
-			SessionNonce:       sessNonce,
-			MasterKeyNonce:     masterKeyNonce,
+			SessionNonce:       dekSessNonce,
+			MasterKeyNonce:     dekMasterNonce,
 		})
 	}
 
@@ -87,7 +98,13 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 		return
 	}
 
-	sealedIEK := sessAead.Seal(nil, sessNonce, iek, nil)
+	iekNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+	if _, err := nsmSession.Read(iekNonce); err != nil {
+		utils.SendError(encoder, fmt.Sprintf("Failed to read IEK nonce: %v", err))
+		return
+	}
+
+	sealedIEK := sessAead.Seal(nil, iekNonce, iek, nil)
 
 	utils.Zero(iek)
 	utils.Zero(masterKey)
@@ -95,7 +112,7 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 	res := enclaveproto.PrepareDEKResponse{
 		DEKs:      results,
 		SealedIEK: sealedIEK,
-		IEKNonce:  sessNonce,
+		IEKNonce:  iekNonce,
 	}
 
 	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.PrepareDEKResponse]{
