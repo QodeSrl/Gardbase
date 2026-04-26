@@ -404,5 +404,13 @@ func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 		c.JSON(500, gin.H{"error": enclaveRes.Error})
 		return
 	}
-	c.JSON(200, enclaveRes.Data)
+
+	res := encryption.DecryptResponse{
+		EnclavePubKey: enclaveRes.Data.EnclavePubKey,
+		Ciphertext:    enclaveRes.Data.Ciphertext,
+		Nonce:         enclaveRes.Data.Nonce,
+		RequestNonce:  enclaveRes.Data.RequestNonce,
+		Attestation:   att,
+	}
+	c.JSON(200, res)
 }

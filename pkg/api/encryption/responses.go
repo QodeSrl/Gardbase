@@ -15,4 +15,15 @@ type SessionGenerateDEKResponse struct {
 	IEKNonce []byte `json:"iek_nonce"`
 }
 
-type DecryptResponse = enclaveproto.DecryptResponse
+type DecryptResponse struct {
+	// x25519 public key of the enclave
+	EnclavePubKey []byte `json:"enclave_public_key"`
+	// Unwrapped DEK, encrypted with NaCl box
+	Ciphertext []byte `json:"ciphertext"`
+	// Nonce used for NaCl box encryption
+	Nonce []byte `json:"nonce"`
+	// Request nonce
+	RequestNonce []byte `json:"request_nonce"`
+	// Attestation document from the enclave
+	Attestation []byte `json:"attestation"`
+}

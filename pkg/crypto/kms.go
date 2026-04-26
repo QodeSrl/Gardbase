@@ -345,7 +345,7 @@ func (ess *EnclaveSecureSession) GetAttestationInfo() map[string]any {
 	}
 }
 
-func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiKey string, wrappedDEK []byte, nonce []byte) ([]byte, error) {
+func UnwrapSingleDEK(ctx context.Context, config SessionConfig, wrappedDEK []byte, nonce []byte) ([]byte, error) {
 	clientPub, clientPriv, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
@@ -358,8 +358,8 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiK
 	}
 
 	reqBytes, _ := json.Marshal(body)
-	httpClient := &http.Client{Timeout: 15 * time.Second, Transport: tenantRoundTripper{TenantID: tenantID, APIKey: apiKey}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/decrypt", strings.NewReader(string(reqBytes)))
+	httpClient := &http.Client{Timeout: 15 * time.Second, Transport: tenantRoundTripper{TenantID: config.TenantID, APIKey: config.APIKey}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.Endpoint+"/decrypt", strings.NewReader(string(reqBytes)))
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +387,14 @@ func UnwrapSingleDEK(ctx context.Context, endpoint string, tenantID string, apiK
 	var attNonce [24]byte
 	copy(attNonce[:], resBody.Ciphertext[:24])
 
-	// TODO: verify attestation in resBody.Attestation
+	result, err := verifyAttestation(config, resBody.Attestation, resBody.Nonce, resBody.EnclavePubKey)
+	if err != nil {
+		return nil, fmt.Errorf("attestation verification failed: %w", err)
+	}
+
+	if !result.Verified {
+		return nil, errors.New("attestation could not be verified")
+	}
 
 	dek, ok := box.Open(nil, resBody.Ciphertext[24:], &attNonce, (*[32]byte)(resBody.EnclavePubKey), clientPriv)
 	if !ok {
