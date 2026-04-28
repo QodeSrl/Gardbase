@@ -13,6 +13,7 @@ import (
 	"github.com/QodeSrl/gardbase/apps/api/internal/middleware"
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
+	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -120,16 +121,22 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	}
 	objects := api.Group("/objects")
 	objects.Use(middleware.TenantMiddleware(dynamoClient))
-	objects.POST("/get-table-hash", objectHandler.GetTableHash)
+	objects.POST("/get-table-hash", middleware.PermissionMiddleware([]string{models.PermissionRead, models.PermissionWrite}), objectHandler.GetTableHash)
 
-	objects.POST("/put", objectHandler.Put)
-	objects.POST("/request-put-large", objectHandler.RequestPutLarge)
-	objects.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
-	objects.POST("/get", objectHandler.Get)
-	objects.POST("/scan", objectHandler.Scan)
-	objects.POST("/query", objectHandler.Query)
-	objects.POST("/delete", objectHandler.Delete)
-	objects.POST("/recover", objectHandler.Recover)
+	objects.Use(middleware.PermissionMiddleware([]string{models.PermissionRead}))
+	{
+		objects.POST("/get", objectHandler.Get)
+		objects.POST("/scan", objectHandler.Scan)
+		objects.POST("/query", objectHandler.Query)
+	}
+	objects.Use(middleware.PermissionMiddleware([]string{models.PermissionWrite}))
+	{
+		objects.POST("/put", objectHandler.Put)
+		objects.POST("/request-put-large", objectHandler.RequestPutLarge)
+		objects.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
+		objects.POST("/delete", objectHandler.Delete)
+		objects.POST("/recover", objectHandler.Recover)
+	}
 
 	encryptionHandler := &handlers.EncryptionHandler{
 		Vsock:  vsock,
@@ -138,6 +145,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	}
 	encryption := api.Group("/encryption")
 	encryption.Use(middleware.TenantMiddleware(dynamoClient))
+	encryption.Use(middleware.PermissionMiddleware([]string{models.PermissionCrypto}))
 	encryption.POST("/secure-session/init", encryptionHandler.HandleSessionInit)
 	encryption.POST("/secure-session/unwrap", encryptionHandler.HandleSessionUnwrap)
 	encryption.POST("/secure-session/generate-deks", encryptionHandler.HandleSessionGenerateDEK)

@@ -82,7 +82,7 @@ func (t *TenantHandler) HandleCreateTenant(c *gin.Context) {
 		return
 	}
 	// TODO: Implement key recovery mechanism
-	apiKey, err := t.Dynamo.CreateAPIKey(c.Request.Context(), tenantID, []string{models.PermissionRead, models.PermissionWrite})
+	apiKey, err := t.Dynamo.CreateAPIKey(c.Request.Context(), tenantID, []string{models.PermissionRead, models.PermissionWrite, models.PermissionCrypto})
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create API key: %v", err)})
 		return

@@ -19,8 +19,9 @@ type APIKey struct {
 }
 
 const (
-	PermissionRead  = "read"
-	PermissionWrite = "write"
+	PermissionRead   = "read"
+	PermissionWrite  = "write"
+	PermissionCrypto = "crypto"
 )
 
 func NewAPIKey(tenantId string, keyId string, hashedKey string, permissions []string, expiresAt *time.Time) *APIKey {
