@@ -10,3 +10,15 @@ type CreateTenantResponse struct {
 	// Nonce               string `json:"nonce"`
 	APIKey string `json:"api_key"`
 }
+
+type CreateAPIKeyResponse struct {
+	APIKey string `json:"api_key"`
+}
+
+type DeleteAPIKeyResponse struct {
+	Message string `json:"message"`
+}
+
+type ListAPIKeysResponse struct {
+	KeysIDs []string `json:"ids"`
+}

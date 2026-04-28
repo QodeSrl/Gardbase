@@ -37,13 +37,13 @@ func NewAPIKey(tenantId string, keyId string, hashedKey string, permissions []st
 func GenerateAPIKey() string {
 	randomBytes := make([]byte, 32)
 	rand.Read(randomBytes)
-	apiKey := "gdb_live_" + base64.URLEncoding.EncodeToString(randomBytes)
+	apiKey := base64.URLEncoding.EncodeToString(randomBytes)
 	return apiKey
 }
 
 func HashAPIKey(apiKey string) (string, error) {
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(apiKey), bcrypt.DefaultCost)
-	return string(hashedBytes), err
+	return "gdb_live_" + string(hashedBytes), err
 }
 
 func GenerateAPIKeyPK(tenantId string) string {
@@ -52,4 +52,8 @@ func GenerateAPIKeyPK(tenantId string) string {
 
 func GenerateAPIKeySK(keyId string) string {
 	return "APIKEY#" + keyId
+}
+
+func (a *APIKey) GetKeyID() string {
+	return a.SK[len("APIKEY#"):]
 }
