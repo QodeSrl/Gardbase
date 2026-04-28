@@ -477,13 +477,13 @@ func (d *DynamoClient) GetTenant(ctx context.Context, tenantID string) (*models.
 	return &tenantConfig, nil
 }
 
-func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (string, error) {
+func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string, permissions []string) (string, error) {
 	apiKey := models.GenerateAPIKey()
 	hashedKey, err := models.HashAPIKey(apiKey)
 	if err != nil {
 		return "", err
 	}
-	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, []string{models.PermissionRead, models.PermissionWrite}, nil)
+	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, permissions, nil)
 	item, err := attributevalue.MarshalMap(apiKeyModel)
 	if err != nil {
 		return "", err
@@ -493,6 +493,42 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string) (strin
 		Item:      item,
 	})
 	return apiKey, err
+}
+
+func (d *DynamoClient) DeleteAPIKey(ctx context.Context, tenantID string, apiKey string) error {
+	pk := models.GenerateAPIKeyPK(tenantID)
+	sk := models.GenerateAPIKeySK(apiKey)
+	_, err := d.Client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(d.APIKeysTable),
+		Key: map[string]ddbTypes.AttributeValue{
+			"pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+			"sk": &ddbTypes.AttributeValueMemberS{Value: sk},
+		},
+	})
+	return err
+}
+
+func (d *DynamoClient) ListAPIKeys(ctx context.Context, tenantID string) ([]models.APIKey, error) {
+	pk := models.GenerateAPIKeyPK(tenantID)
+	out, err := d.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(d.APIKeysTable),
+		KeyConditionExpression: aws.String("pk = :pk"),
+		ExpressionAttributeValues: map[string]ddbTypes.AttributeValue{
+			":pk": &ddbTypes.AttributeValueMemberS{Value: pk},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	apiKeys := make([]models.APIKey, 0, len(out.Items))
+	for _, item := range out.Items {
+		var apiKey models.APIKey
+		if err := attributevalue.UnmarshalMap(item, &apiKey); err != nil {
+			return nil, err
+		}
+		apiKeys = append(apiKeys, apiKey)
+	}
+	return apiKeys, nil
 }
 
 func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantId string, providedKey string) (*models.APIKey, error) {
