@@ -72,19 +72,19 @@ terraform apply -var="environment=dev"
 
 ### Storage
 
-S3 (Objects):
-
-- Each object encrypted with unique DEK
-- DEK wrapped with KMS key, stored as metadata
-- Large binary data (documents, files, blobs)
-- Envelope encryption provides key rotation flexibility
-
 DynamoDB (Objects & Indexes):
 
 - Lightweight encrypted binary data
 - Searchable fields encrypted with deterministic encryption
 - Enables exact-match queries on encrypted data
 - Sortable fields use order-preserving encryption
+
+S3 (Objects):
+
+- Each object encrypted with unique DEK
+- DEK wrapped with KMS key, stored as metadata
+- Large binary data (documents, files, blobs)
+- Envelope encryption provides key rotation flexibility
 
 ### Apps
 
@@ -135,7 +135,6 @@ Key Features:
 - Uses AWS Nitro Enclaves SDK for secure operations
 - vsock server to communicate with the API server
 - NSM (Nitro Secure Module) for attestation, code measurements (PCRs) verifiable by clients
-- KMS client
 - No network access, no persistent storage, memory isolation
 
 #### Lambdas
@@ -176,6 +175,18 @@ Contains:
 - Base Request and Response structures
 - Specific message types (`SessionInitRequest`, `SessionInitResponse`, `SessionGenerateDEKRequest`, `SessionGenerateDEKResponse`, etc.)
 
+#### API
+
+Location `pkg/api`
+<br>
+Language: Go
+
+Purpose: API request and response structures for the Parent Application.
+
+Contains:
+
+- Request and response types for API endpoints (e.g., `GenerateDEKRequest`, `GenerateDEKResponse`, `UnwrapDEKRequest`, `UnwrapDEKResponse`)
+
 #### Models
 
 Location `pkg/models`
@@ -187,60 +198,3 @@ Purpose: Common data structures shared across components.
 Contains:
 
 - Database models (objects, indexes)
-
-## Runtime flow
-
-### Session Initialization
-
-```
-1. Client generates ephemeral keypair + nonce
-2. Client → Parent: { clientPubKey, nonce }
-3. Parent → Enclave: Forward request
-4. Enclave:
-   - Generates ephemeral keypair
-   - Derives session key
-   - Requests attestation from NSM (includes nonce, pubKey)
-5. Enclave → Parent → Client: { enclavePubKey, attestation }
-6. Client:
-   - Verifies attestation (8 checks)
-   - Derives same session key
-   - Session established ✓
-```
-
-### DEK Generation
-
-```
-1. Client → Parent: { sessionID, kmsKeyID, count }
-2. Parent → Enclave: Forward request
-3. Enclave:
-   - Validates session
-   - For i in 1..count:
-      - Calls KMS.GenerateDataKey with attestation
-      - KMS returns { plaintextDEK, wrappedDEK }
-      - Seals plaintextDEK with session key + objectID as associated data
-      - Zeros plaintext DEK from memory
-4. Enclave → Parent → Client: { { sealedDEK, wrappedDEK, nonce }[] }
-5. Client:
-    - Unseals with session key
-    - Uses SealedDEK for local encryption
-    - Stores wrappedDEK with object metadata for later unwrapping
-```
-
-### DEK Unwrapping
-
-```
-1. Client → Parent: { sessionID, { objectID, wrappedDEK }[] }
-2. Parent → Enclave: Forward request
-3. Enclave:
-   - Validates session
-   - For each { objectID, wrappedDEK }:
-      - Calls KMS.Decrypt with attestation
-      - KMS returns DEK encrypted for enclave's RSA key
-      - Decrypts with enclave's RSA private key
-      - Seals with session key + objectID as associated data
-      - Zeros plaintext DEK from memory
-4. Enclave → Parent → Client: { { objectID, sealedDEK }[], nonce }
-5. Client:
-   - Unseals with session key
-   - Uses DEK to decrypt application data
-```
