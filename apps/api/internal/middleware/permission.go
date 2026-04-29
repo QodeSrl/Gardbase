@@ -16,16 +16,13 @@ func PermissionMiddleware(requiredPermissions []string) gin.HandlerFunc {
 			return
 		}
 		// check if user has required permissions
+		permSet := make(map[string]struct{}, len(userPermissions))
+		for _, p := range userPermissions {
+			permSet[p] = struct{}{}
+		}
 		for _, required := range requiredPermissions {
-			hasPermission := false
-			for _, userPerm := range userPermissions {
-				if userPerm == required {
-					hasPermission = true
-					break
-				}
-			}
-			if !hasPermission {
-				c.AbortWithStatusJSON(403, gin.H{"error": "Forbidden: insufficient permissions"})
+			if _, ok := permSet[required]; !ok {
+				c.AbortWithStatusJSON(403, gin.H{"error": "Forbidden"})
 				return
 			}
 		}

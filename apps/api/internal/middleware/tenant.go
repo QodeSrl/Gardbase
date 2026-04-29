@@ -22,6 +22,7 @@ func TenantMiddleware(dynamoClient *storage.DynamoClient) gin.HandlerFunc {
 		}
 		if !tenantIdRegex.MatchString(tenantId) {
 			c.AbortWithStatusJSON(400, gin.H{"error": "Invalid X-Tenant-ID header"})
+			return
 		}
 		if apiKey == "" {
 			c.AbortWithStatusJSON(400, gin.H{"error": "X-API-Key header is required"})

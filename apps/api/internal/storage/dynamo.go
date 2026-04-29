@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -483,7 +484,7 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string, permis
 	if err != nil {
 		return "", err
 	}
-	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, permissions, nil)
+	apiKeyModel := models.NewAPIKey(tenantID, uuid.NewString(), hashedKey, "gdb_live_", permissions, nil)
 	item, err := attributevalue.MarshalMap(apiKeyModel)
 	if err != nil {
 		return "", err
@@ -492,7 +493,7 @@ func (d *DynamoClient) CreateAPIKey(ctx context.Context, tenantID string, permis
 		TableName: aws.String(d.APIKeysTable),
 		Item:      item,
 	})
-	return apiKey, err
+	return apiKeyModel.Prefix + apiKey, err
 }
 
 func (d *DynamoClient) DeleteAPIKey(ctx context.Context, tenantID string, apiKey string) error {
@@ -551,7 +552,10 @@ func (d *DynamoClient) FindAPIKey(ctx context.Context, tenantId string, provided
 		if err := attributevalue.UnmarshalMap(item, &apiKey); err != nil {
 			return nil, err
 		}
-		err := bcrypt.CompareHashAndPassword([]byte(apiKey.HashedKey), []byte(providedKey))
+		if !strings.HasPrefix(providedKey, apiKey.Prefix) {
+			return nil, nil
+		}
+		err := bcrypt.CompareHashAndPassword([]byte(apiKey.HashedKey), []byte(providedKey[len(apiKey.Prefix):]))
 		if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
 			return nil, fmt.Errorf("API key expired")
 		}
