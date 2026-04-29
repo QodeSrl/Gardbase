@@ -122,20 +122,21 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	objects := api.Group("/objects")
 	objects.Use(middleware.TenantMiddleware(dynamoClient))
 	objects.POST("/get-table-hash", middleware.PermissionMiddleware([]string{models.PermissionRead, models.PermissionWrite}), objectHandler.GetTableHash)
-
-	objects.Use(middleware.PermissionMiddleware([]string{models.PermissionRead}))
+	readGroup := objects.Group("/")
+	readGroup.Use(middleware.PermissionMiddleware([]string{models.PermissionRead}))
 	{
-		objects.POST("/get", objectHandler.Get)
-		objects.POST("/scan", objectHandler.Scan)
-		objects.POST("/query", objectHandler.Query)
+		readGroup.POST("/get", objectHandler.Get)
+		readGroup.POST("/scan", objectHandler.Scan)
+		readGroup.POST("/query", objectHandler.Query)
 	}
-	objects.Use(middleware.PermissionMiddleware([]string{models.PermissionWrite}))
+	writeGroup := objects.Group("/")
+	writeGroup.Use(middleware.PermissionMiddleware([]string{models.PermissionWrite}))
 	{
-		objects.POST("/put", objectHandler.Put)
-		objects.POST("/request-put-large", objectHandler.RequestPutLarge)
-		objects.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
-		objects.POST("/delete", objectHandler.Delete)
-		objects.POST("/recover", objectHandler.Recover)
+		writeGroup.POST("/put", objectHandler.Put)
+		writeGroup.POST("/request-put-large", objectHandler.RequestPutLarge)
+		writeGroup.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
+		writeGroup.POST("/delete", objectHandler.Delete)
+		writeGroup.POST("/recover", objectHandler.Recover)
 	}
 
 	encryptionHandler := &handlers.EncryptionHandler{
