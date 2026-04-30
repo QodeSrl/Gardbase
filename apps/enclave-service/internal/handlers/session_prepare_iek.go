@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/session"
-	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/hf/nsm"
+	"github.com/qodesrl/gardbase/apps/enclave-service/internal/session"
+	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 

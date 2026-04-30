@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/hf/nsm"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 	"golang.org/x/crypto/nacl/box"
 
-	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
 )
 
 func HandlePrepareKEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {

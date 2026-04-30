@@ -1,4 +1,4 @@
-module github.com/QodeSrl/gardbase/pkg/crypto
+module github.com/qodesrl/gardbase/pkg/crypto
 
 go 1.24.4
 
@@ -10,11 +10,11 @@ require (
 )
 
 require (
-	github.com/QodeSrl/gardbase/pkg/api v0.1.0
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.1.0
+	github.com/qodesrl/gardbase/pkg/api v0.1.0
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.0
 	golang.org/x/crypto v0.47.0
 )
 
-replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../enclaveproto
+replace github.com/qodesrl/gardbase/pkg/enclaveproto => ../enclaveproto
 
-replace github.com/QodeSrl/gardbase/pkg/api => ../api
+replace github.com/qodesrl/gardbase/pkg/api => ../api

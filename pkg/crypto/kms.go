@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QodeSrl/gardbase/pkg/api/encryption"
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"github.com/qodesrl/gardbase/pkg/api/encryption"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/nacl/box"
 )

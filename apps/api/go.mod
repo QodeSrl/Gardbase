@@ -1,11 +1,11 @@
-module github.com/QodeSrl/gardbase/apps/api
+module github.com/qodesrl/gardbase/apps/api
 
 go 1.24.4
 
 require (
-	github.com/QodeSrl/gardbase/pkg/api v0.1.0
-	github.com/QodeSrl/gardbase/pkg/enclaveproto v0.1.0
-	github.com/QodeSrl/gardbase/pkg/models v0.1.0
+	github.com/qodesrl/gardbase/pkg/api v0.1.0
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.0
+	github.com/qodesrl/gardbase/pkg/models v0.1.0
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.5
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.29
@@ -76,8 +76,8 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/QodeSrl/gardbase/pkg/models => ../../pkg/models
+replace github.com/qodesrl/gardbase/pkg/models => ../../pkg/models
 
-replace github.com/QodeSrl/gardbase/pkg/enclaveproto => ../../pkg/enclaveproto
+replace github.com/qodesrl/gardbase/pkg/enclaveproto => ../../pkg/enclaveproto
 
-replace github.com/QodeSrl/gardbase/pkg/api => ../../pkg/api
+replace github.com/qodesrl/gardbase/pkg/api => ../../pkg/api
