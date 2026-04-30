@@ -1,12 +1,19 @@
-<div align="center">
-
 <br>
 
 # Gardbase
 
-</div>
+Gardbase is a fully encrypted NoSQL DBaaS (Database-as-a-Service) built on AWS infrastructure that provides true zero-trust security. All data is encrypted client-side before leaving your application, while searchable encryption enables secure server-side indexing and queries. AWS Nitro Enclaves manage encryption keys in hardware-isolated environments, ensuring the backend never sees plaintext data. Think MongoDB Atlas meets end-to-end encryption! Ideal for healthcare, finance, and any application requiring verifiable data confidentiality.
 
-Gardbase is a zero-trust encrypted NoSQL DBaaS (Database-as-a-Service). Data is encrypted client-side before leaving your application, while searchable encryption enables secure server-side indexing and queries. AWS Nitro Enclaves manage encryption keys in hardware-isolated environments, ensuring the backend never sees plaintext data. Think MongoDB Atlas meets end-to-end encryption! Ideal for healthcare, finance, and any application requiring verifiable data confidentiality.
+## Features
+
+- 🔒 Zero-Trust Encryption - All data encrypted client-side before transmission
+- 🔐 End-to-End Encryption - Server never sees plaintext data
+- 🛡️ AWS Nitro Enclaves - Cryptographic operations in isolated, attested environment
+- 📊 DynamoDB + S3 Storage - Scalable hybrid storage (inline for small objects, S3 for large)
+- 🔍 Encrypted Indexes - Search encrypted data using deterministic encryption
+- 🔄 Optimistic Locking - Version-based concurrency control prevents conflicts
+- 🚀 Type-Safe Generics - Fully typed SDK with Go 1.18+ generics
+- 📖 ORM-like API - Intuitive API inspired by Mongoose and GORM
 
 ## Getting Started
 
@@ -198,3 +205,63 @@ Purpose: Common data structures shared across components.
 Contains:
 
 - Database models (objects, indexes)
+
+## Security Model
+
+### Encryption Hierarchy
+
+Gardbase uses a 4-level key hierarchy:
+
+```
+Level 1: AWS KMS Key (per environment)
+           ↓ wraps
+Level 2: Tenant Master Key (per tenant, random 32 bytes)
+           ↓ encrypts
+Level 3: Data Encryption Keys (DEKs, per object, random 32 bytes)
+           ↓ encrypts
+Level 4: Your Data (encrypted with DEK using AES-256-GCM)
+```
+
+### Properties
+
+- Master Key stored encrypted (KMS-wrapped) on server
+- Master Key only decrypted inside AWS Nitro Enclave
+- DEKs generated fresh for each object
+- All encryption happens client-side or in enclave
+- Server never sees plaintext data or unencrypted keys
+
+### Enclave Attestation
+
+Every cryptographic operation goes through a verified AWS Nitro Enclave:
+
+- Client requests enclave session
+- Enclave provides cryptographic attestation document
+- Client verifies attestation (proves code running in genuine enclave)
+- Encrypted channel established
+- Enclave performs key operations
+- Keys never leave enclave in plaintext
+
+What this means:
+
+- Even Gardbase operators cannot access your keys
+- Compromised backend cannot decrypt data
+- Hardware-level isolation for sensitive operations
+
+### Index Token Security
+
+Searchable indexes use deterministic encryption:
+
+- Same value always produces same encrypted token
+- Enables equality queries on encrypted data
+- Index tokens generated in enclave, never exposed
+- Cannot reverse token back to original value
+
+**Trade-off**: Deterministic encryption reveals if two records have the same value for an indexed field. Don't index highly sensitive fields if this is a concern.
+
+## Contributing
+
+We welcome contributions! Please fork the repository and submit a pull request with your changes. For major changes, please open an issue first to discuss what you would like to change.
+
+## License
+
+The project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
