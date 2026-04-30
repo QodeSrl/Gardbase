@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
 func HandleGetAttestation(encoder *json.Encoder, attestation *utils.Attestation) {

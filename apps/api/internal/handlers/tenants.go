@@ -4,12 +4,12 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/QodeSrl/gardbase/apps/api/internal/services"
-	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
-	"github.com/QodeSrl/gardbase/pkg/api/tenants"
-	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/qodesrl/gardbase/apps/api/internal/services"
+	"github.com/qodesrl/gardbase/apps/api/internal/storage"
+	"github.com/qodesrl/gardbase/pkg/api/tenants"
+	"github.com/qodesrl/gardbase/pkg/models"
 )
 
 type TenantHandler struct {

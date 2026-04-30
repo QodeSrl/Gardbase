@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/handlers"
-	"github.com/QodeSrl/gardbase/apps/enclave-service/internal/utils"
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/hf/nsm"
 	"github.com/mdlayher/vsock"
+	"github.com/qodesrl/gardbase/apps/enclave-service/internal/handlers"
+	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
 var (
