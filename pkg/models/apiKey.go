@@ -8,10 +8,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Eventually, this could change into a prefix+keyid+secret structure
 type APIKey struct {
 	PK string `dynamodbav:"pk" json:"pk"` // "TENANT#<tenant_id>"
 	SK string `dynamodbav:"sk" json:"sk"` // "APIKEY#<key_id>"
 
+	Prefix      string     `dynamodbav:"prefix" json:"prefix"` // "gdb_live_"
 	HashedKey   string     `dynamodbav:"hashed_key" json:"hashed_key"`
 	Permissions []string   `dynamodbav:"permissions" json:"permissions"`
 	CreatedAt   time.Time  `dynamodbav:"created_at" json:"created_at"`
@@ -19,14 +21,16 @@ type APIKey struct {
 }
 
 const (
-	PermissionRead  = "read"
-	PermissionWrite = "write"
+	PermissionRead   = "read"
+	PermissionWrite  = "write"
+	PermissionCrypto = "crypto"
 )
 
-func NewAPIKey(tenantId string, keyId string, hashedKey string, permissions []string, expiresAt *time.Time) *APIKey {
+func NewAPIKey(tenantId string, keyId string, hashedKey string, prefix string, permissions []string, expiresAt *time.Time) *APIKey {
 	return &APIKey{
 		PK:          GenerateAPIKeyPK(tenantId),
 		SK:          GenerateAPIKeySK(keyId),
+		Prefix:      prefix,
 		HashedKey:   hashedKey,
 		Permissions: permissions,
 		CreatedAt:   time.Now().UTC(),
@@ -37,7 +41,7 @@ func NewAPIKey(tenantId string, keyId string, hashedKey string, permissions []st
 func GenerateAPIKey() string {
 	randomBytes := make([]byte, 32)
 	rand.Read(randomBytes)
-	apiKey := "gdb_live_" + base64.URLEncoding.EncodeToString(randomBytes)
+	apiKey := base64.URLEncoding.EncodeToString(randomBytes)
 	return apiKey
 }
 
@@ -52,4 +56,8 @@ func GenerateAPIKeyPK(tenantId string) string {
 
 func GenerateAPIKeySK(keyId string) string {
 	return "APIKEY#" + keyId
+}
+
+func (a *APIKey) GetKeyID() string {
+	return a.SK[len("APIKEY#"):]
 }

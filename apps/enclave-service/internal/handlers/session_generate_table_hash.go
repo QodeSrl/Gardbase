@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -30,30 +29,13 @@ func HandleSessionGenerateTableHash(encoder *json.Encoder, payload json.RawMessa
 		return
 	}
 
-	encryptedTableName, err := base64.StdEncoding.DecodeString(req.SessionEncryptedTableName)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decode session encrypted table name: %v", err))
-		return
-	}
-	nonce, err := base64.StdEncoding.DecodeString(req.SessionTableNameNonce)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decode nonce: %v", err))
-		return
-	}
-
-	tableName, err := sessAead.Open(nil, nonce, encryptedTableName, nil)
+	tableName, err := sessAead.Open(nil, req.SessionTableNameNonce, req.SessionEncryptedTableName, nil)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt table name: %v", err))
 		return
 	}
 
-	tableSalt, err := base64.StdEncoding.DecodeString(req.TableSalt)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decode table salt: %v", err))
-		return
-	}
-
-	tableHash := utils.Hash(tableName, tableSalt)
+	tableHash := utils.Hash(tableName, req.TableSalt)
 	res := enclaveproto.SessionGenerateTableHashResponse{
 		TableHash: tableHash,
 	}

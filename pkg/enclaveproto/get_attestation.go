@@ -4,6 +4,6 @@ type GetAttestationRequest struct {
 }
 
 type GetAttestationResponse struct {
-	// Attestation document, Base64-encoded
-	Attestation string `json:"attestation"`
+	// Attestation document
+	Attestation []byte `json:"attestation"`
 }

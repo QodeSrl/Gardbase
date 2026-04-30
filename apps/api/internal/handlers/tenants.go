@@ -7,6 +7,7 @@ import (
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
 	"github.com/QodeSrl/gardbase/pkg/api/tenants"
+	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -81,7 +82,7 @@ func (t *TenantHandler) HandleCreateTenant(c *gin.Context) {
 		return
 	}
 	// TODO: Implement key recovery mechanism
-	apiKey, err := t.Dynamo.CreateAPIKey(c.Request.Context(), tenantID)
+	apiKey, err := t.Dynamo.CreateAPIKey(c.Request.Context(), tenantID, []string{models.PermissionRead, models.PermissionWrite, models.PermissionCrypto})
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create API key: %v", err)})
 		return
@@ -97,4 +98,53 @@ func (t *TenantHandler) HandleCreateTenant(c *gin.Context) {
 		// Nonce:               res.Data.Nonce,
 		APIKey: apiKey,
 	})
+}
+
+func (t *TenantHandler) CreateNewAPIKey(c *gin.Context) {
+	tenantID := c.GetString("tenantId")
+	var req tenants.CreateAPIKeyRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid create API key request: %v", err)})
+		return
+	}
+	apiKey, err := t.Dynamo.CreateAPIKey(c.Request.Context(), tenantID, req.Permissions)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to create API key: %v", err)})
+		return
+	}
+	c.JSON(200, tenants.CreateAPIKeyResponse{APIKey: apiKey})
+}
+
+func (t *TenantHandler) DeleteAPIKey(c *gin.Context) {
+	tenantID := c.GetString("tenantId")
+	var req tenants.DeleteAPIKeyRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid delete API key request: %v", err)})
+		return
+	}
+	err := t.Dynamo.DeleteAPIKey(c.Request.Context(), tenantID, req.APIKey)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to delete API key: %v", err)})
+		return
+	}
+	c.JSON(200, tenants.DeleteAPIKeyResponse{Message: "API key deleted successfully"})
+}
+
+func (t *TenantHandler) ListAPIKeys(c *gin.Context) {
+	tenantID := c.GetString("tenantId")
+	var req tenants.ListAPIKeysRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid list API keys request: %v", err)})
+		return
+	}
+	apiKeys, err := t.Dynamo.ListAPIKeys(c.Request.Context(), tenantID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to list API keys: %v", err)})
+		return
+	}
+	keys := make([]string, len(apiKeys))
+	for i, apiKey := range apiKeys {
+		keys[i] = apiKey.GetKeyID()
+	}
+	c.JSON(200, tenants.ListAPIKeysResponse{KeysIDs: keys})
 }

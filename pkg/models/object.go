@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -10,12 +11,12 @@ type Object struct {
 	PK string `dynamodbav:"pk" json:"pk"` // format: "TENANT#<tenant_id>#TABLE#<table_hash>"
 	SK string `dynamodbav:"sk" json:"sk"` // format: "OBJ#<object_id>"
 
-	EncryptedBlob string `dynamodbav:"encrypted_blob,omitempty" json:"encrypted_blob,omitempty"` // < 100KB blobs stored inline
+	EncryptedBlob []byte `dynamodbav:"encrypted_blob,omitempty" json:"encrypted_blob,omitempty"` // < 100KB blobs stored inline
 	S3Key         string `dynamodbav:"s3_key,omitempty" json:"s3_key,omitempty"`                 // S3 object key for larger blobs
 
-	KMSWrappedDEK    string `dynamodbav:"kms_wrapped_dek,omitempty" json:"kms_wrapped_dek,omitempty"`       // DEK wrapped with KMS
-	MasterWrappedDEK string `dynamodbav:"master_wrapped_dek,omitempty" json:"master_wrapped_dek,omitempty"` // DEK wrapped with tenant master key
-	DEKNonce         string `dynamodbav:"dek_nonce,omitempty" json:"dek_nonce,omitempty"`                   // Nonce used for master_wrapped_dek
+	KMSWrappedDEK    []byte `dynamodbav:"kms_wrapped_dek,omitempty" json:"kms_wrapped_dek,omitempty"`       // DEK wrapped with KMS
+	MasterWrappedDEK []byte `dynamodbav:"master_wrapped_dek,omitempty" json:"master_wrapped_dek,omitempty"` // DEK wrapped with tenant master key
+	DEKNonce         []byte `dynamodbav:"dek_nonce,omitempty" json:"dek_nonce,omitempty"`                   // Nonce used for master_wrapped_dek
 
 	Sensitivity string `dynamodbav:"sensitivity,omitempty" json:"sensitivity,omitempty"` // TODO: this is still unused
 
@@ -38,7 +39,12 @@ const (
 	SensitivityHigh   = "high"
 )
 
-func NewObject(tenantId string, tableHash string, objectId string, kmsWrappedDEK string, masterWrappedDEK string, dekNonce string) *Object {
+var (
+	MinObjectID = make([]byte, 16)
+	MaxObjectID = bytes.Repeat([]byte{0xFF}, 16)
+)
+
+func NewObject(tenantId string, tableHash string, objectId string, kmsWrappedDEK []byte, masterWrappedDEK []byte, dekNonce []byte) *Object {
 	return &Object{
 		PK:               GenerateObjectPK(tenantId, tableHash),
 		SK:               GenerateObjectSK(objectId),

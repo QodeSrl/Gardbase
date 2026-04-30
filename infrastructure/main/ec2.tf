@@ -85,7 +85,7 @@ resource "aws_iam_role_policy" "api_policy" {
       },
       {
         Effect = "Allow"
-        Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:DescribeTable"]
+        Action = ["dynamodb:PutItem", "dynamodb:GetItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:DescribeTable", "dynamodb:BatchGetItem"]
         Resource = [
           aws_dynamodb_table.objects.arn,
           "${aws_dynamodb_table.objects.arn}/index/*",
@@ -94,7 +94,9 @@ resource "aws_iam_role_policy" "api_policy" {
           aws_dynamodb_table.tenant_configs.arn,
           "${aws_dynamodb_table.tenant_configs.arn}/index/*",
           aws_dynamodb_table.api_keys.arn,
-          "${aws_dynamodb_table.api_keys.arn}/index/*"
+          "${aws_dynamodb_table.api_keys.arn}/index/*",
+          aws_dynamodb_table.table_configs.arn,
+          "${aws_dynamodb_table.table_configs.arn}/index/*"
         ]
       },
       {

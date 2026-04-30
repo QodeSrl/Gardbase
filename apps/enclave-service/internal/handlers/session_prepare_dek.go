@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -38,12 +37,7 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 		return
 	}
 
-	wrappedMasterKey, err := base64.StdEncoding.DecodeString(req.WrappedMasterKey)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decode wrapped master key: %v", err))
-		return
-	}
-	masterKey, err := utils.DecryptWithOpenSSL(wrappedMasterKey, nsmPrivKey)
+	masterKey, err := utils.DecryptWithOpenSSL(req.WrappedMasterKey, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt master key: %v", err))
 		return
@@ -64,54 +58,61 @@ func HandleSessionPrepareDEK(encoder *json.Encoder, payload json.RawMessage, nsm
 	results := make([]enclaveproto.GeneratedDEK, 0, len(req.DEKs))
 
 	for _, dek := range req.DEKs {
-		ciphertextForRecipient, err := base64.StdEncoding.DecodeString(dek.CiphertextForRecipient)
-		if err != nil {
-			utils.SendError(encoder, fmt.Sprintf("Failed to decode CiphertextForRecipient: %v", err))
-			return
-		}
-		plainDEK, err := utils.DecryptWithOpenSSL(ciphertextForRecipient, nsmPrivKey)
+		plainDEK, err := utils.DecryptWithOpenSSL(dek.CiphertextForRecipient, nsmPrivKey)
 		if err != nil {
 			utils.SendError(encoder, fmt.Sprintf("Failed to decrypt data key: %v", err))
 			return
 		}
 
+		dekSessNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+		if _, err := nsmSession.Read(dekSessNonce); err != nil {
+			utils.SendError(encoder, fmt.Sprintf("Failed to read DEK session nonce: %v", err))
+			return
+		}
+		dekMasterNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+		if _, err := nsmSession.Read(dekMasterNonce); err != nil {
+			utils.SendError(encoder, fmt.Sprintf("Failed to read DEK master nonce: %v", err))
+			return
+		}
+
 		// seal DEK with session key
-		sealedDEK := sessAead.Seal(nil, sessNonce, plainDEK, nil)
+		sealedDEK := sessAead.Seal(nil, dekSessNonce, plainDEK, nil)
 
 		// encrypt DEK with master key
-		masterEncryptedDEK := masterKeyAead.Seal(nil, masterKeyNonce, plainDEK, nil)
+		masterEncryptedDEK := masterKeyAead.Seal(nil, dekMasterNonce, plainDEK, nil)
 
 		utils.Zero(plainDEK)
 
 		results = append(results, enclaveproto.GeneratedDEK{
-			SealedDEK:          base64.StdEncoding.EncodeToString(sealedDEK),
+			SealedDEK:          sealedDEK,
 			KmsEncryptedDEK:    dek.CiphertextBlob,
-			MasterEncryptedDEK: base64.StdEncoding.EncodeToString(masterEncryptedDEK),
-			SessionNonce:       base64.StdEncoding.EncodeToString(sessNonce),
-			MasterKeyNonce:     base64.StdEncoding.EncodeToString(masterKeyNonce),
+			MasterEncryptedDEK: masterEncryptedDEK,
+			SessionNonce:       dekSessNonce,
+			MasterKeyNonce:     dekMasterNonce,
 		})
 	}
 
-	ciphertextForRecipient, err := base64.StdEncoding.DecodeString(req.IEK)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decode IEK: %v", err))
-		return
-	}
-	iek, err := utils.DecryptWithOpenSSL(ciphertextForRecipient, nsmPrivKey)
+	iek, err := utils.DecryptWithOpenSSL(req.IEK, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt IEK: %v", err))
 		return
 	}
 
-	sealedIEK := sessAead.Seal(nil, sessNonce, iek, nil)
+	iekNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
+	if _, err := nsmSession.Read(iekNonce); err != nil {
+		utils.SendError(encoder, fmt.Sprintf("Failed to read IEK nonce: %v", err))
+		return
+	}
+
+	sealedIEK := sessAead.Seal(nil, iekNonce, iek, nil)
 
 	utils.Zero(iek)
 	utils.Zero(masterKey)
 
 	res := enclaveproto.PrepareDEKResponse{
 		DEKs:      results,
-		SealedIEK: base64.StdEncoding.EncodeToString(sealedIEK),
-		IEKNonce:  base64.StdEncoding.EncodeToString(sessNonce),
+		SealedIEK: sealedIEK,
+		IEKNonce:  iekNonce,
 	}
 
 	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.PrepareDEKResponse]{

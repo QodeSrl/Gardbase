@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"io"
 
@@ -43,13 +42,12 @@ func deriveNonceHMAC(key []byte, context string, contextType string, nonceSize i
 	return nonce
 }
 
-func GenerateEphemeralKeypair() (clientPriv [32]byte, clientPub [32]byte, clientPubB64 string, err error) {
+func GenerateEphemeralKeypair() (clientPriv [32]byte, clientPub [32]byte, err error) {
 	if _, err := rand.Read(clientPriv[:]); err != nil {
-		return clientPriv, clientPub, "", err
+		return clientPriv, clientPub, err
 	}
 	curve25519.ScalarBaseMult(&clientPub, &clientPriv)
-	clientPubB64 = base64.StdEncoding.EncodeToString(clientPub[:])
-	return clientPriv, clientPub, clientPubB64, nil
+	return clientPriv, clientPub, nil
 }
 
 func deriveSessionKey(clientPriv [32]byte, enclavePubRaw []byte) ([]byte, error) {
@@ -75,16 +73,11 @@ func zero(b []byte) {
 	}
 }
 
-func openDEK(sessionKey []byte, sealedDEKB64 string, nonceB64 string, associatedData []byte) ([]byte, error) {
-	nonce, err := base64.StdEncoding.DecodeString(nonceB64)
+func openDEK(sessionKey []byte, sealedDEK []byte, nonce []byte, associatedData []byte) ([]byte, error) {
 	if len(nonce) != chacha20poly1305.NonceSizeX {
 		return nil, errors.New("invalid nonce size")
 	}
 	aead, err := chacha20poly1305.NewX(sessionKey)
-	if err != nil {
-		return nil, err
-	}
-	sealedDEK, err := base64.StdEncoding.DecodeString(sealedDEKB64)
 	if err != nil {
 		return nil, err
 	}
