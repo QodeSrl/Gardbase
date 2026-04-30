@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"log"
 
@@ -22,7 +21,7 @@ func HandleGetAttestation(encoder *json.Encoder, attestation *utils.Attestation)
 	log.Printf("Attestation document size: %d bytes", len(att))
 
 	res := enclaveproto.GetAttestationResponse{
-		Attestation: base64.StdEncoding.EncodeToString(att),
+		Attestation: att,
 	}
 	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.GetAttestationResponse]{
 		Success: true,

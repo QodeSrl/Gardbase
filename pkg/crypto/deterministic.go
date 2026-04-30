@@ -11,10 +11,28 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
+	"crypto/sha256"
 	"fmt"
 )
 
 var contextTypeDeterministicEncryption = "gardbase-data-deterministic-encryption-v1"
+
+func EncryptObjectDeterministicFixed(pt []byte, context string, dek []byte) ([]byte, error) {
+	if len(dek) == 0 {
+		return nil, fmt.Errorf("invalid DEK size: %d", len(dek))
+	}
+	if context == "" {
+		return nil, fmt.Errorf("context must not be empty for deterministic encryption")
+	}
+
+	mac := hmac.New(sha256.New, dek)
+	mac.Write([]byte(context))
+	mac.Write([]byte{0}) // separator to avoid ambiguity
+	mac.Write(pt)
+
+	return mac.Sum(nil), nil // 32 bytes
+}
 
 func EncryptObjectDeterministic(pt []byte, context string, dek []byte) ([]byte, error) {
 	if len(dek) != AESKeySize {

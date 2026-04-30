@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -38,12 +37,7 @@ func HandleSessionPrepareIEK(encoder *json.Encoder, payload json.RawMessage, nsm
 		return
 	}
 
-	ciphertextForRecipient, err := base64.StdEncoding.DecodeString(req.IEK)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decode IEK: %v", err))
-		return
-	}
-	iek, err := utils.DecryptWithOpenSSL(ciphertextForRecipient, nsmPrivKey)
+	iek, err := utils.DecryptWithOpenSSL(req.IEK, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt IEK: %v", err))
 		return
@@ -54,8 +48,8 @@ func HandleSessionPrepareIEK(encoder *json.Encoder, payload json.RawMessage, nsm
 	utils.Zero(iek)
 
 	res := enclaveproto.PrepareIEKResponse{
-		SealedIEK: base64.StdEncoding.EncodeToString(sealedIEK),
-		IEKNonce:  base64.StdEncoding.EncodeToString(sessNonce),
+		SealedIEK: sealedIEK,
+		IEKNonce:  sessNonce,
 	}
 
 	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.PrepareIEKResponse]{

@@ -22,6 +22,7 @@ func TenantMiddleware(dynamoClient *storage.DynamoClient) gin.HandlerFunc {
 		}
 		if !tenantIdRegex.MatchString(tenantId) {
 			c.AbortWithStatusJSON(400, gin.H{"error": "Invalid X-Tenant-ID header"})
+			return
 		}
 		if apiKey == "" {
 			c.AbortWithStatusJSON(400, gin.H{"error": "X-API-Key header is required"})
@@ -36,7 +37,6 @@ func TenantMiddleware(dynamoClient *storage.DynamoClient) gin.HandlerFunc {
 		c.Set("tenantId", tenantId)
 		c.Set("permissions", apiKeyRecord.Permissions)
 
-		// TODO: use permissions to restrict access to certain endpoints
 		ctx := context.WithValue(c.Request.Context(), tenantKeyType("tenantId"), tenantId)
 		ctx = context.WithValue(ctx, permissionsKeyType("permissions"), apiKeyRecord.Permissions)
 		c.Request = c.Request.WithContext(ctx)

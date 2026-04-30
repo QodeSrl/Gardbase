@@ -13,6 +13,7 @@ import (
 	"github.com/QodeSrl/gardbase/apps/api/internal/middleware"
 	"github.com/QodeSrl/gardbase/apps/api/internal/services"
 	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
+	"github.com/QodeSrl/gardbase/pkg/models"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -86,10 +87,7 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 }
 
 func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.DynamoClient, kmsService *services.KMS) {
-	vsock := &services.Vsock{
-		EnclaveCID:  getEnvUint32("ENCLAVE_CID", 16),
-		EnclavePort: getEnvUint32("ENCLAVE_PORT", 8080),
-	}
+	vsock := services.NewVsock(getEnvUint32("ENCLAVE_CID", 16), getEnvUint32("ENCLAVE_PORT", 8080))
 
 	api := s.router.Group("/api")
 
@@ -123,13 +121,23 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	}
 	objects := api.Group("/objects")
 	objects.Use(middleware.TenantMiddleware(dynamoClient))
-	objects.POST("/get-table-hash", objectHandler.GetTableHash)
-
-	objects.POST("/put", objectHandler.Put)
-	objects.POST("/request-put-large", objectHandler.RequestPutLarge)
-	objects.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
-	objects.POST("/get", objectHandler.Get)
-	objects.POST("/scan", objectHandler.Scan)
+	objects.POST("/get-table-hash", middleware.PermissionMiddleware([]string{models.PermissionRead, models.PermissionWrite}), objectHandler.GetTableHash)
+	readGroup := objects.Group("/")
+	readGroup.Use(middleware.PermissionMiddleware([]string{models.PermissionRead}))
+	{
+		readGroup.POST("/get", objectHandler.Get)
+		readGroup.POST("/scan", objectHandler.Scan)
+		readGroup.POST("/query", objectHandler.Query)
+	}
+	writeGroup := objects.Group("/")
+	writeGroup.Use(middleware.PermissionMiddleware([]string{models.PermissionWrite}))
+	{
+		writeGroup.POST("/put", objectHandler.Put)
+		writeGroup.POST("/request-put-large", objectHandler.RequestPutLarge)
+		writeGroup.POST("/confirm-put-large", objectHandler.ConfirmPutLarge)
+		writeGroup.POST("/delete", objectHandler.Delete)
+		writeGroup.POST("/recover", objectHandler.Recover)
+	}
 
 	encryptionHandler := &handlers.EncryptionHandler{
 		Vsock:  vsock,
@@ -138,6 +146,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	}
 	encryption := api.Group("/encryption")
 	encryption.Use(middleware.TenantMiddleware(dynamoClient))
+	encryption.Use(middleware.PermissionMiddleware([]string{models.PermissionCrypto}))
 	encryption.POST("/secure-session/init", encryptionHandler.HandleSessionInit)
 	encryption.POST("/secure-session/unwrap", encryptionHandler.HandleSessionUnwrap)
 	encryption.POST("/secure-session/generate-deks", encryptionHandler.HandleSessionGenerateDEK)

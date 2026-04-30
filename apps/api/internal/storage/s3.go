@@ -88,3 +88,31 @@ func (s *S3Client) CheckObjectExists(ctx context.Context, key string) (bool, err
 	}
 	return true, nil
 }
+
+func (s *S3Client) TagForDeletion(ctx context.Context, key string) error {
+	_, err := s.client.PutObjectTagging(ctx, &s3.PutObjectTaggingInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+		Tagging: &s3Types.Tagging{
+			TagSet: []s3Types.Tag{
+				{
+					Key:   aws.String("status"),
+					Value: aws.String("deleted"),
+				},
+				{
+					Key:   aws.String("deleted_at"),
+					Value: aws.String(time.Now().Format(time.RFC3339)),
+				},
+			},
+		},
+	})
+	return err
+}
+
+func (s *S3Client) UntagForDeletion(ctx context.Context, key string) error {
+	_, err := s.client.DeleteObjectTagging(ctx, &s3.DeleteObjectTaggingInput{
+		Bucket: aws.String(s.Bucket),
+		Key:    aws.String(key),
+	})
+	return err
+}

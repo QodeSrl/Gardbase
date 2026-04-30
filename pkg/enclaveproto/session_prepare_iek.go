@@ -1,15 +1,15 @@
 package enclaveproto
 
 type PrepareIEKRequest struct {
-	// Session ID, Base64-encoded
+	// Session ID
 	SessionId string `json:"session_id"`
-	// IEK to prepare, Base64-encoded
-	IEK string `json:"iek"`
+	// IEK to prepare
+	IEK []byte `json:"iek"`
 }
 
 type PrepareIEKResponse struct {
-	// Index encryption key (IEK), Base64-encoded
-	SealedIEK string `json:"iek"`
-	// IEK Nonce used for sealing, Base64-encoded
-	IEKNonce string `json:"iek_nonce"`
+	// Index encryption key (IEK)
+	SealedIEK []byte `json:"iek"`
+	// IEK Nonce used for sealing
+	IEKNonce []byte `json:"iek_nonce"`
 }

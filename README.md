@@ -1,12 +1,19 @@
-<div align="center">
-
 <br>
 
 # Gardbase
 
-</div>
+Gardbase is a fully encrypted NoSQL DBaaS (Database-as-a-Service) built on AWS infrastructure that provides true zero-trust security. All data is encrypted client-side before leaving your application, while searchable encryption enables secure server-side indexing and queries. AWS Nitro Enclaves manage encryption keys in hardware-isolated environments, ensuring the backend never sees plaintext data. Think MongoDB Atlas meets end-to-end encryption! Ideal for healthcare, finance, and any application requiring verifiable data confidentiality.
 
-Gardbase is a secure Database-as-a-Service (DBaaS) that provides client-side encrypted storage with searchable encryption. It stores encrypted data objects in S3 and encrypted, searchable indexes in DynamoDB, using AWS Nitro Enclaves to securely manage encryption keys in a zero-trust architecture: the system ensures that sensitive data is never exposed in plaintext outside of trusted environments, leveraging hardware isolation and attestation to maintain data confidentiality and integrity.
+## Features
+
+- 🔒 Zero-Trust Encryption - All data encrypted client-side before transmission
+- 🔐 End-to-End Encryption - Server never sees plaintext data
+- 🛡️ AWS Nitro Enclaves - Cryptographic operations in isolated, attested environment
+- 📊 DynamoDB + S3 Storage - Scalable hybrid storage (inline for small objects, S3 for large)
+- 🔍 Encrypted Indexes - Search encrypted data using deterministic encryption
+- 🔄 Optimistic Locking - Version-based concurrency control prevents conflicts
+- 🚀 Type-Safe Generics - Fully typed SDK with Go 1.18+ generics
+- 📖 ORM-like API - Intuitive API inspired by Mongoose and GORM
 
 ## Getting Started
 
@@ -72,19 +79,19 @@ terraform apply -var="environment=dev"
 
 ### Storage
 
+DynamoDB (Objects & Indexes):
+
+- Lightweight encrypted binary data
+- Searchable fields encrypted with deterministic encryption
+- Enables exact-match queries on encrypted data
+- Sortable fields use order-preserving encryption
+
 S3 (Objects):
 
 - Each object encrypted with unique DEK
 - DEK wrapped with KMS key, stored as metadata
 - Large binary data (documents, files, blobs)
 - Envelope encryption provides key rotation flexibility
-
-DynamoDB (Indexes):
-
-- Searchable fields encrypted with deterministic encryption
-- Enables exact-match queries on encrypted data
-- Sortable fields use order-preserving encryption
-- Metadata and pointers to S3 objects
 
 ### Apps
 
@@ -135,7 +142,6 @@ Key Features:
 - Uses AWS Nitro Enclaves SDK for secure operations
 - vsock server to communicate with the API server
 - NSM (Nitro Secure Module) for attestation, code measurements (PCRs) verifiable by clients
-- KMS client
 - No network access, no persistent storage, memory isolation
 
 #### Lambdas
@@ -176,6 +182,18 @@ Contains:
 - Base Request and Response structures
 - Specific message types (`SessionInitRequest`, `SessionInitResponse`, `SessionGenerateDEKRequest`, `SessionGenerateDEKResponse`, etc.)
 
+#### API
+
+Location `pkg/api`
+<br>
+Language: Go
+
+Purpose: API request and response structures for the Parent Application.
+
+Contains:
+
+- Request and response types for API endpoints (e.g., `GenerateDEKRequest`, `GenerateDEKResponse`, `UnwrapDEKRequest`, `UnwrapDEKResponse`)
+
 #### Models
 
 Location `pkg/models`
@@ -188,59 +206,62 @@ Contains:
 
 - Database models (objects, indexes)
 
-## Runtime flow
+## Security Model
 
-### Session Initialization
+### Encryption Hierarchy
 
-```
-1. Client generates ephemeral keypair + nonce
-2. Client → Parent: { clientPubKey, nonce }
-3. Parent → Enclave: Forward request
-4. Enclave:
-   - Generates ephemeral keypair
-   - Derives session key
-   - Requests attestation from NSM (includes nonce, pubKey)
-5. Enclave → Parent → Client: { enclavePubKey, attestation }
-6. Client:
-   - Verifies attestation (8 checks)
-   - Derives same session key
-   - Session established ✓
-```
-
-### DEK Generation
+Gardbase uses a 4-level key hierarchy:
 
 ```
-1. Client → Parent: { sessionID, kmsKeyID, count }
-2. Parent → Enclave: Forward request
-3. Enclave:
-   - Validates session
-   - For i in 1..count:
-      - Calls KMS.GenerateDataKey with attestation
-      - KMS returns { plaintextDEK, wrappedDEK }
-      - Seals plaintextDEK with session key + objectID as associated data
-      - Zeros plaintext DEK from memory
-4. Enclave → Parent → Client: { { sealedDEK, wrappedDEK, nonce }[] }
-5. Client:
-    - Unseals with session key
-    - Uses SealedDEK for local encryption
-    - Stores wrappedDEK with object metadata for later unwrapping
+Level 1: AWS KMS Key (per environment)
+           ↓ wraps
+Level 2: Tenant Master Key (per tenant, random 32 bytes)
+           ↓ encrypts
+Level 3: Data Encryption Keys (DEKs, per object, random 32 bytes)
+           ↓ encrypts
+Level 4: Your Data (encrypted with DEK using AES-256-GCM)
 ```
 
-### DEK Unwrapping
+### Properties
 
-```
-1. Client → Parent: { sessionID, { objectID, wrappedDEK }[] }
-2. Parent → Enclave: Forward request
-3. Enclave:
-   - Validates session
-   - For each { objectID, wrappedDEK }:
-      - Calls KMS.Decrypt with attestation
-      - KMS returns DEK encrypted for enclave's RSA key
-      - Decrypts with enclave's RSA private key
-      - Seals with session key + objectID as associated data
-      - Zeros plaintext DEK from memory
-4. Enclave → Parent → Client: { { objectID, sealedDEK }[], nonce }
-5. Client:
-   - Unseals with session key
-   - Uses DEK to decrypt application data
-```
+- Master Key stored encrypted (KMS-wrapped) on server
+- Master Key only decrypted inside AWS Nitro Enclave
+- DEKs generated fresh for each object
+- All encryption happens client-side or in enclave
+- Server never sees plaintext data or unencrypted keys
+
+### Enclave Attestation
+
+Every cryptographic operation goes through a verified AWS Nitro Enclave:
+
+- Client requests enclave session
+- Enclave provides cryptographic attestation document
+- Client verifies attestation (proves code running in genuine enclave)
+- Encrypted channel established
+- Enclave performs key operations
+- Keys never leave enclave in plaintext
+
+What this means:
+
+- Even Gardbase operators cannot access your keys
+- Compromised backend cannot decrypt data
+- Hardware-level isolation for sensitive operations
+
+### Index Token Security
+
+Searchable indexes use deterministic encryption:
+
+- Same value always produces same encrypted token
+- Enables equality queries on encrypted data
+- Index tokens generated in enclave, never exposed
+- Cannot reverse token back to original value
+
+**Trade-off**: Deterministic encryption reveals if two records have the same value for an indexed field. Don't index highly sensitive fields if this is a concern.
+
+## Contributing
+
+We welcome contributions! Please fork the repository and submit a pull request with your changes. For major changes, please open an issue first to discuss what you would like to change.
+
+## License
+
+The project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

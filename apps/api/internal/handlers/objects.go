@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -47,13 +47,8 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get attestation document: " + err.Error()})
 		return
 	}
-	wrappedTableSalt, err := base64.StdEncoding.DecodeString(tenant.WrappedTableSalt)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode table salt: " + err.Error()})
-		return
-	}
 	// Decrypt table salt using KMS
-	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), wrappedTableSalt, attDoc, tenantId, services.PurposeTableSalt)
+	tableSalt, err := h.KMS.Decrypt(c.Request.Context(), tenant.WrappedTableSalt, attDoc, tenantId, services.PurposeTableSalt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decrypt table salt: " + err.Error()})
 		return
@@ -63,7 +58,7 @@ func (h *ObjectHandler) GetTableHash(c *gin.Context) {
 		SessionID:                 req.SessionID,
 		SessionEncryptedTableName: req.SessionEncryptedTableName,
 		SessionTableNameNonce:     req.SessionTableNameNonce,
-		TableSalt:                 base64.StdEncoding.EncodeToString(tableSalt.CiphertextForRecipient),
+		TableSalt:                 tableSalt.CiphertextForRecipient,
 	}
 	payloadBytes, err := json.Marshal(enclaveReqBody)
 	if err != nil {
@@ -297,14 +292,14 @@ func (h *ObjectHandler) Put(c *gin.Context) {
 	}
 
 	// Update
-	obj, err := h.Dynamo.UpdateObjectWithIndexes(ctx, tenantId, req.TableHash, req.ObjectID, req.Version, func(obj *models.Object) {
+	obj, err := h.Dynamo.UpdateObjectWithIndexes(ctx, tenantId, req.TableHash, req.ObjectID, req.Version-1, func(obj *models.Object) {
 		obj.EncryptedBlob = req.EncryptedBlob
 		obj.S3Key = "" // clear s3key if switching from large object to inline
 		obj.KMSWrappedDEK = req.KMSEncryptedDEK
 		obj.MasterWrappedDEK = req.MasterEncryptedDEK
 		obj.DEKNonce = req.DEKNonce
 		obj.UpdatedAt = now
-		obj.Version = req.Version + 1
+		obj.Version = req.Version
 		if req.Sensitivity != "" {
 			obj.Sensitivity = req.Sensitivity
 		}
@@ -347,6 +342,10 @@ func (h *ObjectHandler) Get(c *gin.Context) {
 	}
 	if obj == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
+		return
+	}
+	if obj.Status == models.StatusDeleted {
+		c.JSON(http.StatusGone, gin.H{"error": "Object is deleted"})
 		return
 	}
 	if obj.Status != models.StatusReady {
@@ -422,8 +421,108 @@ func (h *ObjectHandler) Scan(c *gin.Context) {
 		})
 	}
 	resp.NextToken = result.NextToken
+	resp.Count = result.Count
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ObjectHandler) Query(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+
+	var req objects.QueryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	nextToken := ""
+	if req.NextToken != nil {
+		nextToken = *req.NextToken
+	}
+
+	result, err := h.Dynamo.QueryIndexes(ctx, tenantId, req.TableHash, req.Index, req.BetweenRange, req.RangeOp, req.Limit, nextToken, req.ScanForward)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan objects from DynamoDB: " + err.Error()})
+		return
+	}
+
+	var resp objects.QueryResponse
+	for _, obj := range result.Objects {
+		resp.Objects = append(resp.Objects, objects.ResultObject{
+			ObjectID:         obj.SK[len("OBJ#"):],
+			GetURL:           obj.S3Key,
+			EncryptedBlob:    obj.EncryptedBlob,
+			KMSWrappedDEK:    obj.KMSWrappedDEK,
+			MasterWrappedDEK: obj.MasterWrappedDEK,
+			DEKNonce:         obj.DEKNonce,
+			CreatedAt:        obj.CreatedAt,
+			UpdatedAt:        obj.UpdatedAt,
+			Version:          obj.Version,
+		})
+	}
+	resp.NextToken = result.NextToken
+	resp.Count = result.Count
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ObjectHandler) Delete(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+
+	var req objects.DeleteObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	}
+
+	s3Key, err := h.Dynamo.SoftDeleteObjectAndIndexes(ctx, tenantId, req.TableHash, req.ObjectID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFoundOrDeleted) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Object not found or already deleted"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete object in DynamoDB: " + err.Error()})
+		return
+	}
+
+	if s3Key != nil {
+		if err := h.S3Client.TagForDeletion(ctx, *s3Key); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to tag S3 object for deletion: " + err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Object deleted successfully"})
+}
+
+func (h *ObjectHandler) Recover(c *gin.Context) {
+	ctx := c.Request.Context()
+	tenantId := c.GetString("tenantId")
+	var req objects.RecoverObjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s3Key, err := h.Dynamo.UndeleteObject(ctx, tenantId, req.TableHash, req.ObjectID)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Object not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to recover object in DynamoDB: " + err.Error()})
+		return
+	}
+
+	if s3Key != nil {
+		if err := h.S3Client.UntagForDeletion(ctx, *s3Key); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to untag S3 object for deletion: " + err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Object recovered successfully"})
 }
 
 // Helper function to generate S3 key

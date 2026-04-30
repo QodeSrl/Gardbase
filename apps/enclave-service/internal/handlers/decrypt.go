@@ -3,7 +3,6 @@ package handlers
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -20,22 +19,15 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *r
 		return
 	}
 
-	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey)
-	if err != nil || len(clientPubKeyBytes) != 32 {
+	if len(req.ClientEphemeralPublicKey) != 32 {
 		utils.SendError(encoder, "Invalid client ephemeral key")
 		return
 	}
 	var clientPubKey [32]byte
-	copy(clientPubKey[:], clientPubKeyBytes)
-
-	ciphertext, err := base64.StdEncoding.DecodeString(req.Ciphertext)
-	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid ciphertext encoding: %v", err))
-		return
-	}
+	copy(clientPubKey[:], req.ClientEphemeralPublicKey)
 
 	// decrypt the ciphertext for recipient using NSM private key
-	decryptedOutput, err := utils.DecryptWithOpenSSL(ciphertext, nsmPrivKey)
+	decryptedOutput, err := utils.DecryptWithOpenSSL(req.Ciphertext, nsmPrivKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
 		return
@@ -58,9 +50,9 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *r
 		Success: true,
 		Message: "Decryption successful",
 		Data: enclaveproto.DecryptResponse{
-			EnclavePubKey: base64.StdEncoding.EncodeToString(enclavePubKey[:]),
-			Ciphertext:    base64.StdEncoding.EncodeToString(ciphertextBox),
-			Nonce:         base64.StdEncoding.EncodeToString(nonce[:]),
+			EnclavePubKey: enclavePubKey[:],
+			Ciphertext:    ciphertextBox,
+			Nonce:         nonce[:],
 			RequestNonce:  req.Nonce,
 		},
 	}

@@ -22,14 +22,12 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 		return
 	}
 
-	// decode client ephemeral public key
-	clientPubKeyBytes, err := base64.StdEncoding.DecodeString(req.ClientEphemeralPublicKey)
-	if err != nil || len(clientPubKeyBytes) != 32 {
+	if len(req.ClientEphemeralPublicKey) != 32 {
 		utils.SendError(encoder, "Invalid client ephemeral key")
 		return
 	}
 	var clientPubKey [32]byte
-	copy(clientPubKey[:], clientPubKeyBytes)
+	copy(clientPubKey[:], req.ClientEphemeralPublicKey)
 
 	// generate enclave ephemeral keypair
 	var ephPriv, ephPub [32]byte
@@ -40,7 +38,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	curve25519.ScalarBaseMult(&ephPub, &ephPriv)
 
 	// derive session key (shared secret, x25519 + hkdf)
-	sessKey, err := utils.DeriveSessionKey(ephPriv, clientPubKeyBytes)
+	sessKey, err := utils.DeriveSessionKey(ephPriv, req.ClientEphemeralPublicKey)
 	if err != nil {
 		utils.SendError(encoder, fmt.Sprintf("Failed to derive session key: %v", err))
 		return
@@ -67,13 +65,8 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 		attestationReq := request.Attestation{
 			PublicKey: ephPub[:],
 		}
-		if req.Nonce != "" {
-			nonce, err := base64.StdEncoding.DecodeString(req.Nonce)
-			if err != nil {
-				utils.SendError(encoder, fmt.Sprintf("Invalid nonce encoding: %v", err))
-				return
-			}
-			attestationReq.Nonce = nonce
+		if req.Nonce != nil {
+			attestationReq.Nonce = req.Nonce
 		}
 		attestationRes, err := nsmSession.Send(&attestationReq)
 		if err != nil {
@@ -89,11 +82,11 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 
 	res := enclaveproto.SessionInitResponse{
 		SessionId:                 sidB64,
-		EnclaveEphemeralPublicKey: base64.StdEncoding.EncodeToString(ephPub[:]),
+		EnclaveEphemeralPublicKey: ephPub[:],
 		ExpiresAt:                 expiresAt.Format(time.RFC3339),
 	}
 	if len(sessionAttDoc) > 0 {
-		res.Attestation = base64.StdEncoding.EncodeToString(sessionAttDoc)
+		res.Attestation = sessionAttDoc
 	}
 	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionInitResponse]{Success: true, Data: res})
 }

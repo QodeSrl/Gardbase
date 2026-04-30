@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -17,6 +18,19 @@ type Index struct {
 	CreatedAt time.Time `dynamodbav:"created_at,omitempty" json:"created_at"`
 	UpdatedAt time.Time `dynamodbav:"updated_at,omitempty" json:"updated_at"`
 }
+
+const (
+	DETHashValueLength           = 32
+	OPERangeValueLength          = 8 // TODO
+	ObjectIDLength               = 16
+	IndexTokenHashLength         = DETHashValueLength + ObjectIDLength
+	IndexTokenHashAndRangeLength = DETHashValueLength + OPERangeValueLength + ObjectIDLength
+)
+
+var (
+	MinRangeValue = make([]byte, OPERangeValueLength) // assuming 8-byte range values for OPE, adjust if needed (TODO)
+	MaxRangeValue = bytes.Repeat([]byte{0xFF}, OPERangeValueLength)
+)
 
 func NewIndex(indexName string, tenantId string, tableHash string, indexToken []byte, objectId string, s3Key string) *Index {
 	return &Index{
@@ -37,8 +51,8 @@ func GenerateIndexPK(tenantId string, tableHash string, indexName string) string
 func (i *Index) GetIndexName() string {
 	// PK format: "TENANT#<tenant_id>#TABLE#<table_hash>#IDX#<index_name>"
 	parts := strings.SplitN(i.PK, "#", 5)
-	if len(parts) == 5 && parts[3] == "IDX" {
-		return parts[4]
+	if len(parts) == 5 && parts[4] == "IDX" {
+		return parts[5]
 	}
 	return ""
 }
@@ -47,7 +61,7 @@ func (i *Index) GetTableHash() string {
 	// PK format: "TENANT#<tenant_id>#TABLE#<table_hash>#IDX#<index_name>"
 	parts := strings.SplitN(i.PK, "#", 5)
 	if len(parts) == 5 && parts[2] == "TABLE" {
-		return parts[2]
+		return parts[3]
 	}
 	return ""
 }

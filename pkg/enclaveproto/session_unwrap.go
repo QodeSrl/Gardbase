@@ -3,12 +3,12 @@ package enclaveproto
 type SessionUnwrapItem struct {
 	// Object ID
 	ObjectId string `json:"object_id"`
-	// Encrypted DEK, Base64-encoded
-	Ciphertext string `json:"ciphertext"`
+	// Encrypted DEK
+	Ciphertext []byte `json:"ciphertext"`
 }
 
 type SessionUnwrapRequest struct {
-	// Session ID, Base64-encoded
+	// Session ID
 	SessionId string              `json:"session_id"`
 	Items     []SessionUnwrapItem `json:"items"`
 }
@@ -16,10 +16,10 @@ type SessionUnwrapRequest struct {
 type SessionUnwrapItemResult struct {
 	// Object ID
 	ObjectId string `json:"object_id"`
-	// Decrypted DEK, Base64-encoded
-	SealedDEK string `json:"sealed_dek"`
-	// Nonce used for decryption, Base64-encoded
-	Nonce   string `json:"nonce"`
+	// Decrypted DEK
+	SealedDEK []byte `json:"sealed_dek"`
+	// Nonce used for decryption
+	Nonce   []byte `json:"nonce"`
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }

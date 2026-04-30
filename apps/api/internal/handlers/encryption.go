@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -77,17 +76,12 @@ func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "missing object_id for one of the items"})
 			return
 		}
-		if it.Ciphertext == "" {
+		if it.Ciphertext == nil {
 			c.JSON(400, gin.H{"error": fmt.Sprintf("missing ciphertext for object_id %s", objId)})
 			return
 		}
-		ctBytes, err := base64.StdEncoding.DecodeString(it.Ciphertext)
-		if err != nil {
-			c.JSON(400, gin.H{"error": fmt.Sprintf("invalid base64 ciphertext for object_id %s: %v", objId, err)})
-			return
-		}
 		tenantId := c.GetString("tenantId")
-		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, services.PurposeDataKey)
+		out, err := e.KMS.Decrypt(c.Request.Context(), it.Ciphertext, att, tenantId, services.PurposeDataKey)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("KMS decrypt failed for object_id %s: %v", objId, err)})
 			return
@@ -95,7 +89,7 @@ func (e *EncryptionHandler) HandleSessionUnwrap(c *gin.Context) {
 		// append item for enclave unwrap request
 		items = append(items, enclaveproto.SessionUnwrapItem{
 			ObjectId:   objId,
-			Ciphertext: base64.StdEncoding.EncodeToString(out.CiphertextForRecipient),
+			Ciphertext: out.CiphertextForRecipient,
 		})
 	}
 
@@ -177,19 +171,13 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 			return
 		}
 		deks[i] = enclaveproto.DEKToPrepare{
-			CiphertextBlob:         base64.StdEncoding.EncodeToString(out.CiphertextBlob),
-			CiphertextForRecipient: base64.StdEncoding.EncodeToString(out.CiphertextForRecipient),
+			CiphertextBlob:         out.CiphertextBlob,
+			CiphertextForRecipient: out.CiphertextForRecipient,
 		}
 		log.Printf("Generated DEK %d: CiphertextBlob len=%d, CiphertextForRecipient len=%d", i, len(out.CiphertextBlob), len(out.CiphertextForRecipient))
 	}
 
-	KMSWrappedMasterKey, err := base64.StdEncoding.DecodeString(tenant.WrappedMasterKey)
-	if err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode wrapped master key: %v", err)})
-		return
-	}
-
-	wrappedMasterkeyOut, err := e.KMS.Decrypt(c.Request.Context(), KMSWrappedMasterKey, att, tenantId, services.PurposeMasterKey)
+	wrappedMasterkeyOut, err := e.KMS.Decrypt(c.Request.Context(), tenant.WrappedMasterKey, att, tenantId, services.PurposeMasterKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped master key: %v", err)})
 		return
@@ -201,7 +189,7 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to get table IEK: %v", err)})
 		return
 	}
-	if wrappedIEK == "" {
+	if wrappedIEK == nil {
 		// generate new IEK and persist it
 		out, err := e.KMS.GenerateDataKey(c.Request.Context(), att, tenantId, services.PurposeIndexKey)
 		if err != nil {
@@ -210,21 +198,16 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 		}
 		// send ciphertextforrecipient IEK to enclave to be sealed with session key, and get back sealed IEK
 		// now wrapped with attestation
-		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+		wrappedIEK = out.CiphertextForRecipient
 		// save kms wrapped IEK in Dynamo
-		err = e.Dynamo.SetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash, base64.StdEncoding.EncodeToString(out.CiphertextBlob))
+		err = e.Dynamo.SetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash, out.CiphertextBlob)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to set table IEK: %v", err)})
 			return
 		}
 	} else {
 		// unwrap IEK with KMS
-		ctBytes, err := base64.StdEncoding.DecodeString(wrappedIEK)
-		if err != nil {
-			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode wrapped IEK: %v", err)})
-			return
-		}
-		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, services.PurposeIndexKey)
+		out, err := e.KMS.Decrypt(c.Request.Context(), wrappedIEK, att, tenantId, services.PurposeIndexKey)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped IEK: %v", err)})
 			return
@@ -234,13 +217,13 @@ func (e *EncryptionHandler) HandleSessionGenerateDEK(c *gin.Context) {
 			return
 		}
 		// now wrapped with attestation
-		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+		wrappedIEK = out.CiphertextForRecipient
 	}
 
 	// Prepare DEK in enclave (PrepareDEKRequest)
 	prepareDEKReq := enclaveproto.PrepareDEKRequest{
 		DEKs:             deks,
-		WrappedMasterKey: base64.StdEncoding.EncodeToString(wrappedMasterkeyOut.CiphertextForRecipient),
+		WrappedMasterKey: wrappedMasterkeyOut.CiphertextForRecipient,
 		SessionId:        req.SessionId,
 		IEK:              wrappedIEK,
 	}
@@ -304,7 +287,7 @@ func (e *EncryptionHandler) HandleSessionGetTableIEK(c *gin.Context) {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to get table IEK: %v", err)})
 		return
 	}
-	if wrappedIEK == "" {
+	if wrappedIEK == nil {
 		// generate new IEK and persist it
 		out, err := e.KMS.GenerateDataKey(c.Request.Context(), att, tenantId, services.PurposeIndexKey)
 		if err != nil {
@@ -313,21 +296,16 @@ func (e *EncryptionHandler) HandleSessionGetTableIEK(c *gin.Context) {
 		}
 		// send ciphertextforrecipient IEK to enclave to be sealed with session key, and get back sealed IEK
 		// now wrapped with attestation
-		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+		wrappedIEK = out.CiphertextForRecipient
 		// save kms wrapped IEK in Dynamo
-		err = e.Dynamo.SetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash, base64.StdEncoding.EncodeToString(out.CiphertextBlob))
+		err = e.Dynamo.SetWrappedTableIEK(c.Request.Context(), tenantId, req.TableHash, out.CiphertextBlob)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to set table IEK: %v", err)})
 			return
 		}
 	} else {
 		// unwrap IEK with KMS
-		ctBytes, err := base64.StdEncoding.DecodeString(wrappedIEK)
-		if err != nil {
-			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decode wrapped IEK: %v", err)})
-			return
-		}
-		out, err := e.KMS.Decrypt(c.Request.Context(), ctBytes, att, tenantId, services.PurposeIndexKey)
+		out, err := e.KMS.Decrypt(c.Request.Context(), wrappedIEK, att, tenantId, services.PurposeIndexKey)
 		if err != nil {
 			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to decrypt wrapped IEK: %v", err)})
 			return
@@ -337,7 +315,7 @@ func (e *EncryptionHandler) HandleSessionGetTableIEK(c *gin.Context) {
 			return
 		}
 		// now wrapped with attestation
-		wrappedIEK = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+		wrappedIEK = out.CiphertextForRecipient
 	}
 
 	prepareDEKReq := enclaveproto.PrepareIEKRequest{
@@ -392,21 +370,15 @@ func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 		return
 	}
 
-	ciphertext, err := base64.StdEncoding.DecodeString(decryptReq.Ciphertext)
-	if err != nil {
-		c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid ciphertext encoding: %v", err)})
-		return
-	}
-
 	// Unwrap data key with KMS using attestation document
-	out, err := e.KMS.Decrypt(c.Request.Context(), ciphertext, att, tenantId, services.PurposeDataKey)
+	out, err := e.KMS.Decrypt(c.Request.Context(), decryptReq.Ciphertext, att, tenantId, services.PurposeDataKey)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("KMS decrypt failed: %v", err)})
 		return
 	}
 
 	// Prepare decrypt request for enclave
-	decryptReq.Ciphertext = base64.StdEncoding.EncodeToString(out.CiphertextForRecipient)
+	decryptReq.Ciphertext = out.CiphertextForRecipient
 	payloadBytes, err := json.Marshal(decryptReq)
 	if err != nil {
 		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to marshal decrypt request: %v", err)})
@@ -432,5 +404,13 @@ func (e *EncryptionHandler) HandleDecrypt(c *gin.Context) {
 		c.JSON(500, gin.H{"error": enclaveRes.Error})
 		return
 	}
-	c.JSON(200, enclaveRes.Data)
+
+	res := encryption.DecryptResponse{
+		EnclavePubKey: enclaveRes.Data.EnclavePubKey,
+		Ciphertext:    enclaveRes.Data.Ciphertext,
+		Nonce:         enclaveRes.Data.Nonce,
+		RequestNonce:  enclaveRes.Data.RequestNonce,
+		Attestation:   att,
+	}
+	c.JSON(200, res)
 }
