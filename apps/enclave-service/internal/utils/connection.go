@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
 func SendResponse[T any](encoder *json.Encoder, res enclaveproto.Response[T]) {

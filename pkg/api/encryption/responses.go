@@ -1,6 +1,6 @@
 package encryption
 
-import "github.com/QodeSrl/gardbase/pkg/enclaveproto"
+import "github.com/qodesrl/gardbase/pkg/enclaveproto"
 
 type SessionInitResponse = enclaveproto.SessionInitResponse
 

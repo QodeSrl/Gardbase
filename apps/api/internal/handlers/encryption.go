@@ -6,11 +6,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/QodeSrl/gardbase/apps/api/internal/services"
-	"github.com/QodeSrl/gardbase/apps/api/internal/storage"
-	"github.com/QodeSrl/gardbase/pkg/api/encryption"
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/gin-gonic/gin"
+	"github.com/qodesrl/gardbase/apps/api/internal/services"
+	"github.com/qodesrl/gardbase/apps/api/internal/storage"
+	"github.com/qodesrl/gardbase/pkg/api/encryption"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
 type EncryptionHandler struct {

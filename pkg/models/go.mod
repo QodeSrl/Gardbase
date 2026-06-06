@@ -1,4 +1,4 @@
-module github.com/QodeSrl/gardbase/pkg/models
+module github.com/qodesrl/gardbase/pkg/models
 
 go 1.24.4
 

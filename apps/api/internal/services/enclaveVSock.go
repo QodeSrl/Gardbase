@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/QodeSrl/gardbase/pkg/enclaveproto"
 	"github.com/mdlayher/vsock"
+	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
 type VsockPool struct {
