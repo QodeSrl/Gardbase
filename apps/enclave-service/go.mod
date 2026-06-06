@@ -3,9 +3,9 @@ module github.com/qodesrl/gardbase/apps/enclave-service
 go 1.24.4
 
 require (
-	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9
 	github.com/mdlayher/vsock v1.2.1
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
 	golang.org/x/crypto v0.47.0
 )
 

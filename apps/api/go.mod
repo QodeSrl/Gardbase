@@ -3,9 +3,6 @@ module github.com/qodesrl/gardbase/apps/api
 go 1.24.4
 
 require (
-	github.com/qodesrl/gardbase/pkg/api v0.1.1
-	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
-	github.com/qodesrl/gardbase/pkg/models v0.1.1
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.5
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.29
@@ -15,6 +12,9 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
 	github.com/mdlayher/vsock v1.2.1
+	github.com/qodesrl/gardbase/pkg/api v0.1.1
+	github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
+	github.com/qodesrl/gardbase/pkg/models v0.1.1
 	go.uber.org/zap v1.27.1
 )
 
