@@ -1,112 +1,81 @@
 import React from "react";
-import { LuShield, LuCircleCheck, LuDatabase } from "react-icons/lu";
+import {
+  LuLock,
+  LuShieldCheck,
+  LuSearch,
+  LuDatabase,
+  LuKeyRound,
+  LuGitBranch,
+} from "react-icons/lu";
+
+const features = [
+  {
+    icon: LuLock,
+    title: "Client-side encryption",
+    desc: "Every object is sealed with a unique AES-256-GCM data key before it leaves your app. The backend only ever stores ciphertext.",
+  },
+  {
+    icon: LuShieldCheck,
+    title: "Attested Nitro Enclaves",
+    desc: "Key operations run in hardware-isolated AWS Nitro Enclaves. Clients verify a signed attestation (PCRs, COSE, AWS root CA) before trusting them.",
+  },
+  {
+    icon: LuSearch,
+    title: "Searchable encryption",
+    desc: "Query encrypted data directly. Deterministic tokens power equality lookups; order-preserving encryption enables sorting and ranges.",
+  },
+  {
+    icon: LuKeyRound,
+    title: "4-level key hierarchy",
+    desc: "KMS → tenant master key → per-object DEKs → your data. Envelope encryption means rotation without re-encrypting everything.",
+  },
+  {
+    icon: LuDatabase,
+    title: "Hybrid DynamoDB + S3",
+    desc: "Small encrypted objects live inline in DynamoDB; large blobs go to S3 with wrapped DEKs in metadata. Scalable by default.",
+  },
+  {
+    icon: LuGitBranch,
+    title: "Type-safe Go SDK",
+    desc: "An ORM-like API built on Go generics, inspired by Mongoose and GORM — plus optimistic locking for safe concurrent writes.",
+  },
+];
 
 const FeaturesSection: React.FC = () => {
   return (
-    <section id="features" className="lg:py-30 bg-slate-50 py-12 sm:py-16">
+    <section id="features" className="relative py-20 sm:py-28">
+      <div
+        className="absolute left-[10%] top-1/3 -z-10 h-72 w-72 rounded-full bg-accent-3/10 blur-[120px]"
+        aria-hidden
+      />
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center sm:mb-16">
-          <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
-            Compliance as a Service, Not a Tool
+        <div className="mx-auto mb-14 max-w-3xl text-center sm:mb-16">
+          <span className="text-sm font-semibold uppercase tracking-widest text-accent-2">
+            Capabilities
+          </span>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
+            Real encryption, real database ergonomics
           </h2>
-          <p className="mx-auto max-w-3xl text-base text-gray-600 sm:text-lg md:text-xl">
-            Gardbase shifts the paradigm from complex configuration to automatic compliance. Our
-            zero-knowledge architecture makes data breaches technically impossible.
+          <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
+            Zero-trust security usually means giving up querying, sorting, and developer experience.
+            Gardbase keeps all three.
           </p>
         </div>
 
-        <div className="grid items-center gap-8 sm:gap-12 md:grid-cols-2">
-          <div>
-            <div className="space-y-6 sm:space-y-8">
-              <div className="flex items-start space-x-3 sm:space-x-4">
-                <div className="bg-brand flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl sm:h-10 sm:w-10">
-                  <LuShield className="h-4 w-4 text-white sm:h-5 sm:w-5" />
-                </div>
-                <div>
-                  <h3 className="text-brand mb-1.5 text-lg font-semibold tracking-tight sm:mb-2 sm:text-xl">
-                    Breach-Proof Architecture
-                  </h3>
-                  <p className="text-sm text-gray-600 sm:text-base">
-                    Client-side encryption with zero-knowledge design. Even if our infrastructure is
-                    compromised, your data remains useless ciphertext.
-                  </p>
-                </div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map(f => (
+            <div
+              key={f.title}
+              className="glass group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/40"
+            >
+              <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent/25 to-accent-3/20 text-accent-2 ring-1 ring-fg/10">
+                <f.icon className="h-5 w-5" />
               </div>
-
-              <div className="flex items-start space-x-3 sm:space-x-4">
-                <div className="bg-brand flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl sm:h-10 sm:w-10">
-                  <LuCircleCheck className="h-4 w-4 text-white sm:h-5 sm:w-5" />
-                </div>
-                <div>
-                  <h3 className="text-brand mb-1.5 text-lg font-semibold tracking-tight sm:mb-2 sm:text-xl">
-                    Automated Compliance
-                  </h3>
-                  <p className="text-sm text-gray-600 sm:text-base">
-                    GDPR-conformant audit logs, automated data retention, and built-in portability
-                    features work out of the box.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3 sm:space-x-4">
-                <div className="bg-brand flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl sm:h-10 sm:w-10">
-                  <LuDatabase className="h-4 w-4 text-white sm:h-5 sm:w-5" />
-                </div>
-                <div>
-                  <h3 className="text-brand mb-1.5 text-lg font-semibold tracking-tight sm:mb-2 sm:text-xl">
-                    Developer-First Experience
-                  </h3>
-                  <p className="text-sm text-gray-600 sm:text-base">
-                    Seamless integration with your existing stack. Simple SDKs, predictable pricing,
-                    and familiar database interfaces.
-                  </p>
-                </div>
-              </div>
+              <h3 className="mb-2 text-lg font-semibold text-fg">{f.title}</h3>
+              <p className="text-sm leading-relaxed text-muted">{f.desc}</p>
             </div>
-          </div>
-
-          {/* TODO: this section will be modified when the actual SDK(s) is (are) ready */}
-          <div className="rounded-2xl bg-white p-4 shadow-lg sm:p-6 lg:p-8">
-            <div className="overflow-x-auto rounded-lg bg-gray-800 p-4 font-mono text-xs text-green-400 sm:p-6 sm:text-sm">
-              <div className="mb-2">
-                <span className="text-gray-500">// Simple integration</span>
-              </div>
-              <div className="space-y-1">
-                <div>
-                  <span className="text-blue-400">import</span> {"{"} GardbaseClient {"}"}{" "}
-                  <span className="text-blue-400">from</span>{" "}
-                  <span className="text-yellow-400">'@gardbase/client'</span>
-                </div>
-                <div className="mt-4">
-                  <span className="text-blue-400">const</span>{" "}
-                  <span className="text-white">gardb</span> ={" "}
-                  <span className="text-blue-400">new</span>{" "}
-                  <span className="text-white">GardbaseClient</span>({"{"}
-                </div>
-                <div className="ml-4">
-                  <span className="text-white">apiKey</span>:{" "}
-                  <span className="text-yellow-400">'your-api-key'</span>,
-                </div>
-                <div className="ml-4">
-                  <span className="text-white">autoCompliance</span>:{" "}
-                  <span className="text-orange-400">true</span>{" "}
-                  <span className="text-gray-500">// Always on</span>
-                </div>
-                <div>{"}"});</div>
-                <div className="mt-4">
-                  <span className="text-gray-500">// Data is encrypted client-side</span>
-                </div>
-                <div>
-                  <span className="text-blue-400">await</span>{" "}
-                  <span className="text-white">gardb</span>.
-                  <span className="text-white">users</span>.
-                  <span className="text-white">create</span>({"{"}{" "}
-                  <span className="text-white">email</span>,{" "}
-                  <span className="text-white">name</span> {"}"});
-                </div>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
     </section>
