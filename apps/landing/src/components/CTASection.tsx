@@ -16,12 +16,12 @@ const CTASection: React.FC = () => {
           />
           <div className="relative">
             <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
-              Build on a database that{" "}
-              <span className="text-gradient-bright">can&apos;t betray you</span>
+              Build where breaches{" "}
+              <span className="text-gradient-bright">come up empty</span>
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base text-slate-300 sm:text-lg">
-              Clone it, audit it, deploy it on your own AWS — all open source. Star the repo to
-              follow along as the managed cloud takes shape.
+              Clone it, read every line, and deploy it into your own AWS account — it&apos;s all open
+              source. Star the repo to follow along as the managed cloud takes shape.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
               <a
