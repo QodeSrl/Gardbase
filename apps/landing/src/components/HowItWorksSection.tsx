@@ -38,7 +38,7 @@ const HowItWorksSection: React.FC = () => {
             How it works
           </span>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
-            Trust you can verify, not just assume
+            Zero plaintext ever reaches the server
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
             Three steps from your application to provably confidential storage.

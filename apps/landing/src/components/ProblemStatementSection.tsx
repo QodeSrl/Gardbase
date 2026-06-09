@@ -12,7 +12,7 @@ const gardbase = [
   "Data is encrypted client-side — the server only holds ciphertext",
   "Keys are unwrapped only inside attested AWS Nitro Enclaves",
   "Searchable indexes work directly on encrypted data",
-  "Zero-trust by design — and you can cryptographically verify it",
+  "Zero-trust architecture — and you can cryptographically verify it",
 ];
 
 const ProblemStatementSection: React.FC = () => {
