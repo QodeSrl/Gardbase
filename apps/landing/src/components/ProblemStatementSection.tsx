@@ -21,15 +21,15 @@ const ProblemStatementSection: React.FC = () => {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto mb-14 max-w-3xl text-center sm:mb-16">
           <span className="text-sm font-semibold uppercase tracking-widest text-accent-2">
-            The purpose
+            Why Gardbase
           </span>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
-            Encryption shouldn&apos;t be an afterthought
+            Your database is your biggest blast radius
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
-            Most databases are built to read your data. Gardbase is built so it never can. The
-            difference is architectural — and it&apos;s why the entire engine is open source for you
-            to audit.
+            One leaked credential or one misconfigured bucket, and a traditional database hands over
+            everything in plaintext. Gardbase is built so there&apos;s nothing readable to take — and
+            the entire engine is open source for you to audit.
           </p>
         </div>
 

@@ -40,14 +40,14 @@ const HeroSection: React.FC = () => {
 
           <h1 className="animate-fade-up mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
             <span className="text-fg">The database that</span>
-            <span className="text-gradient animate-gradient block">can&apos;t be breached</span>
+            <span className="text-gradient animate-gradient block">can&apos;t read your data</span>
           </h1>
 
           <p className="animate-fade-up mx-auto mt-6 max-w-2xl text-base text-muted sm:text-lg md:text-xl">
-            Gardbase is an open-source, zero-trust encrypted NoSQL database. Data is encrypted
-            client-side and keys live inside hardware-isolated AWS Nitro Enclaves — so the backend
-            never sees plaintext. Catastrophic breaches become{" "}
-            <strong className="text-fg">architecturally impossible</strong>.
+            Gardbase is an open-source, zero-trust NoSQL database. Records are encrypted inside your
+            own application, and the keys exist only within hardware-isolated AWS Nitro Enclaves — so
+            the server stores ciphertext and nothing else. A breach walks away with{" "}
+            <strong className="text-fg">data it can never decrypt</strong>.
           </p>
 
           <div className="animate-fade-up mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
