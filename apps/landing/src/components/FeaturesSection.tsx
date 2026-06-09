@@ -32,7 +32,7 @@ const features = [
   {
     icon: LuDatabase,
     title: "Hybrid DynamoDB + S3",
-    desc: "Small encrypted objects live inline in DynamoDB; large blobs go to S3 with wrapped DEKs in metadata. Scalable by default.",
+    desc: "Small encrypted objects live inline in DynamoDB; large blobs go to S3 with wrapped DEKs in metadata. Storage scales without extra wiring.",
   },
   {
     icon: LuGitBranch,
@@ -54,7 +54,7 @@ const FeaturesSection: React.FC = () => {
             Capabilities
           </span>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
-            Real encryption, real database ergonomics
+            Strong encryption, full database ergonomics
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
             Zero-trust security usually means giving up querying, sorting, and developer experience.
