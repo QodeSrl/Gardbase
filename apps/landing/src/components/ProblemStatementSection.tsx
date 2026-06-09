@@ -1,53 +1,79 @@
 import React from "react";
+import { LuTriangleAlert, LuShieldCheck, LuArrowRight } from "react-icons/lu";
+
+const traditional = [
+  "Stores your data in plaintext — one breach exposes everything",
+  "Operators, infra, and backups can all read sensitive records",
+  "Compliance bolted on as config you must get right, every time",
+  "Trust is a promise, not something you can verify",
+];
+
+const gardbase = [
+  "Data is encrypted client-side — the server only holds ciphertext",
+  "Keys are unwrapped only inside attested AWS Nitro Enclaves",
+  "Searchable indexes work directly on encrypted data",
+  "Zero-trust by design — and you can cryptographically verify it",
+];
 
 const ProblemStatementSection: React.FC = () => {
   return (
-    <section className="lg:py-25 mb-20 bg-white py-12 sm:py-16">
+    <section id="why" className="relative py-20 sm:py-28">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-20 text-center sm:mb-16">
-          <h2 className="text-brand mb-3 text-2xl font-bold tracking-tight sm:mb-4 sm:text-3xl md:text-4xl">
-            GDPR Compliance Shouldn't Be This Hard
+        <div className="mx-auto mb-14 max-w-3xl text-center sm:mb-16">
+          <span className="text-sm font-semibold uppercase tracking-widest text-accent-2">
+            The purpose
+          </span>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
+            Encryption shouldn&apos;t be an afterthought
           </h2>
-          <p className="mx-auto max-w-3xl text-base text-gray-600 sm:text-lg md:text-xl">
-            Traditional databases make you choose between developer experience and compliance. With
-            complex configurations, shared responsibility models, and constant legal uncertainty.
+          <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
+            Most databases are built to read your data. Gardbase is built so it never can. The
+            difference is architectural — and it&apos;s why the entire engine is open source for you
+            to audit.
           </p>
         </div>
 
-        <div className="grid gap-6 sm:gap-8 md:grid-cols-3">
-          <div className="rounded-2xl bg-red-50 p-6 sm:p-8">
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-red-500 group-hover:text-red-400 sm:text-sm">
-              Financial Impact
+        <div className="grid gap-6 md:grid-cols-2 lg:gap-8">
+          {/* Traditional */}
+          <div className="glass relative overflow-hidden rounded-2xl p-7 sm:p-8">
+            <div className="absolute right-6 top-6 h-24 w-24 rounded-full bg-red-500/10 blur-3xl" />
+            <div className="mb-5 inline-flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-500 dark:text-red-300">
+              <LuTriangleAlert className="h-4 w-4" />
+              Traditional databases
             </div>
-            <h3 className="text-brand mb-2 text-lg font-semibold sm:text-xl">€5.88B in Fines</h3>
-            <p className="text-sm text-gray-600 sm:text-base">
-              GDPR fines continue to escalate, with enforcement becoming more aggressive and
-              personal liability extending to executives.
-            </p>
+            <ul className="space-y-3">
+              {traditional.map(item => (
+                <li key={item} className="flex items-start gap-3 text-sm text-muted sm:text-base">
+                  <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400/70" />
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="rounded-2xl bg-orange-50 p-6 sm:p-8">
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-orange-500 group-hover:text-orange-400 sm:text-sm">
-              Business Cost
+          {/* Gardbase */}
+          <div className="ring-glow relative overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-b from-accent/10 to-transparent p-7 sm:p-8">
+            <div className="absolute right-6 top-6 h-24 w-24 rounded-full bg-accent/20 blur-3xl" />
+            <div className="mb-5 inline-flex items-center gap-2 rounded-lg bg-accent/15 px-3 py-1.5 text-sm font-medium text-accent">
+              <LuShieldCheck className="h-4 w-4" />
+              The Gardbase way
             </div>
-            <h3 className="text-brand mb-2 text-lg font-semibold sm:text-xl">8% Profit Drop</h3>
-            <p className="text-sm text-gray-600 sm:text-base">
-              SMEs face disproportionate compliance costs, with some experiencing over 8% reduction
-              in profits due to regulatory overhead.
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-yellow-50 p-6 sm:p-8">
-            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-amber-500 group-hover:text-amber-400 sm:text-sm">
-              Technical Burden
-            </div>
-            <h3 className="text-brand mb-2 text-lg font-semibold sm:text-xl">Complex Tools</h3>
-            <p className="text-sm text-gray-600 sm:text-base">
-              Current solutions offer compliance as a tool you must configure correctly, leaving all
-              responsibility and risk with you.
-            </p>
+            <ul className="space-y-3">
+              {gardbase.map(item => (
+                <li key={item} className="flex items-start gap-3 text-sm text-fg sm:text-base">
+                  <LuArrowRight className="mt-1 h-4 w-4 flex-shrink-0 text-accent-2" />
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
+
+        <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-subtle sm:text-base">
+          Built for teams in <span className="text-fg">healthcare</span>,{" "}
+          <span className="text-fg">finance</span>, and anywhere data confidentiality has to be
+          provable — not just promised.
+        </p>
       </div>
     </section>
   );
