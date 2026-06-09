@@ -36,7 +36,7 @@ const plans: Plan[] = [
     features: [
       "Fully managed Nitro Enclave fleet",
       "Automated key management & rotation",
-      "Usage-based pricing — no mock numbers",
+      "Transparent usage-based pricing",
       "Dashboards, metrics & alerts",
       "Priority support",
     ],
@@ -124,7 +124,7 @@ const PricingSection: React.FC = () => {
         </div>
 
         <p className="mt-8 text-center text-xs text-subtle sm:text-sm">
-          Managed cloud pricing will be published when it launches — no placeholder numbers here.
+          Managed cloud pricing will be published at launch. Request early access to be the first to know.
         </p>
       </div>
     </section>
