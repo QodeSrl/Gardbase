@@ -1,27 +1,222 @@
-@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
+/* Drive the `dark:` variant off our class toggle, not prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Fixed brand + accent + always-dark surfaces (code windows, CTA spotlight) */
 @theme {
   --color-brand: #00174f;
+  --color-brand-700: #002a7a;
+  --color-brand-500: #1d4ed8;
+
+  --color-ink: #05070f;
+  --color-ink-2: #080b16;
+  --color-surface: #0c1020;
+  --color-surface-2: #11162b;
+
+  --color-accent: #3b82f6;
+  --color-accent-2: #22d3ee;
+  --color-accent-3: #6366f1;
+
   --font-sans: "Poppins", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Semantic tokens that switch with the active theme */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg2: var(--bg2);
+  --color-card: var(--card);
+  --color-card2: var(--card2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+}
+
+/* Dark theme (default) */
+:root,
+:root.dark {
+  --bg: #05070f;
+  --bg2: #080b16;
+  --card: #0c1020;
+  --card2: #11162b;
+  --fg: #ffffff;
+  --muted: #c5cee4;
+  --subtle: #8b95ad;
+  --line: rgba(255, 255, 255, 0.1);
+
+  --glass-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.045) 0%,
+    rgba(255, 255, 255, 0.015) 100%
+  );
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
+  --grid-line: rgba(255, 255, 255, 0.04);
+  --text-grad: linear-gradient(120deg, #ffffff 0%, #a7c2ff 45%, #22d3ee 100%);
+}
+
+/* Light theme */
+:root.light {
+  --bg: #f6f8fc;
+  --bg2: #eef2f9;
+  --card: #ffffff;
+  --card2: #f3f6fc;
+  --fg: #0a1430;
+  --muted: #41506b;
+  --subtle: #6b7892;
+  --line: rgba(8, 18, 48, 0.1);
+
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.6) 100%);
+  --glass-border: rgba(8, 18, 48, 0.08);
+  --glass-shadow: 0 10px 30px -18px rgba(8, 18, 48, 0.25);
+  --grid-line: rgba(10, 22, 60, 0.05);
+  --text-grad: linear-gradient(120deg, #00174f 0%, #1d4ed8 50%, #0891b2 100%);
 }
 
 @layer base {
-  button:hover {
-    cursor: pointer;
-  }
-
   html {
     scroll-behavior: smooth;
   }
 
   body {
-    background-color: #1e1e20;
-    color: #fff;
+    background-color: var(--bg);
+    color: var(--muted);
     width: 100%;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     font-synthesis: style;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
+  }
+
+  button:hover {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: rgba(59, 130, 246, 0.35);
+    color: #fff;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    background: var(--text-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Always-bright gradient (use on permanently dark panels) */
+  .text-gradient-bright {
+    background: linear-gradient(120deg, #ffffff 0%, #a7c2ff 45%, #22d3ee 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(12px);
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .mask-fade {
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 40%, transparent 100%);
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 40%, transparent 100%);
+  }
+
+  .ring-glow {
+    box-shadow:
+      0 0 0 1px rgba(59, 130, 246, 0.25),
+      0 20px 60px -20px rgba(59, 130, 246, 0.45);
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulseGlow 4s ease-in-out infinite;
+  }
+
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradientShift 8s ease infinite;
+  }
+
+  .animate-fade-up {
+    animation: fadeUp 0.7s cubic-bezier(0.21, 0.99, 0.4, 1) both;
+  }
+
+  .animate-marquee {
+    animation: marquee 28s linear infinite;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
   }
 }
