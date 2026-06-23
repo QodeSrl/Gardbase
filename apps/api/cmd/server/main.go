@@ -103,6 +103,12 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	health.GET("/storage", healthCheckHandler.HandleStorageHealthCheck)
 	health.GET("/kms", healthCheckHandler.HandleKMSHealthCheck)
 
+	dependenciesHandler := &handlers.DependenciesHandler{
+		Dependencies: services.NewDependenciesService(getEnv("GO_MOD_PATH", "go.mod")),
+	}
+	dependencies := api.Group("/dependencies")
+	dependencies.GET("/", dependenciesHandler.HandleListDependencies)
+
 	tenantHandler := &handlers.TenantHandler{
 		Vsock:  vsock,
 		Dynamo: dynamoClient,
