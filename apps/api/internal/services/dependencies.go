@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,6 +115,110 @@ func (d *Dependencies) List(ctx context.Context) ([]DependencyInfo, error) {
 	})
 
 	return deps, nil
+}
+
+// UpdateResult describes the outcome of upgrading a single dependency.
+type UpdateResult struct {
+	Path            string `json:"path"`
+	PreviousVersion string `json:"previous_version"`
+	NewVersion      string `json:"new_version"`
+}
+
+// Update upgrades the given module to the requested version (or to its latest
+// available version when targetVersion is empty) by invoking the Go toolchain
+// against the module that owns the configured go.mod file. It returns the
+// dependency information after the update has been applied.
+//
+// The update is performed with `go get <module>@<version>` followed by
+// `go mod tidy` so that go.mod and go.sum stay consistent. Both commands run in
+// the directory containing the configured go.mod file.
+func (d *Dependencies) Update(ctx context.Context, modulePath, targetVersion string) (*UpdateResult, error) {
+	modulePath = strings.TrimSpace(modulePath)
+	if modulePath == "" {
+		return nil, fmt.Errorf("module path is required")
+	}
+	if err := module.CheckPath(modulePath); err != nil {
+		return nil, fmt.Errorf("invalid module path %q: %w", modulePath, err)
+	}
+
+	// Resolve the dependency to ensure it is actually declared and to capture
+	// its current version before applying the update.
+	current, err := d.requirement(modulePath)
+	if err != nil {
+		return nil, err
+	}
+
+	targetVersion = strings.TrimSpace(targetVersion)
+	if targetVersion == "" {
+		latest, err := d.latestVersion(ctx, modulePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve latest version: %w", err)
+		}
+		targetVersion = latest
+	} else if !semver.IsValid(targetVersion) {
+		return nil, fmt.Errorf("invalid target version %q", targetVersion)
+	}
+
+	if current.Version != "" && semver.IsValid(current.Version) && semver.IsValid(targetVersion) &&
+		semver.Compare(targetVersion, current.Version) < 0 {
+		return nil, fmt.Errorf("target version %s is older than current version %s", targetVersion, current.Version)
+	}
+
+	workDir := filepath.Dir(d.GoModPath)
+	if workDir == "" {
+		workDir = "."
+	}
+
+	if out, err := d.runGo(ctx, workDir, "get", modulePath+"@"+targetVersion); err != nil {
+		return nil, fmt.Errorf("go get failed: %w: %s", err, strings.TrimSpace(out))
+	}
+	if out, err := d.runGo(ctx, workDir, "mod", "tidy"); err != nil {
+		return nil, fmt.Errorf("go mod tidy failed: %w: %s", err, strings.TrimSpace(out))
+	}
+
+	// Re-read go.mod to report the version that was actually pinned.
+	updated, err := d.requirement(modulePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UpdateResult{
+		Path:            modulePath,
+		PreviousVersion: current.Version,
+		NewVersion:      updated.Version,
+	}, nil
+}
+
+// requirement parses go.mod and returns the require directive for the given
+// module path.
+func (d *Dependencies) requirement(modulePath string) (module.Version, error) {
+	data, err := os.ReadFile(d.GoModPath)
+	if err != nil {
+		return module.Version{}, fmt.Errorf("failed to read go.mod at %q: %w", d.GoModPath, err)
+	}
+
+	mf, err := modfile.Parse(filepath.Base(d.GoModPath), data, nil)
+	if err != nil {
+		return module.Version{}, fmt.Errorf("failed to parse go.mod: %w", err)
+	}
+
+	for _, req := range mf.Require {
+		if req.Mod.Path == modulePath {
+			return req.Mod, nil
+		}
+	}
+
+	return module.Version{}, fmt.Errorf("dependency %q is not declared in go.mod", modulePath)
+}
+
+// runGo executes a `go` subcommand in the given working directory and returns
+// its combined output.
+func (d *Dependencies) runGo(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 // latestVersion queries the module proxy for the latest version of the given

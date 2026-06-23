@@ -108,6 +108,7 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	}
 	dependencies := api.Group("/dependencies")
 	dependencies.GET("/", dependenciesHandler.HandleListDependencies)
+	dependencies.POST("/update", dependenciesHandler.HandleUpdateDependency)
 
 	tenantHandler := &handlers.TenantHandler{
 		Vsock:  vsock,

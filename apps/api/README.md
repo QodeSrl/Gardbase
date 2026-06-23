@@ -44,3 +44,34 @@ Example response:
   ]
 }
 ```
+
+`POST /api/dependencies/update`
+
+Upgrades a single dependency listed by `GET /api/dependencies/`. Provide the
+module `path` and, optionally, the target `version`. When `version` is omitted
+the dependency is upgraded to its latest available version on the module proxy.
+
+The update runs `go get <module>@<version>` followed by `go mod tidy` in the
+directory containing the configured `go.mod` (see `GO_MOD_PATH`), so the Go
+toolchain must be available in the runtime environment.
+
+Example request:
+
+```json
+{
+  "path": "go.uber.org/zap",
+  "version": "v1.27.1"
+}
+```
+
+Example response:
+
+```json
+{
+  "updated": {
+    "path": "go.uber.org/zap",
+    "previous_version": "v1.27.0",
+    "new_version": "v1.27.1"
+  }
+}
+```
