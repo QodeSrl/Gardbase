@@ -1,22 +1,22 @@
 ---
 schema_version: 1
-id: ced3d59b-5c02-4640-88e1-3cc81d9d5635
+id: 98c59bf1-2386-45a6-9684-efa148a277fc
 name: landing
 node: apps/landing
 category: app
 ---
 
 ## Purpose
-Public-facing marketing/landing website for the product. Presents hero, problem statement, features, how-it-works, pricing, open-source, and CTA sections to convert visitors. Static single-page React app served by Vite.
+Marketing/landing website for the product. A static single-page React application presenting hero, features, how-it-works, pricing, open-source, CTA, and footer sections to drive user acquisition.
 
 ## Structure
-Standard Vite + React + TypeScript app within an Nx monorepo (project.json, eslint.config.js). Entry: src/main.tsx mounts App.tsx. App.tsx composes the single MainPage (src/pages/MainPage.tsx), which renders the section components (Header, HeroSection, ProblemStatementSection, FeaturesSection, HowItWorksSection, OpenSourceSection, PricingSection, CTASection, Footer). src/lib holds shared concerns: site.ts (site metadata/config), themeContext.ts + ThemeProvider.tsx (theme/dark-mode context). src/types.ts for shared types. Styling via src/index.css. Static assets in public/ (favicons, touch icon) and src/assets/ (logos). HTML shell in index.html. Build config in vite.config.ts; TS config split into tsconfig.json / tsconfig.node.json.
+Vite + React + TypeScript app. Entry at src/main.tsx mounting src/components/App.tsx, which renders src/pages/MainPage.tsx composed of section components (HeroSection, FeaturesSection, HowItWorksSection, ProblemStatementSection, PricingSection, OpenSourceSection, CTASection) plus Header and Footer. src/lib holds site configuration (site.ts), theme context (themeContext.ts), and ThemeProvider.tsx for light/dark theming. src/types.ts for shared types, src/index.css for global styles, src/assets for logos. public/ holds favicons and touch icons. Config: vite.config.ts, tsconfig.json/tsconfig.node.json, eslint.config.js, project.json (Nx target wiring), package.json. index.html is the Vite HTML shell.
 
 ## Behavior
-main.tsx bootstraps React, wraps the tree in ThemeProvider for light/dark theming via React context (themeContext.ts), and renders App -> MainPage -> ordered marketing sections. Header likely provides navigation/theme toggle; Footer provides links. Content/links sourced from site.ts. No routing beyond a single page; primarily presentational with theme state being the main interactive concern. Built and served as a static SPA by Vite.
+Built and served as a static SPA via Vite. main.tsx bootstraps React into the index.html root element. ThemeProvider wraps the app to supply theme state via context; section components render content largely driven by site.ts config constants. No backend/runtime logic beyond client-side rendering; output is static assets for hosting/CDN. Nx project.json defines build/serve/lint targets.
 
 ## Dependencies
-React + ReactDOM, Vite (build/dev server), TypeScript, ESLint (flat config). Nx tooling (project.json) for monorepo task orchestration. No backend calls implied; self-contained static content from src/lib/site.ts and local assets.
+React + ReactDOM, Vite (build/dev server), TypeScript, ESLint (flat config). Part of an Nx monorepo (project.json). No apparent internal workspace package dependencies referenced in the file list; self-contained content from src/lib/site.ts.
 
 ## Notes
-Theme state is local to this app via React context, not shared from a workspace lib. site.ts centralizes copy/links — update there for content changes. Favicons/icons duplicated across public/ for various platforms. Section components are stateless presentational units; adding/reordering sections is done in MainPage.tsx.
+.infrar/knowledge.md present (generated knowledge artifact). Content is config-driven via site.ts, so copy/marketing changes should be made there. Theme handling is local to this app (own ThemeProvider/context) rather than a shared library.

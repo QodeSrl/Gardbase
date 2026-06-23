@@ -1,22 +1,22 @@
 ---
 schema_version: 1
-id: dfe8a543-11f2-4d76-b699-a89daa5e2d61
-name: infrastructure-main
+id: 3b184470-7eb0-4a73-b3a4-961e183776a9
+name: infra-main
 node: infrastructure/main
 category: iac
 ---
 
 ## Purpose
-Root Terraform configuration defining the primary cloud infrastructure (AWS) for the project. Provisions compute, storage, data, encryption, and monitoring resources, parameterized per environment (dev/prod).
+Root Terraform module that provisions the primary AWS infrastructure stack, parameterized per environment (dev/prod) via tfvars. Defines compute, storage, encryption, and monitoring resources for the application.
 
 ## Structure
-Flat Terraform root module. main.tf holds provider/backend and core wiring; resource concerns split by file: ec2.tf (compute instances), s3.tf (object storage), dynamodb.tf (NoSQL tables), kms.tf (encryption keys), cloudwatch.tf (logging/alarms/metrics). variables.tf declares inputs; outputs.tf exposes computed values. environments/*.tfvars supply per-environment variable values. user_data.sh is the EC2 bootstrap/cloud-init script. .terraform.lock.hcl pins provider versions.
+Flat root module organized by resource domain: main.tf (provider/backend/root config), ec2.tf (instances), s3.tf (buckets), dynamodb.tf (tables), kms.tf (encryption keys), cloudwatch.tf (logs/alarms/metrics), variables.tf (input declarations), outputs.tf (exported values). environments/ holds dev.tfvars and prod.tfvars for per-env values. user_data.sh is the EC2 bootstrap script. .terraform.lock.hcl pins provider versions. .infrar/knowledge.md is tooling-generated metadata.
 
 ## Behavior
-Applied via `terraform init/plan/apply` with a selected var-file (e.g. `-var-file=environments/dev.tfvars`). Terraform reconciles declared resources against actual cloud state. EC2 instances run user_data.sh on first boot for provisioning. KMS keys encrypt S3/DynamoDB/CloudWatch resources where referenced. Outputs surface IDs/endpoints for downstream consumption.
+Applied via `terraform plan/apply -var-file=environments/<env>.tfvars`. Provisions a complete stack: EC2 instances (bootstrapped with user_data.sh), S3 buckets, DynamoDB tables, KMS keys for at-rest encryption, and CloudWatch monitoring. Outputs in outputs.tf expose resource identifiers/endpoints for downstream consumers. State backend and provider configured in main.tf.
 
 ## Dependencies
-Terraform CLI and the AWS provider (versions pinned in .terraform.lock.hcl). AWS credentials/region context required at apply time. Likely a remote backend (e.g. S3 + DynamoDB state lock) configured in main.tf. Inter-resource dependencies: KMS keys referenced by S3/DynamoDB/CloudWatch; EC2 may reference S3/DynamoDB outputs.
+Terraform CLI and AWS provider (versions locked in .terraform.lock.hcl). Requires AWS credentials and permissions for EC2, S3, DynamoDB, KMS, CloudWatch, IAM. KMS keys referenced cross-resource for encryption. Likely a remote state backend (e.g., S3/DynamoDB) declared in main.tf.
 
 ## Notes
-Verify backend and state-locking configuration before applying to prod. Confirm tfvars do not contain secrets (use a secrets manager/SSM instead). The dynamodb.tf table may double as the state-lock table—check for circular bootstrap concerns. Review user_data.sh for idempotency and secret handling.
+No separate module abstraction — single root module per environment via tfvars rather than workspaces or distinct state dirs; confirm state isolation between dev and prod. Verify user_data.sh changes trigger intended instance replacement. Keep .terraform.lock.hcl committed for reproducible provider versions.
