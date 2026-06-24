@@ -96,7 +96,9 @@ resource "aws_iam_role_policy" "api_policy" {
           aws_dynamodb_table.api_keys.arn,
           "${aws_dynamodb_table.api_keys.arn}/index/*",
           aws_dynamodb_table.table_configs.arn,
-          "${aws_dynamodb_table.table_configs.arn}/index/*"
+          "${aws_dynamodb_table.table_configs.arn}/index/*",
+          aws_dynamodb_table.chat.arn,
+          "${aws_dynamodb_table.chat.arn}/index/*"
         ]
       },
       {
@@ -226,6 +228,9 @@ resource "aws_instance" "api" {
     dynamo_table_configs_table  = aws_dynamodb_table.table_configs.name
     dynamo_tenant_configs_table = aws_dynamodb_table.tenant_configs.name
     dynamo_api_keys_table       = aws_dynamodb_table.api_keys.name
+    dynamo_chat_table           = aws_dynamodb_table.chat.name
+    staff_chat_token            = var.staff_chat_token
+    chat_allowed_origins        = var.chat_allowed_origins
     kms_key_id                  = aws_kms_key.enclave_key.id
     enclave_cpus                = var.enclave_cpus
     enclave_memory_mib          = var.enclave_memory_mib

@@ -64,3 +64,16 @@ variable "enclave_pcr0_sha384" {
   type        = string
   default     = "PLACEHOLDER_PCR0"
 }
+
+variable "staff_chat_token" {
+  description = "Shared bearer token that authenticates support staff for the landing-site support chat. Leave empty to disable the staff side of the chat."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "chat_allowed_origins" {
+  description = "Comma-separated list of origins permitted to open a support-chat WebSocket (e.g. \"https://gardbase.com\"). Use \"*\" to allow any origin."
+  type        = string
+  default     = "*"
+}

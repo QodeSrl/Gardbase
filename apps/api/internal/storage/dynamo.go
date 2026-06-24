@@ -27,9 +27,11 @@ type DynamoClient struct {
 	TableConfigTable  string
 	TenantConfigTable string
 	APIKeysTable      string
+	ChatTable         string
+	ChatRetention     time.Duration
 }
 
-func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, tableConfigTable string, tenantConfigTable string, apiKeysTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
+func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable string, tableConfigTable string, tenantConfigTable string, apiKeysTable string, chatTable string, cfg aws.Config, useLocalstack bool, localstackUrl string) *DynamoClient {
 	return &DynamoClient{
 		Client: dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
 			if useLocalstack {
@@ -41,6 +43,7 @@ func NewDynamoClient(ctx context.Context, objectsTable string, indexesTable stri
 		TableConfigTable:  tableConfigTable,
 		TenantConfigTable: tenantConfigTable,
 		APIKeysTable:      apiKeysTable,
+		ChatTable:         chatTable,
 	}
 }
 

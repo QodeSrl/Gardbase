@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,6 +41,7 @@ type AWSConfig struct {
 	DynamoTableConfigsTable  string
 	DynamoTenantConfigsTable string
 	DynamoAPIKeysTable       string
+	DynamoChatTable          string
 	KMSKeyID                 string
 	MaxRetries               int
 	RequestTimeout           time.Duration
@@ -159,6 +161,46 @@ func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.D
 	encryption.POST("/secure-session/generate-deks", encryptionHandler.HandleSessionGenerateDEK)
 	encryption.POST("/secure-session/get-table-iek", encryptionHandler.HandleSessionGetTableIEK)
 	encryption.POST("/decrypt", encryptionHandler.HandleDecrypt)
+
+	s.setupChatRoutes(api, dynamoClient)
+}
+
+// setupChatRoutes wires the support chat widget used on the landing site:
+// website visitors talk to support staff over WebSockets, and every message is
+// persisted in DynamoDB so the history survives reconnects.
+//
+// Routes (mounted under /api):
+//
+//	POST /chat/conversations                 -> visitor starts a conversation
+//	GET  /chat/conversations/:conversationId/messages -> load history (visitor)
+//	GET  /chat/ws/:conversationId            -> visitor WebSocket
+//	GET  /chat/staff/conversations/:conversationId/messages -> load history (staff, token)
+//	GET  /chat/staff/ws/:conversationId      -> staff WebSocket (token)
+func (s *Server) setupChatRoutes(api *gin.RouterGroup, dynamoClient *storage.DynamoClient) {
+	if dynamoClient.ChatTable == "" {
+		s.logger.Warn("Support chat disabled: DYNAMO_CHAT_TABLE is not set")
+		return
+	}
+
+	chatHandler := &handlers.ChatHandler{
+		Hub:            services.NewChatHub(),
+		Dynamo:         dynamoClient,
+		Logger:         s.logger,
+		AllowedOrigins: getEnvAsSlice("CHAT_ALLOWED_ORIGINS", []string{"*"}),
+	}
+
+	chat := api.Group("/chat")
+	// Visitor-facing endpoints (public, used by the landing-site widget).
+	chat.POST("/conversations", chatHandler.HandleCreateConversation)
+	chat.GET("/conversations/:conversationId/messages", chatHandler.HandleListMessages)
+	chat.GET("/ws/:conversationId", chatHandler.HandleWebSocket)
+
+	// Staff-facing endpoints, gated by the shared staff token.
+	staffToken := getEnv("STAFF_CHAT_TOKEN", "")
+	staff := chat.Group("/staff")
+	staff.Use(middleware.StaffChatMiddleware(staffToken))
+	staff.GET("/conversations/:conversationId/messages", chatHandler.HandleListMessages)
+	staff.GET("/ws/:conversationId", chatHandler.HandleWebSocket)
 }
 
 func (s *Server) start() {
@@ -204,7 +246,7 @@ func initAWSServices(ctx context.Context, logger *zap.Logger) (*storage.S3Client
 	}
 
 	s3Client := storage.NewS3Client(ctx, awsConfig.S3Bucket, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
-	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTableConfigsTable, awsConfig.DynamoTenantConfigsTable, awsConfig.DynamoAPIKeysTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
+	dynamoClient := storage.NewDynamoClient(ctx, awsConfig.DynamoObjectsTable, awsConfig.DynamoIndexesTable, awsConfig.DynamoTableConfigsTable, awsConfig.DynamoTenantConfigsTable, awsConfig.DynamoAPIKeysTable, awsConfig.DynamoChatTable, cfg, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 	kmsService := services.NewKMSService(ctx, cfg, awsConfig.KMSKeyID, awsConfig.UseLocalstack, awsConfig.LocalstackUrl)
 
 	if err := testAWSConnectivity(ctx, s3Client, dynamoClient, logger); err != nil {
@@ -232,6 +274,7 @@ func loadAWSConfig() *AWSConfig {
 		DynamoTableConfigsTable:  getEnvOrPanic("DYNAMO_TABLE_CONFIGS_TABLE"),
 		DynamoTenantConfigsTable: getEnvOrPanic("DYNAMO_TENANT_CONFIGS_TABLE"),
 		DynamoAPIKeysTable:       getEnvOrPanic("DYNAMO_API_KEYS_TABLE"),
+		DynamoChatTable:          getEnv("DYNAMO_CHAT_TABLE", ""),
 		KMSKeyID:                 getEnvOrPanic("KMS_KEY_ID"),
 		MaxRetries:               getEnvAsInt("AWS_MAX_RETRIES", 3),
 		RequestTimeout:           time.Duration(getEnvAsInt("AWS_REQUEST_TIMEOUT", 5)) * time.Second,
@@ -300,6 +343,24 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 	}
 	return defaultValue
 }
+func getEnvAsSlice(key string, defaultValue []string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	if len(result) == 0 {
+		return defaultValue
+	}
+	return result
+}
+
 func getEnvUint32(key string, defaultValue uint32) uint32 {
 	if value := os.Getenv(key); value != "" {
 		if uintVal, err := strconv.ParseUint(value, 10, 32); err == nil {

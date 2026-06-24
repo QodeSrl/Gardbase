@@ -8,6 +8,7 @@ import OpenSourceSection from "@/components/OpenSourceSection";
 import PricingSection from "@/components/PricingSection";
 import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
+import SupportChat from "@/components/SupportChat";
 
 const MainPage: React.FC = () => {
   return (
@@ -23,6 +24,7 @@ const MainPage: React.FC = () => {
         <CTASection />
       </main>
       <Footer />
+      <SupportChat />
     </div>
   );
 };

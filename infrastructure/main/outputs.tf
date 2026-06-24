@@ -6,6 +6,7 @@ output "dynamodb_tables" {
   value = {
     objects = aws_dynamodb_table.objects.name
     index   = aws_dynamodb_table.indexes.name
+    chat    = aws_dynamodb_table.chat.name
   }
 }
 
