@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "name": "api",
+      "kind": "app",
+      "path": "apps/api",
+      "entrypoint": "apps/api/cmd/server",
+      "role": "backend-api",
+      "summary": "Go HTTP API (Nx project @gardbase/api) serving tenants/objects/encryption endpoints, backed by DynamoDB/S3 and talking to the enclave over vsock; containerized via Dockerfile.Api and pushed to ECR."
+    },
+    {
+      "name": "enclave-service",
+      "kind": "app",
+      "path": "apps/enclave-service",
+      "entrypoint": "apps/enclave-service/cmd/enclave",
+      "role": "secure-enclave-service",
+      "summary": "Go service running inside an AWS Nitro Enclave that handles attestation, session key derivation and KMS key wrapping/unwrapping; containerized via Dockerfile.enclave."
+    },
+    {
+      "name": "landing",
+      "kind": "app",
+      "path": "apps/landing",
+      "entrypoint": "apps/landing",
+      "role": "frontend",
+      "summary": "React + Vite marketing/landing site (Nx project @gardbase/landing) built to dist/apps/landing."
+    },
+    {
+      "name": "infrastructure-bootstrap",
+      "kind": "infra",
+      "path": "infrastructure/bootstrap",
+      "entrypoint": "infrastructure/bootstrap",
+      "role": "terraform-bootstrap",
+      "summary": "Terraform workspace (S3 backend key bootstrap/terraform.tfstate) creating the Lambda code bucket and the ECR repository consumed by the main stack."
+    },
+    {
+      "name": "infrastructure-main",
+      "kind": "infra",
+      "path": "infrastructure/main",
+      "entrypoint": "infrastructure/main",
+      "role": "terraform-main",
+      "summary": "Main Terraform workspace (S3 backend key main/terraform.tfstate) provisioning EC2 Nitro hosts, DynamoDB, S3, KMS and CloudWatch; reads bootstrap remote state and has dev/prod tfvars."
+    },
+    {
+      "name": "crypto-sdk",
+      "kind": "lib",
+      "path": "pkg/crypto",
+      "entrypoint": "pkg/crypto",
+      "role": "client-sdk",
+      "summary": "Standalone Go module (github.com/qodesrl/gardbase/pkg/crypto) implementing client-side deterministic/probabilistic/OPE encryption and KMS helpers; published as an SDK rather than deployed."
+    }
+  ],
+  "sharedFolders": [
+    "pkg/models",
+    "pkg/enclaveproto",
+    "pkg/api"
+  ],
+  "repoWideOther": false,
+  "branches": [
+    {
+      "name": "main",
+      "classification": "permanent",
+      "reason": "Default branch (origin/HEAD -> origin/main); receives merges from test via PRs."
+    },
+    {
+      "name": "development",
+      "classification": "permanent",
+      "reason": "Long-lived integration branch in the development -> test -> main promotion flow."
+    },
+    {
+      "name": "test",
+      "classification": "permanent",
+      "reason": "Long-lived staging branch merged from development and promoted into main."
+    },
+    {
+      "name": "infrar-test",
+      "classification": "temporary",
+      "reason": "Tooling branch containing a single 'infrar: import analysis' commit; not part of the development/test/main flow."
+    }
+  ]
+}
