@@ -1,75 +1,76 @@
 ---
 schema_version: 1
-id: 028999ee-c197-41aa-944f-2a2a6836ea9a
+id: 8c8b40ec-59f8-4a9f-bec7-a415b6114fff
 name: landing
 node: apps/landing
 category: app
 ---
 ## Purpose
 
-`landing` is the public marketing site for Gardbase — a single-page React app that explains what the product is, why zero-trust encrypted storage matters, how the enclave attestation flow works, and where the code lives. It exists to convert visitors into GitHub stars and early-access sign-ups; it is entirely static and has no runtime dependency on the `api` or `enclave-service` nodes.
+`landing` is the marketing site for Gardbase — a single-page React application that explains what the product is, why it exists, and how the zero-trust architecture works, then drives visitors to the GitHub repository and the docs.
+
+It is a purely presentational node. It has no backend calls, no analytics, no forms, and no dependency on any other node in the repo: all copy, links, and product claims are hardcoded in the components and in one small config module. Its content mirrors the architecture implemented by the `api`, `enclave-service`, and `crypto-sdk` nodes (client-side AES-256-GCM, attested Nitro Enclaves, searchable encryption, a four-level key hierarchy), so changes to those guarantees should be reflected here.
 
 ## Structure
 
 ```
 apps/landing/
-  index.html                # Vite entry; favicons, SEO meta, pre-paint theme script
-  vite.config.ts            # React SWC + Tailwind v4 plugins, "@" → /src alias
-  package.json              # @gardbase/landing
-  project.json              # Nx wiring (build output → dist/apps/landing)
-  tsconfig.json             # extends the workspace tsconfig.base.json
-  eslint.config.js
-  public/                   # favicon set + apple-touch-icon
+  index.html               # document head, favicons, meta description, pre-hydration theme script
   src/
-    main.tsx                # ReactDOM root: StrictMode → ThemeProvider → BrowserRouter → App
-    index.css               # Tailwind v4 config-in-CSS: fonts, @theme tokens, light/dark vars, utilities
-    types.ts                # currently empty
+    main.tsx               # ReactDOM root: StrictMode → ThemeProvider → BrowserRouter → App
     components/
-      App.tsx               # router: every path renders MainPage
-      Header.tsx            # sticky nav, scroll-aware glass, mobile menu, theme toggle
-      HeroSection.tsx       # headline, CTAs, trust badges
-      ProblemStatementSection.tsx   # "traditional vs Gardbase" contrast  (#why)
-      FeaturesSection.tsx           # six feature cards                   (#features)
-      HowItWorksSection.tsx         # three steps + key hierarchy         (#how-it-works)
-      OpenSourceSection.tsx         # four open-source pitches            (#open-source)
-      PricingSection.tsx            # three plans                         (#pricing)
-      CTASection.tsx                # closing call to action
-      Footer.tsx                    # three link columns + legal
-    pages/MainPage.tsx      # composes Header + all sections + Footer
-    lib/
-      site.ts               # single source of truth for repo/docs/license/company URLs
-      themeContext.ts       # Theme type, storage key, React context, useTheme hook
-      ThemeProvider.tsx     # state + <html> class/colorScheme sync + localStorage persistence
-    assets/                 # logo.svg, logo-white.svg
+      App.tsx              # router: path "*" → MainPage
+      Header.tsx           # sticky nav, anchor links, theme toggle, mobile menu
+      HeroSection.tsx      # headline, trust badges, primary CTAs
+      ProblemStatementSection.tsx  # "#why" — traditional DB vs Gardbase comparison
+      FeaturesSection.tsx          # "#features" — six feature cards
+      HowItWorksSection.tsx        # "#how-it-works" — three steps + key hierarchy
+      OpenSourceSection.tsx        # "#open-source" — auditability, self-hosting, license
+      PricingSection.tsx           # "#pricing" — Open Source vs Managed Cloud (early access)
+      CTASection.tsx               # closing spotlight panel
+      Footer.tsx                   # three link columns + logo
+    pages/MainPage.tsx     # composes Header + all sections + Footer
+    lib/site.ts            # single source of truth for name, repo, docs, license, company URLs
+    lib/themeContext.ts    # Theme type, storage key, React context, useTheme hook
+    lib/ThemeProvider.tsx  # theme state, <html> class sync, localStorage persistence
+    assets/                # logo.svg, logo-white.svg
+    index.css              # Tailwind v4 theme tokens, light/dark variables, animations
+  public/                  # favicons and apple-touch-icon
+  vite.config.ts           # React SWC + Tailwind plugins, "@" → /src alias, dev server on 0.0.0.0:3000
+  project.json             # Nx project; build output goes to dist/apps/landing
+  package.json             # @gardbase/landing
 ```
 
 ## Behavior
 
-**Rendering.** Client-side only. `main.tsx` mounts into `#root` and wraps the tree in `ThemeProvider` and `BrowserRouter`. Routing is nominal: `App.tsx` maps `path="*"` to `MainPage`, so every URL renders the same page. Navigation is anchor-based (`#why`, `#features`, `#how-it-works`, `#open-source`, `#pricing`) with `scroll-behavior: smooth` from CSS.
+**Rendering.** A conventional Vite SPA. `main.tsx` mounts into `#root` inside `React.StrictMode`, wrapped by `ThemeProvider` and `BrowserRouter`. The router has a single catch-all route, so every path renders `MainPage`; navigation within the page is anchor-based (`#why`, `#features`, `#how-it-works`, `#open-source`, `#pricing`) rather than route-based.
 
-**Theming.** Dark is the default. An inline script in `index.html` runs *before paint*, reads `gardbase-theme` from localStorage, and sets the matching class and `colorScheme` on `<html>` — this is what prevents a light flash on load. `ThemeProvider` then takes over: it reads the initial theme from the class the script already applied, and on every change swaps the `light`/`dark` class, updates `style.colorScheme`, and writes back to localStorage (failing silently if storage is unavailable). `useTheme()` exposes `{theme, toggle, setTheme}`; `Header` renders the sun/moon toggle and `Footer` uses it to pick the light or dark logo variant.
+**Theming.** Dark is the default. An inline script in `index.html` runs before hydration, reads `localStorage["gardbase-theme"]`, and applies the `light` or `dark` class plus `color-scheme` to `<html>` — this is what prevents a flash of the wrong theme. `ThemeProvider` then reads that class as its initial state, keeps `<html>` in sync on every change, and writes the choice back to `localStorage` inside a `try/catch` so private-mode browsers degrade gracefully. `Header` and `Footer` consume `useTheme()` to toggle and to swap between the dark and light logo assets.
 
-**Styling.** Tailwind v4, configured entirely in `index.css` rather than a JS config file. A `@custom-variant dark (&:where(.dark, .dark *))` binds the `dark:` variant to the class toggle instead of `prefers-color-scheme`. Fixed brand colors, accents, always-dark surfaces, and the Poppins/JetBrains Mono font stacks live in `@theme`; semantic tokens (`bg`, `card`, `fg`, `muted`, `subtle`, `line`) are declared in `@theme inline` and repointed by the `:root.dark` / `:root.light` blocks, so components reference semantic names (`bg-bg`, `text-muted`, `border-line`) and never hardcode a palette. Custom utilities include `.text-gradient`, `.text-gradient-bright` (for panels that stay dark in both themes), and `.glass`. Icons come from `react-icons` (`lu` and `si` sets).
+Styling uses Tailwind CSS v4 configured entirely in `index.css`. A `@custom-variant dark` drives the `dark:` variant off the class toggle instead of `prefers-color-scheme`. Fixed brand colors (`brand`, `accent`, `accent-2`, `accent-3`, the always-dark `ink`/`surface` surfaces) live in `@theme`, while semantic tokens (`bg`, `card`, `fg`, `muted`, `subtle`, `line`) are declared with `@theme inline` and remapped per theme, so components reference semantic names and both themes follow automatically.
 
-**Content.** Sections are driven by local literal arrays at the top of each component (`features`, `steps`, `hierarchy`, `plans`, `points`, `footerCols`), so copy edits are data edits. Every external URL — repo, docs, license, company — resolves through `lib/site.ts`. The pricing tiers are Open Source (free, self-hosted), Managed Cloud (marked "In development", links to the company site for early access), and Enterprise (custom).
+**Header.** Sticky, with a scroll listener that switches to a glass/blurred treatment past 8px. Desktop shows nav links, a theme toggle, a GitHub "Star" link, and a "Get Started" button pointing at the docs. Under `md` it collapses into a hamburger menu with `aria-expanded` and per-link close handling.
 
-**Header interaction.** A scroll listener flips a `scrolled` flag past 8px to swap in the glass/border treatment; the mobile menu is local `useState`. Both are self-contained — there is no global state beyond theme.
+**Content sections.** Each section is a self-contained component with its copy declared as a local array or object literal at the top of the file — feature cards, comparison bullets, the three how-it-works steps, the key hierarchy (KMS key → tenant master key → per-object DEKs → your data), and the two pricing plans. Pricing presents "Open Source / Free forever" against a "Managed Cloud / Early access" plan badged as in development, whose CTA points at the company site rather than a signup flow.
 
-**Build.** `nx vite:build` (via `pnpm build`, which runs `tsc` first) emits to `dist/apps/landing` at the workspace root with `emptyOutDir`. Dev server binds `0.0.0.0:3000`. From the repo root: `pnpm dev:landing`.
+**Shared configuration.** `lib/site.ts` centralizes the repo URL, docs URL, license name and URL, company name and URL, tagline, and copyright year. Every external link in the header, sections, and footer reads from it, so a repo move or license change is a one-line edit.
+
+**Build and dev.** `pnpm dev` runs `nx serve` (Vite dev server, bound to `0.0.0.0:3000`); `pnpm build` runs `tsc` then `nx vite:build`, emitting to `dist/apps/landing`. Linting and formatting go through the workspace's Nx-managed ESLint and Prettier (with the Tailwind class-sorting plugin).
 
 ## Dependencies
 
-- **Framework:** React 19 + `react-dom`, `react-router-dom` 7.
-- **Build:** Vite 7, `@vitejs/plugin-react-swc`, `@tailwindcss/vite` + `tailwindcss` 4.
-- **UI:** `react-icons` (Lucide + Simple Icons).
-- **Fonts:** Poppins and JetBrains Mono, loaded from Google Fonts via `@import` at the top of `index.css` (a render-blocking external request).
-- **Workspace:** part of the pnpm workspace and the Nx graph as `@gardbase/landing`; shares the root ESLint and Prettier config (Prettier runs with `prettier-plugin-tailwindcss` for class sorting). No dependency on any Go module or on the deployed API.
+- **Runtime:** React 19 with `react-dom`, `react-router-dom` v7, `react-icons` (Lucide `lu*` and Simple Icons `si*` sets), and `tailwindcss` v4 with `@tailwindcss/vite`.
+- **Build:** Vite 7 with `@vitejs/plugin-react-swc`; TypeScript extending the workspace `tsconfig.base.json`; the `@/*` path alias is declared in both `tsconfig.json` and `vite.config.ts`.
+- **Workspace:** Nx orchestrates targets and caching; pnpm workspaces manage installation; ESLint and Prettier config is shared from the repo root.
+- **External assets:** Poppins and JetBrains Mono are fetched from Google Fonts via an `@import` at the top of `index.css`.
+- **No internal dependencies:** the site does not consume any Go module or call the Gardbase API.
 
 ## Notes
 
-- Nothing here is deployed by the Terraform in `infrastructure/` — that stack provisions only the API/enclave host. Hosting for the landing build output is external to this repo.
-- The router exists but serves no distinct routes; `path="*"` → `MainPage` means deep links and 404s alike render the home page. Adding real routes means adding entries in `App.tsx`.
-- `src/types.ts` is empty; per-component types are declared inline.
-- The pre-paint theme script in `index.html` and `ThemeProvider.readInitial()` are two halves of one mechanism. Changing the storage key or the class names requires editing both, plus `THEME_STORAGE_KEY` in `themeContext.ts`.
-- `site.year` is hardcoded to 2026 rather than derived from the current date.
-- Marketing copy makes concrete security claims (client-side AES-256-GCM, Nitro attestation, the 4-level key hierarchy) that mirror the actual implementation in `pkg/crypto` and `enclave-service` — a change to the security model should be reflected here too.
+- Everything about this node is static content. The product claims it renders (encryption modes, attestation steps, key hierarchy, licensing) are copy, not behavior — when the underlying architecture changes, nothing here breaks, so the copy has to be updated deliberately.
+- The catch-all route means unknown paths render the landing page rather than a 404. Hosting must fall back to `index.html` for the SPA to work on deep links.
+- `src/types.ts` is empty, and `src/vite-env.d.ts` carries only the Vite client types.
+- The `CTASection` panel is intentionally dark in both themes and uses fixed brand colors rather than semantic tokens; the inline comment in the file says so explicitly.
+- The pricing "Managed Cloud" plan is aspirational — it is badged "In development" and its CTA links to the company website, not to a product signup.
+- `project.json` sets `outputPath` to `../../dist/apps/landing` while `vite.config.ts` sets `build.outDir` to the same location; the two must stay in agreement for Nx caching to track outputs correctly.
+- There is no deployment configuration in the repo for this node — no CI workflow, Dockerfile, or hosting manifest. Publishing the built `dist/apps/landing` directory is currently a manual step.
