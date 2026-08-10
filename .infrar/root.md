@@ -7,11 +7,11 @@ parent_branch: null
 
 | Id | Name | Entrypoint | Category |
 |---|---|---|---|
-| 24de065a-7aaa-43d2-ba85-2e8ec8d1ee7b | api | apps/api/cmd/server | app |
-| 656ca69f-3981-4c49-9e54-7901b7277cd9 | enclave-service | apps/enclave-service/cmd/enclave | app |
-| b02f5975-df24-4215-a61a-edfe59296091 | landing | apps/landing | app |
-| 8fabb931-798c-4315-9564-4c3f9c8ddd1f | infrastructure-bootstrap | infrastructure/bootstrap | iac |
-| c892b457-069e-4b74-b20d-1d3ce53e8576 | infrastructure-main | infrastructure/main | iac |
-| 980a19a0-3ad8-4f09-95a7-a4012ac0ea95 | crypto-sdk | pkg/crypto | other |
+| 30d1db76-770f-49f5-9d67-b96ea1bcc10f | api | apps/api/cmd/server | app |
+| 645bbf4e-c309-4832-ba62-ed70fa1e2d2e | enclave-service | apps/enclave-service/cmd/enclave | app |
+| 61e96bce-c3d9-4025-9135-1aae0926f7b7 | landing | apps/landing | app |
+| 4a5a52d3-51e4-4cbd-82b6-19c90257dc3b | infrastructure-bootstrap | infrastructure/bootstrap | iac |
+| 1da63b23-3341-4cec-83b4-ab2e2a128a8d | infrastructure-main | infrastructure/main | iac |
+| bf5f9da9-97e4-44d5-a019-ddc1e69960bc | crypto-sdk | pkg/crypto | app |
 
 ## Metadata

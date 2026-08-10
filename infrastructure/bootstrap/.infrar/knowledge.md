@@ -1,59 +1,58 @@
 ---
 schema_version: 1
-id: 8fabb931-798c-4315-9564-4c3f9c8ddd1f
+id: 4a5a52d3-51e4-4cbd-82b6-19c90257dc3b
 name: infrastructure-bootstrap
 node: infrastructure/bootstrap
 category: iac
 ---
 ## Purpose
 
-`infrastructure-bootstrap` is the first-run Terraform workspace. It creates the small set of AWS resources that must exist *before* application images can be built and before the main stack can be deployed — specifically, somewhere to push container images and somewhere to store Lambda artifacts.
+`infrastructure-bootstrap` is the small Terraform workspace that has to run **before** anything else can be deployed. It creates the two long-lived artifact stores that the rest of the pipeline assumes already exist:
 
-It exists to break a chicken-and-egg dependency: `infrastructure-main` launches an EC2 instance whose user-data pulls `:latest-parent` and `:latest-enclave` from ECR, so the ECR repository has to be created and populated first. This workspace is that step.
+- an S3 bucket for Lambda deployment packages;
+- an ECR repository that holds both container images built from this repo (the API server and the enclave service).
 
-It is intentionally minimal and long-lived — you apply it once per environment and then rarely touch it again.
+It is deliberately separated from `infrastructure/main` because of ordering: images must be pushed to ECR before the EC2 host boots and tries to pull them, and the main stack reads this workspace's outputs through a remote-state data source rather than re-declaring the resources. Splitting also means the bucket and repository survive a `destroy` of the application stack.
 
 ## Structure
 
-A flat Terraform workspace at `infrastructure/bootstrap`, four files:
+Four files, all at `infrastructure/bootstrap`:
 
-- `main.tf` — the `terraform` block (required version `>= 1.0.0`, AWS provider `~> 6.0`, S3 backend), the `aws` provider configuration, and both resources:
-  - `aws_s3_bucket.lambdas_bucket` — named `${project_name}-lambdas-bucket-${environment}`, for Lambda deployment packages.
-  - `aws_ecr_repository.api` — named `${project_name}-api`, the single repository holding both application images (differentiated by tag, not by repository).
+- `main.tf` — the `terraform` block (required version `>= 1.0.0`, `hashicorp/aws ~> 6.0`, S3 backend), the AWS provider, and both resources.
 - `variables.tf` — `environment` (default `dev`), `project_name` (default `gardbase`), `region` (default `eu-central-1`).
 - `outputs.tf` — `lambdas_bucket_name`, `lambda_bucket_arn`, `ecr_repository_url`, `ecr_repository_name`.
-- `.terraform.lock.hcl` — provider version lock.
+- `.terraform.lock.hcl` — pins the AWS provider to `6.13.0`.
 
-There is no `environments/` directory here; variables are passed on the command line (`terraform apply -var="environment=dev"`).
+There is no `environments/` directory here; the environment is passed on the command line (`terraform apply -var="environment=dev"`).
 
 ## Behavior
 
-**State.** The S3 backend is hard-coded: bucket `gardbase-terraform-state`, key `bootstrap/terraform.tfstate`, region `eu-central-1`, encrypted. That state bucket is itself a prerequisite this workspace does not create — it must exist before `terraform init`. There is no DynamoDB lock table configured, so concurrent applies are not protected against.
+**State.** Remote S3 backend: bucket `gardbase-terraform-state`, key `bootstrap/terraform.tfstate`, region `eu-central-1`, `encrypt = true`. There is no DynamoDB lock table configured, so concurrent applies are not serialized.
 
-**Consumption by the main stack.** `infrastructure-main` reads this workspace's outputs through a `terraform_remote_state` data source pointing at the same bucket and the `bootstrap/terraform.tfstate` key. Only `ecr_repository_url` is actually consumed today — it is templated into the EC2 user-data so the instance can `docker login`, pull the parent image, and pull the enclave image that `nitro-cli build-enclave` converts into an EIF. This remote-state read is what makes bootstrap a hard ordering dependency rather than just a convention.
+**Resources.**
 
-**Environment-conditional destruction.** Both resources are protective by environment: `force_destroy` on the bucket and `force_delete` on the ECR repository are `true` only when `environment == "dev"`. In any other environment a `terraform destroy` fails while objects or images remain, which is deliberate — it prevents accidentally deleting published images that running instances depend on.
+- `aws_s3_bucket.lambdas_bucket` — named `${project_name}-lambdas-bucket-${environment}`. `force_destroy` is `true` only when `environment == "dev"`, so a dev bucket can be torn down with objects still in it while other environments cannot.
+- `aws_ecr_repository.api` — named `${project_name}-api`, with the same dev-only `force_delete` guard. Both application images live in this one repository, distinguished only by tag: `latest-parent` for the API server and `latest-enclave` for the enclave service.
 
-**Typical flow.**
-1. `terraform init && terraform apply -var="environment=dev"` here.
-2. Build and push both images via the Nx targets (`nx run api:build-and-push`, `nx run enclave-service:build-and-push`), passing the AWS account ID and region.
-3. Apply `infrastructure/main`, whose instances pull those images on boot.
+**Consumption.** `infrastructure/main/main.tf` declares a `terraform_remote_state` data source against `bootstrap/terraform.tfstate` and passes `outputs.ecr_repository_url` into the EC2 user data, where it is used for `docker login`, `docker pull ...:latest-parent`, and `nitro-cli build-enclave --docker-uri ...:latest-enclave`. The bucket outputs are exported but nothing in the repo consumes them yet.
 
-Re-applying is effectively a no-op once the resources exist. Changing `environment` produces a *new* bucket (name is environment-suffixed) but reuses the same ECR repository, since its name is not environment-suffixed.
+**Operational order.** `terraform apply` here → `nx run @gardbase/api:build-and-push` and `nx run @gardbase/enclave-service:build-and-push` (which tag and push into this ECR repository) → `terraform apply` in `infrastructure/main`. The Nx docker targets take `--aws_account_id` and `--aws_region` arguments and reconstruct the registry URL themselves rather than reading it from these outputs.
 
 ## Dependencies
 
-- **Terraform** `>= 1.0.0`; **AWS provider** `~> 6.0`.
-- **Pre-existing AWS resources**: the `gardbase-terraform-state` S3 bucket in `eu-central-1`.
-- **AWS permissions**: create/manage S3 buckets and ECR repositories, plus read/write on the state bucket.
-- **Downstream**: `infrastructure-main` (via remote state), and the `api` / `enclave-service` Docker push targets which target the ECR repository this creates.
-- **Upstream**: nothing.
+**Upstream (must exist before first run, not managed here):** the `gardbase-terraform-state` S3 bucket that holds this workspace's own state, and AWS credentials able to create S3 buckets and ECR repositories.
+
+**Providers:** `hashicorp/aws ~> 6.0` (locked at `6.13.0`).
+
+**Downstream consumers:**
+- `infrastructure/main` — reads this state for `ecr_repository_url`; the EC2 IAM policy grants the instance `ecr:GetAuthorizationToken`, `ecr:BatchCheckLayerAvailability`, `ecr:GetDownloadUrlForLayer`, and `ecr:BatchGetImage` so it can pull from here.
+- The `api` and `enclave-service` nodes — their Nx `docker-push` targets are the only writers to this repository.
 
 ## Notes
 
-- The state backend configuration is hard-coded rather than partial, so the same bucket and region are used for every environment — environments are separated by resource naming, not by state isolation. Two environments share one state file per workspace.
-- The ECR repository name has no `${environment}` suffix while the S3 bucket does. Deploying multiple environments therefore shares a single image repository across them; the images are distinguished only by the `latest-parent` / `latest-enclave` tags, which are also mutable. There is no image immutability setting, no lifecycle policy, and no scan-on-push configured.
-- Both images live in the *same* ECR repository despite very different trust levels — the enclave image is the one whose PCR0 measurement gates KMS access.
-- The Lambda bucket is provisioned but nothing in the repository currently uploads to it; the README's "Lambdas" section under Components is an empty placeholder.
-- The bucket has no explicit versioning, encryption, or public-access-block configuration (unlike the uploads bucket in `infrastructure-main`, which sets all three).
-- No DynamoDB state lock table is configured for either workspace.
+- The ECR repository name is **not** environment-suffixed (`gardbase-api`, not `gardbase-api-dev`), while the Lambda bucket is. Applying this workspace against a second environment in the same account reuses the same repository, so `latest-parent` / `latest-enclave` tags are shared across environments and a push for dev also changes what prod would pull.
+- Because tags are mutable and always `latest-*`, there is no image immutability or digest pinning; the enclave's PCR0 changes whenever a new enclave image is pushed and rebuilt, which invalidates the `enclave_pcr0_sha384` value baked into the KMS key policy in `infrastructure/main`.
+- The Lambda bucket is provisioned but unused — there are no Lambda functions anywhere in the repo yet. The README lists a "Lambdas" component with no content.
+- No lifecycle policy, versioning, encryption configuration, or public-access block is declared on the Lambda bucket, and no image scanning or lifecycle policy on the ECR repository.
+- The backend block hardcodes the state bucket, key, and region, so the same three values are duplicated verbatim in `infrastructure/main/main.tf` (both in its own backend and in the remote-state data source).
+- `terraform.tfvars` files are gitignored (`infrastructure/*/terraform.tfvars`), so per-environment values are expected to be passed with `-var` or an untracked tfvars file.

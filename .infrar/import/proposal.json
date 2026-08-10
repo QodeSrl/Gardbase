@@ -7,7 +7,7 @@
       "path": "apps/api",
       "entrypoint": "apps/api/cmd/server",
       "role": "backend-api",
-      "summary": "Go HTTP API (Nx project @gardbase/api) serving tenants/objects/encryption endpoints, backed by DynamoDB/S3 and talking to the enclave over vsock; containerized via Dockerfile.Api and pushed to ECR."
+      "summary": "Go HTTP API server (Nx project @gardbase/api, own Go module) exposing tenant/object/encryption endpoints over DynamoDB and S3 and proxying crypto ops to the enclave via vsock; built and pushed to ECR with Dockerfile.Api."
     },
     {
       "name": "enclave-service",
@@ -15,7 +15,7 @@
       "path": "apps/enclave-service",
       "entrypoint": "apps/enclave-service/cmd/enclave",
       "role": "secure-enclave-service",
-      "summary": "Go service running inside an AWS Nitro Enclave that handles attestation, session key derivation and KMS key wrapping/unwrapping; containerized via Dockerfile.enclave."
+      "summary": "Go service (Nx project @gardbase/enclave-service, own Go module) running inside an AWS Nitro Enclave: attestation, session key derivation and KMS DEK unwrapping over a vsock server; built and pushed to ECR with Dockerfile.enclave."
     },
     {
       "name": "landing",
@@ -23,7 +23,7 @@
       "path": "apps/landing",
       "entrypoint": "apps/landing",
       "role": "frontend",
-      "summary": "React + Vite marketing/landing site (Nx project @gardbase/landing) built to dist/apps/landing."
+      "summary": "React 19 + Vite + Tailwind marketing site (Nx/pnpm project @gardbase/landing) built to dist/apps/landing."
     },
     {
       "name": "infrastructure-bootstrap",
@@ -31,7 +31,7 @@
       "path": "infrastructure/bootstrap",
       "entrypoint": "infrastructure/bootstrap",
       "role": "terraform-bootstrap",
-      "summary": "Terraform workspace (S3 backend key bootstrap/terraform.tfstate) creating the Lambda code bucket and the ECR repository consumed by the main stack."
+      "summary": "Terraform workspace (S3 backend key bootstrap/terraform.tfstate, eu-central-1) creating the Lambda code bucket and the ECR repository consumed by the main stack."
     },
     {
       "name": "infrastructure-main",
@@ -39,7 +39,7 @@
       "path": "infrastructure/main",
       "entrypoint": "infrastructure/main",
       "role": "terraform-main",
-      "summary": "Main Terraform workspace (S3 backend key main/terraform.tfstate) provisioning EC2 Nitro hosts, DynamoDB, S3, KMS and CloudWatch; reads bootstrap remote state and has dev/prod tfvars."
+      "summary": "Main Terraform workspace (S3 backend key main/terraform.tfstate) provisioning EC2 Nitro hosts, DynamoDB, S3, KMS and CloudWatch; reads the bootstrap remote state and ships dev/prod tfvars."
     },
     {
       "name": "crypto-sdk",
@@ -47,7 +47,7 @@
       "path": "pkg/crypto",
       "entrypoint": "pkg/crypto",
       "role": "client-sdk",
-      "summary": "Standalone Go module (github.com/qodesrl/gardbase/pkg/crypto) implementing client-side deterministic/probabilistic/OPE encryption and KMS helpers; published as an SDK rather than deployed."
+      "summary": "Standalone Go module github.com/qodesrl/gardbase/pkg/crypto implementing client-side deterministic/probabilistic/order-preserving encryption, KMS helpers and enclave attestation verification; consumed as an SDK, not deployed."
     }
   ],
   "sharedFolders": [
@@ -60,7 +60,7 @@
     {
       "name": "main",
       "classification": "permanent",
-      "reason": "Default branch (origin/HEAD -> origin/main); receives merges from test via PRs."
+      "reason": "Default branch (origin/HEAD -> origin/main); receives promotion merges from test."
     },
     {
       "name": "development",
@@ -70,12 +70,12 @@
     {
       "name": "test",
       "classification": "permanent",
-      "reason": "Long-lived staging branch merged from development and promoted into main."
+      "reason": "Long-lived staging branch merged from development and promoted into main via PRs."
     },
     {
       "name": "infrar-test",
       "classification": "temporary",
-      "reason": "Tooling branch containing a single 'infrar: import analysis' commit; not part of the development/test/main flow."
+      "reason": "Tooling branch forked from main with a single 'infrar: import analysis' commit; outside the development/test/main flow."
     }
   ]
 }

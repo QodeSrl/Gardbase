@@ -1,66 +1,81 @@
 ---
 schema_version: 1
-id: c892b457-069e-4b74-b20d-1d3ce53e8576
+id: 1da63b23-3341-4cec-83b4-ab2e2a128a8d
 name: infrastructure-main
 node: infrastructure/main
 category: iac
 ---
 ## Purpose
 
-`infrastructure-main` provisions the entire Gardbase runtime environment on AWS: the Nitro-Enclaves-capable EC2 host that runs both the API container and the enclave, the DynamoDB tables and S3 bucket that hold encrypted data, the KMS key whose policy enforces the zero-trust guarantee, and the CloudWatch logging and alarms around it.
+`infrastructure-main` is the Terraform workspace that provisions the entire Gardbase runtime on AWS: the Nitro-Enclave-capable EC2 host that runs both application containers, the five DynamoDB tables and the S3 bucket they persist to, the KMS key that anchors the whole key hierarchy, and the CloudWatch logging and alarms around it.
 
-The security-critical piece lives here, not in application code. The KMS key policy conditions every `Decrypt`/`GenerateDataKey` call on `kms:RecipientAttestation:ImageSha384` matching the expected enclave PCR0 measurement. That single condition is what makes the claim "even a compromised API server cannot decrypt data" true: KMS itself refuses to return recipient-encrypted key material unless the attestation document comes from the exact enclave image you pinned.
+Its defining responsibility is the trust boundary. The KMS key policy is what makes the zero-trust claim enforceable: `kms:Decrypt` and `kms:GenerateDataKey` are gated on `kms:RecipientAttestation:ImageSha384` matching the enclave's PCR0 measurement, so even the EC2 instance role cannot unwrap keys outside an attested enclave running the expected image. Everything else here — the instance, the storage, the IAM role — exists to serve that arrangement.
 
 ## Structure
 
-A Terraform workspace at `infrastructure/main`, split by resource family:
+All files sit flat in `infrastructure/main`:
 
-- `main.tf` — `terraform` block (required version `>= 1.0.0`, AWS `~> 6.0`, TLS `~> 4.0`, S3 backend at key `main/terraform.tfstate`), the `terraform_remote_state.bootstrap` data source, the `aws` provider with `default_tags` (Project / Environment / ManagedBy), and `data.aws_caller_identity.current`.
-- `variables.tf` — `environment`, `project_name`, `region`, `instance_type` (default `m5a.xlarge`, with a comment noting not all instance types support Nitro Enclaves), `enclave_cpus` (2), `enclave_memory_mib` (2048), `kms_key_deletion_window_days` (30), `enable_debug_mode` (false), `max_attestation_age_minutes` (5), `allowed_ssh_cidr_blocks`, `enclave_pcr0_sha384` (default `PLACEHOLDER_PCR0`).
-- `kms.tf` — the customer-managed key with rotation enabled, its attestation-conditioned policy, and an alias.
-- `dynamodb.tf` — five tables: `objects`, `indexes` (with the `gsi1` GSI), `table_configs`, `tenant_configs`, `api_keys`.
-- `s3.tf` — the `uploads` bucket plus lifecycle, versioning, SSE, and public-access-block configurations.
-- `ec2.tf` — default-VPC/subnet lookups, security group, IAM role + inline policy + instance profile, AL2023 AMI lookup, a generated TLS keypair stored in SSM, and the `aws_instance.api` itself.
-- `cloudwatch.tf` — two log groups (api, enclave) and two metric alarms (high CPU, instance status check).
-- `user_data.sh` — the ~440-line bootstrap script templated into the instance.
-- `outputs.tf` — bucket name, table names, instance id/DNS/IP, the SSM path for the SSH key, enclave configuration, and the KMS key id/ARN.
-- `environments/dev.tfvars` and `environments/prod.tfvars` — currently only environment/project/region.
+- `main.tf` — `terraform` block (required version `>= 1.0.0`, providers `hashicorp/aws ~> 6.0` and `hashicorp/tls ~> 4.0`, S3 backend at key `main/terraform.tfstate`), the `terraform_remote_state.bootstrap` data source, the AWS provider with `default_tags` (`Project`, `Environment`, `ManagedBy`), and `data.aws_caller_identity.current`.
+- `variables.tf` — `environment`, `project_name`, `region`, `instance_type` (default `m5a.xlarge`), `enclave_cpus` (2), `enclave_memory_mib` (2048), `kms_key_deletion_window_days` (30), `enable_debug_mode` (false), `max_attestation_age_minutes` (5), `allowed_ssh_cidr_blocks`, `enclave_pcr0_sha384` (default `PLACEHOLDER_PCR0`).
+- `dynamodb.tf` — five tables: `objects`, `indexes`, `table_configs`, `tenant_configs`, `api_keys`.
+- `s3.tf` — the `uploads` bucket plus lifecycle, versioning, server-side encryption, and public-access-block configurations.
+- `kms.tf` — the enclave KMS key and its alias.
+- `ec2.tf` — default-VPC/subnet lookups, the security group, the instance IAM role/policy/profile, the AL2023 AMI lookup, a generated SSH keypair stored in SSM, and the `aws_instance.api` resource.
+- `cloudwatch.tf` — two log groups and two metric alarms.
+- `outputs.tf` — bucket name, table names, instance id/DNS/IP, the SSM parameter holding the SSH key, the enclave configuration, and the KMS key id/ARN.
+- `user_data.sh` — the ~440-line instance bootstrap script, rendered through `templatefile`.
+- `environments/dev.tfvars`, `environments/prod.tfvars` — three values each (`environment`, `project_name`, `region`).
+- `.terraform.lock.hcl` — provider pins.
 
 ## Behavior
 
-**Data plane.** The `objects` and `indexes` tables use `pk`/`sk` composite keys; `indexes` has a *binary* sort key (the encrypted index token with the object UUID appended) and a `gsi1` GSI keyed by object for index reconciliation. `objects` has TTL enabled on `ttl` and point-in-time recovery on. All tables use `PROVISIONED` billing with capacity 5 when `environment == "production"` and 1 otherwise — note the string compared is `"production"` while the tfvars files set `"prod"`, so the production branch never fires as written. The `uploads` bucket is versioned, SSE-AES256, fully public-access-blocked, and has a lifecycle rule expiring objects tagged `status=deleted` after 30 days — which is exactly the tag the API's soft-delete path applies.
+**Storage schema.** All tables use `PROVISIONED` billing at 5 RCU/WCU when `environment == "production"` and 1 otherwise.
 
-**KMS policy.** Two statements: the account root gets `kms:*`, and the EC2 instance role gets `GenerateDataKey`, `Decrypt`, `ReEncrypt`, `Encrypt`, and `DescribeKey` — but only under `StringEqualsIgnoreCase` on `kms:RecipientAttestation:ImageSha384`. When `enable_debug_mode` is true that condition value becomes `"*"`, disabling the attestation gate; otherwise it is `var.enclave_pcr0_sha384`. Key rotation is enabled and the deletion window is configurable.
+- `objects` — `pk` (S) / `sk` (S), TTL on `ttl` (used for the 30-day soft-delete window), point-in-time recovery, and server-side encryption enabled.
+- `indexes` — `pk` (S) / `sk` (**B**, the binary index token), plus a `gsi1` GSI on `gsi1pk`/`gsi1sk` with `ALL` projection that lets the API find every index row belonging to one object.
+- `table_configs` and `tenant_configs` — `pk`-only tables holding the KMS-wrapped table index key and the wrapped tenant master key / table salt respectively.
+- `api_keys` — `pk` / `sk`, one row per key.
 
-**Compute.** A single `aws_instance.api` in the first subnet of the default VPC, with `enclave_options { enabled = true }`, detailed monitoring, a 30 GB encrypted gp3 root volume, a public IP, and `user_data_replace_on_change = true` combined with `create_before_destroy` — so any user-data edit replaces the instance. `ignore_changes = [ami]` prevents churn when Amazon publishes new AL2023 images. An RSA-4096 keypair is generated by the TLS provider and its private half stored as an SSM `SecureString` at `/${project_name}/${environment}/api/ssh-private-key`.
+**Object bucket.** `${project_name}-uploads-${environment}`, versioned, SSE-S3 (`AES256`), fully public-access-blocked, `force_destroy` only in dev. A lifecycle rule expires objects tagged `status=deleted` after 30 days — this is the back half of the API's soft-delete flow, which tags rather than deletes.
 
-**Instance bootstrap (`user_data.sh`).** Installs Docker and `aws-nitro-enclaves-cli`, raises `user.max_user_namespaces`/`max_mnt_namespaces` (needed for vsock), writes `/etc/nitro_enclaves/allocator.yaml` from the CPU/memory variables, and starts the allocator. It then creates two systemd units:
-- `gardbase-enclave.service` (oneshot, `RemainAfterExit`, ordered `Before=gardbase-parent.service`) — logs into ECR, pulls `:latest-enclave`, deletes any stale EIF, runs `nitro-cli build-enclave` to produce `/opt/gardbase/enclave.eif`, terminates existing enclaves, and launches the new one at CID 16 with the allocated CPU/memory (adding `--debug-mode` when enabled).
-- `gardbase-parent.service` — runs the API container with `--device=/dev/vsock`, ports 80/443 published, and the full environment block (bucket, five table names, region, KMS key id, `BASE_URL` derived from IMDSv2 public hostname, `PORT=80`, `ENCLAVE_PORT=5000`, `ENCLAVE_CID=16`, etc.), restarting always.
+**KMS.** One symmetric key with automatic rotation and the configured deletion window. The policy has two statements: full `kms:*` for the account root, and a scoped grant to the EC2 instance role for `GenerateDataKey`, `Decrypt`, `ReEncrypt`, `Encrypt`, and `DescribeKey` — conditioned on `kms:RecipientAttestation:ImageSha384` equalling `var.enclave_pcr0_sha384`, or `*` when `enable_debug_mode` is true. An alias `alias/${project_name}-enclave-${environment}` is created alongside.
 
-It also drops helper scripts in `/opt/gardbase`: `run-enclave.sh`, `capture-console.sh` (only tails the console in debug mode), `health-check.sh` (curls `/api/health` and checks `nitro-cli describe-enclaves` reports RUNNING), and `extract-pcrs.sh`, which parses PCR0/PCR1/PCR2 out of the build log and publishes them to SSM at `/${project}/${env}/enclave/pcr-values` for clients to pin. Finally it installs and configures the CloudWatch agent and writes an MOTD with operator commands.
+**Compute.** The instance is placed in the account's **default VPC**, first available subnet, with a public IP. The security group allows 80 and 443 from anywhere and SSH from `var.allowed_ssh_cidr_blocks` when `environment == "prod"`, otherwise from `0.0.0.0/0`; egress is unrestricted. `enclave_options.enabled = true`, detailed monitoring on, and a 30 GB encrypted gp3 root volume. `lifecycle` sets `create_before_destroy` and `ignore_changes = [ami]`, and `user_data_replace_on_change = true` means editing the bootstrap script replaces the instance.
 
-**The PCR bootstrap cycle.** PCR0 is a measurement of the built EIF, so it cannot be known before the first apply. The practical sequence is: apply with `enclave_pcr0_sha384` at its placeholder (or `enable_debug_mode = true`), let the instance build the EIF and publish its PCRs, then feed PCR0 back into the variable and re-apply so the KMS condition tightens. Any change to the enclave image changes PCR0 and requires the same update, or KMS will start rejecting the enclave.
+**Instance IAM.** Scoped to exactly what the API needs: S3 object CRUD plus `ListBucket`/`HeadBucket` on the uploads bucket; DynamoDB item and query/scan operations on the five tables and their indexes; ECR pull permissions; `kms:Decrypt`/`GenerateDataKey`/`DescribeKey` on the one key; CloudWatch Logs writes scoped to `/aws/ec2/${project_name}*`; and `ssm:PutParameter` under `/${project_name}/${environment}/*` so the boot script can publish PCR values.
 
-**Observability.** Two log groups with 7-day retention; the CloudWatch agent ships user-data and enclave console logs into them. Alarms fire on >80% average CPU over two 5-minute periods and on any failed status check over two 1-minute periods — neither has an alarm action attached, so they surface in the console but notify nobody.
+**SSH.** A 4096-bit RSA key is generated by the `tls` provider, registered as an `aws_key_pair`, and the private half is written to SSM Parameter Store as a `SecureString` at `/${project_name}/${environment}/api/ssh-private-key`.
+
+**Bootstrap (`user_data.sh`).** Rendered with the region, resource names, ECR URL, and enclave sizing. It installs Docker and the Nitro Enclaves CLI, raises `user.max_user_namespaces` / `user.max_mnt_namespaces` for vsock, writes `/etc/nitro_enclaves/allocator.yaml` from `enclave_cpus`/`enclave_memory_mib`, starts the allocator, logs into ECR, and pulls both image tags. It then writes two systemd units:
+
+- `gardbase-enclave.service` (oneshot, ordered `Before=gardbase-parent.service`) — pulls `:latest-enclave`, runs `nitro-cli build-enclave` to produce `/opt/gardbase/enclave.eif`, terminates any running enclave, and starts the new one at CID 16 with the configured CPU/memory, adding `--debug-mode` when `enable_debug_mode` is true.
+- `gardbase-parent.service` — `docker run` of `:latest-parent` with `--device=/dev/vsock`, ports 80/443 published, and every environment variable the API requires (bucket, five table names, region, KMS key id, `BASE_URL` from the instance's public hostname, `ENCLAVE_PORT=5000`, `ENCLAVE_CID=16`, `ENVIRONMENT`, `PORT=80`).
+
+Helper scripts are installed alongside: `run-enclave.sh`, `capture-console.sh` (debug-mode console capture), `extract-pcrs.sh` (parses PCR0/1/2 out of the build log and publishes them to SSM at `/${project}/${env}/enclave/pcr-values`), and `health-check.sh` (curls `/api/health` and asserts the enclave is `RUNNING`). Finally it installs the CloudWatch agent, starts both services in order, runs the health check, and writes an operator MOTD.
+
+**Observability.** Two log groups (`/aws/ec2/${project}-api-${env}` and `.../enclave-${env}`) with 7-day retention, and two alarms on the instance: average CPU > 80% over two 5-minute periods, and `StatusCheckFailed` > 0 over two 1-minute periods.
 
 ## Dependencies
 
-- **Upstream**: `infrastructure-bootstrap`, read through `terraform_remote_state` — `ecr_repository_url` is templated into user-data. Bootstrap must be applied first, and both images must already be pushed, or the instance comes up without them.
-- **Pre-existing**: the `gardbase-terraform-state` S3 bucket, and a default VPC with subnets in the target region.
-- **Providers**: `hashicorp/aws ~> 6.0`, `hashicorp/tls ~> 4.0`.
-- **Application nodes**: `api` and `enclave-service` are consumed as ECR images; this workspace supplies every environment variable the API reads and the CPU/memory the enclave gets. `pkg/crypto` consumes the published PCR values indirectly, via the client's `SessionConfig.ExpectedPCRs`.
-- **AWS permissions**: EC2, IAM (role/policy/instance profile), KMS, DynamoDB, S3, SSM, CloudWatch Logs and alarms.
+**Upstream:**
+- `infrastructure/bootstrap` — consumed via `terraform_remote_state` for `ecr_repository_url`. The bootstrap workspace must be applied first.
+- Container images already pushed to that ECR repository as `latest-parent` and `latest-enclave`; the instance fails to start its services otherwise.
+- The `gardbase-terraform-state` S3 bucket (unmanaged) and a pre-existing default VPC in the target region.
+- The enclave's PCR0 value, which only exists after the enclave image has been built at least once.
+
+**Providers:** `hashicorp/aws ~> 6.0`, `hashicorp/tls ~> 4.0`.
+
+**Downstream consumers:** the `api` node reads every table name, the bucket, the KMS key id, and the enclave CID/port from the environment variables this workspace injects; the `enclave-service` node depends on the enclave options, allocator sizing, and the KMS attestation condition; `pkg/crypto` clients verify against the PCR values published to SSM by `extract-pcrs.sh`.
 
 ## Notes
 
-- Everything runs on **one** EC2 instance — a single point of failure with no ASG, no load balancer, and no multi-AZ. Instance replacement means downtime and, because enclave sessions live only in enclave memory, all in-flight client sessions are invalidated.
-- The environment comparison mismatch (`"production"` in `dynamodb.tf` vs `"prod"` in `prod.tfvars`) means production would silently get capacity-1 tables. The `force_destroy`/`force_delete` guards elsewhere correctly compare against `"dev"`, so those behave as intended.
-- Security group ingress allows 80 and 443 from `0.0.0.0/0`. SSH is restricted to `allowed_ssh_cidr_blocks` only when `environment == "prod"`; otherwise it is open to the world, and `allowed_ssh_cidr_blocks` defaults to `[""]`, which is not a valid CIDR — prod applies need a real value.
-- There is no TLS termination anywhere: port 443 is opened in the security group and published by the container, but the API serves plain HTTP on `PORT=80` and `BASE_URL` is templated as `http://`. Client traffic — including API keys — is unencrypted in transit unless something is put in front of it. This matters less for payload confidentiality (data is already client-side encrypted) than for credentials.
-- `enable_debug_mode = true` both relaxes the KMS attestation condition to `"*"` and runs the enclave in debug mode, where PCRs are zeroed. It disables the core security property and is for development only.
-- The AMI filter selects `al2023-ami-*-x86_64` despite a comment describing ARM/Graviton; the default `m5a.xlarge` is x86, so they agree, but switching to a Graviton instance type would require changing the filter too.
-- The instance role grants `ecr:GetAuthorizationToken` on `*` and the KMS actions on the key ARN; note that the *host* role is the KMS principal — the attestation condition, not the principal, is what restricts use to the enclave.
-- The remote state read means `terraform destroy` ordering matters: destroying bootstrap first breaks this workspace's plan.
-- `user_data.sh` writes the CloudWatch config pointing at `/var/log/user-data.log`, while the script itself tees to `/var/log/user_data.log` (underscore) — that log stream stays empty.
-- The commented-out `ssh_command` output references `aws_eip.api`, which does not exist in this workspace; the instance uses an ordinary public IP that changes on replacement.
+- **Capacity and SSH conditionals disagree with the tfvars.** `dynamodb.tf` compares `var.environment == "production"`, but `environments/prod.tfvars` sets `environment = "prod"`. As written, a prod apply gets 1 RCU/WCU tables. `ec2.tf` and `s3.tf` compare against `"prod"` and `"dev"` respectively, so the three files use three different environment string conventions.
+- **`enclave_pcr0_sha384` defaults to `PLACEHOLDER_PCR0`.** Until it is set to the real measurement, the KMS condition can never match and every enclave key operation fails — unless `enable_debug_mode` is true, which replaces the condition with `*` and removes the attestation guarantee entirely. This is a chicken-and-egg step: build the enclave, read PCR0 from `/opt/gardbase/pcr-values.json` or SSM, then re-apply with the real value. Every new enclave image push changes PCR0 and requires repeating it.
+- **Single instance, no redundancy.** There is no Auto Scaling group, no load balancer, no TLS termination (port 443 is open in the security group but nothing terminates it), and `BASE_URL` is set to `http://<public-dns>`. Replacing the instance changes the public IP; there is no Elastic IP (the `aws_eip.api` reference survives only in a commented-out output) and no DNS record.
+- **Default VPC.** No VPC, subnets, NAT, or private networking are managed here; the host sits on a public subnet with a public IP.
+- `allowed_ssh_cidr_blocks` defaults to `[""]`, which is not a valid CIDR — a prod apply must override it. Outside prod, SSH is open to `0.0.0.0/0`.
+- The CloudWatch agent config collects `/var/log/user-data.log` and `/opt/gardbase/logs/enclave-console.log`, but the script actually writes `/var/log/user_data.log` (underscore) and `/opt/gardbase/enclave-console.log`, so neither stream is picked up as configured.
+- Both alarms are declared without `alarm_actions`, so they change state but notify nobody.
+- The enclave service unit removes and rebuilds the EIF on every start, and the parent unit re-pulls `:latest-parent` on every restart — so a `systemctl restart` is effectively a redeploy of whatever is currently tagged `latest`.
+- `user_data_replace_on_change = true` combined with `create_before_destroy` means any edit to `user_data.sh` or to a templated value replaces the instance in place of an in-place update.
+- A stray `terraform.tfstate` exists at the repository root; it is not this workspace's state (which lives in S3) and should not be treated as authoritative.

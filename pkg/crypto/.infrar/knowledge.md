@@ -1,60 +1,79 @@
 ---
 schema_version: 1
-id: 980a19a0-3ad8-4f09-95a7-a4012ac0ea95
+id: bf5f9da9-97e4-44d5-a019-ddc1e69960bc
 name: crypto-sdk
 node: pkg/crypto
-category: other
+category: app
 ---
 ## Purpose
 
-`crypto-sdk` is the client-side half of Gardbase's zero-trust model, published as the standalone Go module `github.com/qodesrl/gardbase/pkg/crypto`. It is a library, not a deployed service — applications import it to talk to a Gardbase deployment safely.
+`crypto-sdk` is the client-side half of Gardbase's zero-trust design: a standalone Go module (`github.com/qodesrl/gardbase/pkg/crypto`) that applications embed to encrypt their own data before it ever reaches the API.
 
-It carries the two responsibilities the server cannot be trusted with:
+It carries the two responsibilities that cannot be delegated to the server:
 
-1. **Verifying the enclave.** Full AWS Nitro attestation verification — COSE/CBOR decoding, certificate chain validation to the AWS Nitro root CA, ECDSA P-384 signature check, document freshness, nonce match, enclave public-key binding, and PCR comparison against expected measurements. Everything else in the SDK refuses to run until this passes.
-2. **Encrypting and decrypting data.** Probabilistic AES-GCM for payloads, deterministic AES-GCM (and an HMAC variant) for equality-searchable index tokens, and order-preserving encryption for range-queryable index tokens — plus the session handling that gets DEKs from the enclave in the first place.
+1. **Verification.** Before trusting the enclave with anything, it independently validates the Nitro attestation document — certificate chain to the AWS Nitro root CA, COSE/ECDSA signature, freshness, nonce echo, public-key binding, and optionally PCR code measurements. Only after that does it accept the session key it just negotiated.
+2. **Encryption.** It implements the three field encryption modes the storage layer expects — probabilistic AES-256-GCM for opaque payloads, deterministic AES-GCM for equality-searchable index tokens, and order-preserving encryption for range-queryable fields — along with the session handshake and DEK unsealing that feed them keys.
 
-The design contract: plaintext exists only in the calling application and inside the enclave. This module is what makes that true on the client side.
+It is a library, not a service. Nothing in this repo deploys it; the `api` and `enclave-service` modules do not import it. It is the reference implementation that higher-level SDKs are built on.
 
 ## Structure
 
-Five source files and a test, all in package `crypto`:
+The node root is `pkg/crypto`, a self-contained Go module with `replace` directives to the sibling `pkg/enclaveproto` and `pkg/api` modules.
 
-- `kms.go` — the session API and HTTP client. `EnclaveSecureSession` (session id, X25519 keypair, enclave public key, derived session key, expiry, attestation state, endpoint, http client), `SessionConfig` (endpoint, tenant id, API key, `ExpectedPCRs`, optional `RootCA`, `MaxAttestationAge`, `VerifyPCRs`, `HTTPTimeout`), and `tenantRoundTripper` which injects `X-Tenant-ID`/`X-API-Key` on every request. Entry points: `InitEnclaveSecureSession`, and on the session `GenerateDEK`, `GetTableIEK`, `SessionUnwrap`, `UnsealDEK`, `GetAttestationInfo`, `Close`. Plus the standalone `UnwrapSingleDEK`.
-- `attestationVerification.go` — the attestation machinery. `attestationDocument` and `coseSign1` CBOR structs, the embedded AWS Nitro root CA PEM, `verifyAttestation` (the eight-step pipeline), `verifyCertificateChain`, `verifyCOSESignature`, `verifyPCRs`, and `verificationResult` which records which steps passed.
-- `probabilistic.go` — `EncryptObjectProbabilistic` / `DecryptObjectProbabilistic`. AES-256-GCM with a random 12-byte nonce; ciphertext format is `nonce ‖ gcmCiphertext`.
-- `deterministic.go` — `EncryptObjectDeterministic` / `DecryptObjectDeterministic` (AES-GCM with an HMAC-derived nonce so the same plaintext+context always yields the same ciphertext) and `EncryptObjectDeterministicFixed` (a one-way 32-byte HMAC-SHA256 tag, no decryption).
-- `ope.go` — order-preserving encryption. A large family of `Normalize*OPE`/`Denormalize*OPE` helpers mapping int8/16/32/64, uint variants, float32/64, `time.Time` and `time.Duration` into a monotonic 32-bit domain, the generic `NormalizeValueOPE(any)` dispatcher, and `EncryptObjectOPE`/`DecryptObjectOPE` producing 8-byte big-endian ciphertexts.
-- `utils.go` — constants (`AESKeySize` 32, `GMCNonceSize` 12), `generateRandomBytes`, `deriveNonceHMAC`, `GenerateEphemeralKeypair`, `deriveSessionKey`, `zero`, `openDEK`.
-- `kms_test.go` — integration-style tests gated on an `-enclave-endpoint` flag; they require a live deployment and do nothing useful without one.
+- `kms.go` — the session client. Defines `EnclaveSecureSession` and `SessionConfig`, the `tenantRoundTripper` that injects auth headers, and the five operations: `InitEnclaveSecureSession`, `SessionUnwrap`, `GenerateDEK`, `GetTableIEK`, `UnsealDEK`, plus `Close`, `GetAttestationInfo`, and the standalone `UnwrapSingleDEK`.
+- `attestationVerification.go` — the attestation verifier. Holds the CBOR structs (`attestationDocument`, `coseSign1`), the embedded AWS Nitro root CA PEM, the eight-step `verifyAttestation`, and the helpers `verifyCertificateChain`, `verifyCOSESignature`, `verifyPCRs`.
+- `deterministic.go` — `EncryptObjectDeterministic` / `DecryptObjectDeterministic` (AES-GCM with an HMAC-derived nonce) and `EncryptObjectDeterministicFixed` (a raw HMAC-SHA256 token).
+- `probabilistic.go` — `EncryptObjectProbabilistic` / `DecryptObjectProbabilistic` (AES-GCM, `nonce || ciphertext`).
+- `ope.go` — order-preserving encryption over `goope`, plus the full set of `Normalize*OPE` / `Denormalize*OPE` converters and the reflective `NormalizeValueOPE`.
+- `utils.go` — shared primitives: `AESKeySize`/`GMCNonceSize` constants, `generateRandomBytes`, `deriveNonceHMAC`, `GenerateEphemeralKeypair`, `deriveSessionKey`, `openDEK`, `zero`.
+- `kms_test.go` — integration-style tests for session init and DEK generation.
 
 ## Behavior
 
-**Session establishment.** `InitEnclaveSecureSession` generates an ephemeral X25519 keypair and a 32-byte random nonce, POSTs them to `<endpoint>/secure-session/init`, and receives the session id, the enclave's ephemeral public key, an expiry, and an attestation document. It derives the session key with X25519 + HKDF-SHA256 using info `"gardbase-enclave-session-v1"` — byte-for-byte the same derivation the enclave performs, which is what makes the channel end-to-end rather than terminating at the API. It then verifies the attestation; on failure it zeroes the session key and returns an error alongside the (unusable) session.
+**Session establishment.** `InitEnclaveSecureSession` generates an ephemeral X25519 keypair and a 32-byte nonce, POSTs them to `<Endpoint>/secure-session/init`, and receives the enclave's ephemeral public key, a session ID, an expiry, and an attestation document. It derives the shared session key with `X25519 → HKDF-SHA256(info: "gardbase-enclave-session-v1")` — the same derivation the enclave performs — then verifies the attestation. If verification fails it zeroes the session key and returns an error (alongside a non-nil session value, so callers must check `err`, not just the pointer). Only on success is `AttestationVerified` set, and every subsequent operation refuses to run without it and without a non-expired session.
 
-**Attestation verification pipeline.** In order: decode COSE_Sign1 → decode the attestation document from its payload → verify the certificate chain from the leaf through the CA bundle to the root (the embedded AWS root CA unless `SessionConfig.RootCA` overrides it) → verify the COSE signature (SHA-384 over the canonical `Sig_structure`, with AWS's raw 96-byte R‖S signature split into two 48-byte P-384 halves rather than ASN.1) → check the document is no older than `MaxAttestationAge` → check the nonce equals the one this client generated → check the embedded public key equals the enclave ephemeral key received → if `VerifyPCRs`, compare each expected PCR against the document. Every step appends to `VerifiedSteps`, surfaced by `GetAttestationInfo` for logging or display. The nonce and public-key bindings are what stop a malicious API from replaying an old document or substituting its own key.
+**Attestation verification.** `verifyAttestation` runs in a fixed order, appending to `VerifiedSteps` as it goes: decode the COSE_Sign1 envelope → decode the CBOR attestation document → verify the leaf certificate against the CA bundle up to the root (the embedded AWS Nitro root CA unless `config.RootCA` overrides it) → verify the ES384 signature by reconstructing the `Signature1` structure, hashing with SHA-384, and checking the raw 96-byte `R || S` against the leaf's ECDSA key → check the document age against `MaxAttestationAge` → compare the echoed nonce → compare the embedded public key against the enclave key just used for the handshake → and, when `VerifyPCRs` is set and `ExpectedPCRs` is non-empty, compare each expected PCR. The nonce and public-key checks are what make the document specific to *this* handshake rather than replayable.
 
-**Key retrieval.** `GenerateDEK(ctx, tableHash, count)` asks for a batch of DEKs plus the table's index encryption key; each returned DEK arrives sealed under the session key and is opened locally with `openDEK` (XChaCha20-Poly1305, 24-byte nonce). The caller gets, per DEK, the plaintext key plus the KMS-wrapped and master-key-wrapped forms to persist alongside the object. `GetTableIEK` fetches just the IEK. `SessionUnwrap` bulk-unwraps DEKs for reads; `UnsealDEK` opens one of those results using the **object ID as associated data**, so a sealed DEK cannot be moved to a different object. Every session method first checks expiry and `AttestationVerified` and refuses to proceed otherwise.
+**Key operations.** All of them go through the API server, which relays to the enclave:
 
-**The one-shot path.** `UnwrapSingleDEK` needs no prior session: it generates a NaCl box keypair, POSTs to `/decrypt`, verifies the returned attestation, and opens the box. Useful for a single decryption where establishing a session is overkill.
+- `GenerateDEK(tableHash, count)` — returns `count` DEKs, each with its plaintext (unsealed locally from the session-sealed form), its KMS-wrapped form, and its master-key-wrapped form plus nonce for storage. Also returns the table's index encryption key.
+- `GetTableIEK(tableHash)` — fetches just the IEK, unsealed with the session key.
+- `SessionUnwrap(items)` — batch-unwraps stored DEKs; results are session-sealed per object.
+- `UnsealDEK(sealed, nonce, objectID)` — opens a session-sealed DEK with XChaCha20-Poly1305 using the object ID as associated data, matching how the enclave sealed it.
+- `UnwrapSingleDEK` — a sessionless path: generates a NaCl box keypair, POSTs to `/decrypt`, verifies the returned attestation, and opens the box.
 
-**Encryption modes and their trade-offs.** Payloads use probabilistic AES-GCM — semantically secure, not searchable. Index tokens for equality use deterministic encryption, where the nonce is HMAC-derived from the key and a caller-supplied context string (the context also serves as AEAD associated data), so identical values produce identical tokens; that is precisely what enables equality queries and precisely what leaks which records share a value. Range-queryable fields use OPE, which leaks far more — order, distribution, approximate magnitude, frequency — and the file opens with an explicit warning to use it only for low-sensitivity data where range queries are genuinely required. The normalization helpers exist because OPE operates on a 32-bit ordered integer domain: signed integers get their sign bit flipped, floats get the IEEE-754 sign/magnitude transform, and 64-bit values are truncated to their high 32 bits (so `int64` and extended timestamps lose precision by design). `Close()` zeroes the session key and client private key.
+Authentication is transparent: `tenantRoundTripper` sets `X-Tenant-ID` and `X-API-Key` on every request from `SessionConfig`. `Close()` zeroes the session key and the client private key.
+
+**Encryption modes.**
+
+- *Probabilistic* — random 12-byte nonce, AES-256-GCM, output `nonce || ciphertext`. Two encryptions of the same value differ; nothing is queryable.
+- *Deterministic* — nonce derived as `HMAC-SHA256(dek, "gardbase-data-deterministic-encryption-v1" || 0x00 || context)` truncated to 12 bytes, with `context` also used as GCM associated data. Same plaintext plus same context plus same key always yields the same ciphertext, which is what makes equality lookups on encrypted index tokens possible. A non-empty context is mandatory.
+- *Deterministic fixed* — `HMAC-SHA256(dek, context || 0x00 || plaintext)`, a one-way 32-byte token with no decryption path; this is the 32-byte hash segment the index sort keys are built from.
+- *OPE* — values are first normalized to the `[0, 2^32-1]` input range by the `Normalize*` helpers (sign-bit flipping for signed integers, IEEE-754 bit reordering for floats, high-32-bit truncation for `int64` and out-of-range timestamps), encrypted with `goope` into a wide `[0, 2^61]` output range to limit collisions, and emitted as 8 big-endian bytes — the range segment of a hash+range index token.
+
+**Testing.** `kms_test.go` takes an `-enclave-endpoint` flag and exercises `InitEnclaveSecureSession` and `GenerateDEK` against a live deployment. There are no unit tests for the encryption modes or the attestation verifier.
 
 ## Dependencies
 
-- **Internal modules** (via local `replace` directives): `pkg/api` (request/response types for the HTTP calls) and `pkg/enclaveproto` (`SessionUnwrapItem`, `GeneratedDEK`, and friends). It does **not** depend on `pkg/models` or on either application.
-- **Libraries**: `github.com/fxamacker/cbor/v2` (COSE/CBOR), `github.com/alessandrofoglia07/goope` (the OPE primitive), `golang.org/x/crypto` (curve25519, hkdf, chacha20poly1305, nacl/box). Everything else is the Go standard library — no AWS SDK, no HTTP framework.
-- **Runtime peer**: a reachable Gardbase API endpoint, plus valid `TenantID`/`APIKey` with the `crypto` permission. The API relays to the enclave; this module never talks to the enclave or to AWS directly.
-- **Operational input**: expected PCR values, which `infrastructure-main` publishes to SSM at `/${project}/${env}/enclave/pcr-values` after each EIF build (also obtainable via `nitro-cli describe-eif`).
+**Internal (via `replace`):**
+- `pkg/api` — the `encryption` package supplies every request/response type the session client marshals.
+- `pkg/enclaveproto` — the underlying enclave message types those aliases resolve to (`SessionInitRequest/Response`, `SessionUnwrapItem`, `GeneratedDEK`, `PrepareIEKResponse`, `DecryptRequest/Response`).
+
+**Third party:**
+- `github.com/fxamacker/cbor/v2` — decodes the COSE envelope and the attestation document.
+- `github.com/alessandrofoglia07/goope` — the order-preserving encryption primitive.
+- `golang.org/x/crypto` — `curve25519`, `hkdf`, `chacha20poly1305` (XChaCha20-Poly1305 for unsealing), `nacl/box`.
+- Standard library for AES-GCM, HMAC, ECDSA, and X.509.
+
+**Runtime peers:** the `api` node (as the HTTP endpoint) and the `enclave-service` node (as the counterparty whose derivation, sealing, and attestation this module mirrors). Any change to the HKDF info string, the AEAD choice, the associated-data convention, or the index-token layout must be made on both sides simultaneously.
 
 ## Notes
 
-- This module is the mirror image of `enclave-service`. The HKDF info string, the XChaCha20-Poly1305 sealing format, and the associated-data conventions must match exactly on both sides — changing one without the other silently breaks every session.
-- `VerifyPCRs` defaults to false in `SessionConfig`; with it off, the SDK confirms it is talking to *a* genuine Nitro enclave but not to *your* enclave image. Production clients must set it true and supply `ExpectedPCRs`, and must update those values whenever the enclave image is rebuilt.
-- OPE ciphertexts are 8 bytes and OPE range values are assumed to be exactly 8 bytes by the server-side index layout (`models.OPERangeValueLength`, itself `TODO`-flagged); the two must stay in sync.
-- `EncryptObjectDeterministicFixed` is one-way (HMAC), unlike `EncryptObjectDeterministic` (reversible AES-GCM). It also accepts any non-empty key length while the AES variants require exactly 32 bytes.
-- `NormalizeTimeOPE` rejects timestamps before 1970 or after 2106 and points at `NormalizeTimeExtendedOPE`, whose precision is roughly 136 years per unit — usable for coarse ordering only. `uint64` is rejected outright as unrepresentable.
-- Error handling in the HTTP helpers is awkward: the response body is decoded into `errBody` and then `io.ReadAll` is called on the already-consumed body, so non-200 error messages come back empty. Several errors also read "failed to start decrypt session" regardless of which call actually failed.
-- `UnwrapSingleDEK` slices `resBody.Ciphertext[:24]` before validating its length, so a short or empty ciphertext from a misbehaving server panics rather than erroring.
-- `zero()` is best-effort — Go's garbage collector may have already copied the buffer elsewhere.
-- The tests require a live enclave endpoint passed via `-enclave-endpoint`; there is no unit-test coverage of the crypto primitives or the attestation pipeline in this module.
+- **`VerifyPCRs` defaults to false.** With it off, the verifier confirms the document came from a genuine Nitro enclave signed by AWS, but not *which code* is running in it. Production clients must set `VerifyPCRs: true` and populate `ExpectedPCRs` (obtainable from `nitro-cli describe-eif`, or from the SSM parameter `extract-pcrs.sh` publishes) for the zero-trust property to hold end to end.
+- **OPE leaks.** `ope.go` opens with an explicit warning: order-preserving encryption reveals ordering, approximate values, distribution, and frequency. It is intended only for low-sensitivity fields where range queries are genuinely required. Deterministic encryption similarly reveals which records share a value for an indexed field.
+- **OPE is lossy for wide types.** `NormalizeInt64OPE`, `NormalizeFloat64OPE`, and `NormalizeTimeExtendedOPE` keep only the high 32 bits, so round-tripping an `int64` or `float64` does not return the original value — they preserve order for range queries, not equality. `NormalizeTimeOPE` is exact but rejects timestamps outside 1970–2106, and `uint64` is rejected outright.
+- **`InitEnclaveSecureSession` returns a non-nil session together with an error** when attestation fails. Callers that ignore the error will hold a session whose key has been zeroed.
+- **This module is not in any Dockerfile and has no Nx project.** It participates in `go.work` and is versioned as its own module for consumption as a dependency; `go test ./...` here requires a reachable enclave endpoint and fails without one.
+- The HTTP error paths in `kms.go` decode the response body into `errBody` and then call `io.ReadAll` on the already-drained body, so the reported error message is usually empty and the status code is the only signal.
+- `UnwrapSingleDEK` copies the NaCl box nonce from the first 24 bytes of the ciphertext before verifying the attestation; verification does gate the final `box.Open`, but the ordering makes the flow harder to follow than the session path.
+- The AWS Nitro root CA is embedded as a PEM constant with a 2049 expiry; `SessionConfig.RootCA` exists to override it if AWS ever rotates.
