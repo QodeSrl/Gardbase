@@ -11,9 +11,9 @@ terraform {
     }
   }
   backend "s3" {
-    bucket = "gardbase-terraform-state"
-    key    = "main/terraform.tfstate"
-    region = "eu-central-1"
+    bucket  = "gardbase-terraform-state"
+    key     = "main/terraform.tfstate"
+    region  = "eu-central-1"
     encrypt = true
   }
 }
@@ -28,12 +28,13 @@ data "terraform_remote_state" "bootstrap" {
 }
 
 provider "aws" {
-  region = var.region
+  region  = var.region
+  profile = "terraform"
   default_tags {
     tags = {
-      Project = var.project_name
+      Project     = var.project_name
       Environment = var.environment
-      ManagedBy = "Terraform"
+      ManagedBy   = "Terraform"
     }
   }
 }

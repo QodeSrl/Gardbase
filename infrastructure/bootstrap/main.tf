@@ -15,7 +15,8 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region  = var.region
+  profile = "terraform"
 }
 
 resource "aws_s3_bucket" "lambdas_bucket" {
