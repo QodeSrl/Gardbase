@@ -23,11 +23,11 @@ Gardbase is a fully encrypted NoSQL DBaaS (Database-as-a-Service) built on AWS i
 - Docker
 - Terraform 1.5+
 - Node.js 22.14.0+
-- pnpm 10.13.1+
+- pnpm 12.6.0+
 - AWS CLI configured with an account that can create: VPC, Lambda, ECR, EC2, IAM, S3, DynamoDB tables, KMS keys, CloudWatch resources
 
 ```bash
-aws configure
+aws login
 aws sts get-caller-identity
 ```
 
