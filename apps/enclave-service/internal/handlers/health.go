@@ -1,23 +1,17 @@
 package handlers
 
 import (
-	"encoding/json"
 	"time"
 
-	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
-func HandleHealth(encoder *json.Encoder, startTime time.Time) {
+func HandleHealth(startTime time.Time) enclaveproto.HealthResponse {
 	uptime := time.Since(startTime).String()
-	res := enclaveproto.Response[enclaveproto.HealthResponse]{
-		Success: true,
-		Data: enclaveproto.HealthResponse{
-			Status:    "healthy",
-			Timestamp: time.Now(),
-			Uptime:    uptime,
-		},
-		Message: "Service is healthy",
+	res := enclaveproto.HealthResponse{
+		Status:    "healthy",
+		Timestamp: time.Now(),
+		Uptime:    uptime,
 	}
-	utils.SendResponse(encoder, res)
+	return res
 }

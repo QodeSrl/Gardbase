@@ -12,48 +12,40 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func HandleSessionPrepareIEK(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
+func HandleSessionPrepareIEK(payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) (res enclaveproto.PrepareIEKResponse, err error) {
 	var req enclaveproto.PrepareIEKRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid session prepare IEK request: %v", err))
-		return
+		return res, fmt.Errorf("Invalid session prepare IEK request: %v", err)
 	}
 
 	sess, ok := session.GetSession(req.SessionId)
 	if !ok {
-		utils.SendError(encoder, "Invalid or expired session ID")
-		return
+		return res, fmt.Errorf("Invalid or expired session ID")
 	}
 
 	sessAead, err := chacha20poly1305.NewX(sess.Key)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to create AEAD cipher: %v", err))
-		return
+		return res, fmt.Errorf("Failed to create AEAD cipher: %v", err)
 	}
 
 	sessNonce := make([]byte, chacha20poly1305.NonceSizeX) // 24 bytes
 	if _, err := nsmSession.Read(sessNonce); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to read session nonce: %v", err))
-		return
+		return res, fmt.Errorf("Failed to read session nonce: %v", err)
 	}
 
 	iek, err := utils.DecryptWithOpenSSL(req.IEK, nsmPrivKey)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt IEK: %v", err))
-		return
+		return res, fmt.Errorf("Failed to decrypt IEK: %v", err)
 	}
 
 	sealedIEK := sessAead.Seal(nil, sessNonce, iek, nil)
 
 	utils.Zero(iek)
 
-	res := enclaveproto.PrepareIEKResponse{
+	res = enclaveproto.PrepareIEKResponse{
 		SealedIEK: sealedIEK,
 		IEKNonce:  sessNonce,
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.PrepareIEKResponse]{
-		Success: true,
-		Data:    res,
-	})
+	return res, nil
 }

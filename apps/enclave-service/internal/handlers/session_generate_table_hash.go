@@ -10,37 +10,30 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func HandleSessionGenerateTableHash(encoder *json.Encoder, payload json.RawMessage) {
+func HandleSessionGenerateTableHash(payload json.RawMessage) (res enclaveproto.SessionGenerateTableHashResponse, err error) {
 	var req enclaveproto.SessionGenerateTableHashRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid generate table hash request: %v", err))
-		return
+		return res, fmt.Errorf("Invalid generate table hash request: %v", err)
 	}
 
 	sess, ok := session.GetSession(req.SessionID)
 	if !ok {
-		utils.SendError(encoder, "Invalid or expired session ID")
-		return
+		return res, fmt.Errorf("Invalid or expired session ID")
 	}
 
 	sessAead, err := chacha20poly1305.NewX(sess.Key)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to create AEAD cipher: %v", err))
-		return
+		return res, fmt.Errorf("Failed to create AEAD cipher: %v", err)
 	}
 
 	tableName, err := sessAead.Open(nil, req.SessionTableNameNonce, req.SessionEncryptedTableName, nil)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt table name: %v", err))
-		return
+		return res, fmt.Errorf("Failed to decrypt table name: %v", err)
 	}
 
 	tableHash := utils.Hash(tableName, req.TableSalt)
-	res := enclaveproto.SessionGenerateTableHashResponse{
+	res = enclaveproto.SessionGenerateTableHashResponse{
 		TableHash: tableHash,
 	}
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionGenerateTableHashResponse]{
-		Success: true,
-		Data:    res,
-	})
+	return res, nil
 }

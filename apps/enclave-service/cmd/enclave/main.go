@@ -150,6 +150,7 @@ func handleConnection(conn net.Conn) {
 	conn.SetReadDeadline(time.Now().Add(5 * time.Minute))
 
 	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer
 	encoder := json.NewEncoder(conn)
 
 	for scanner.Scan() {
@@ -165,43 +166,51 @@ func handleConnection(conn net.Conn) {
 
 		log.Printf("Received request type: %s, payload size: %d bytes", req.Type, len(req.Payload))
 
+		var err error
+		// pointer to response type
+		var res any
+
 		switch req.Type {
 		case "health":
-			handlers.HandleHealth(encoder, startTime)
+			res = handlers.HandleHealth(startTime)
 		case "prepare_kek":
 			// currently unused, will be implemented later on with advanced self-managed keys
-			handlers.HandlePrepareKEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
+			res, err = handlers.HandlePrepareKEK(req.Payload, nsmSession, nsmPrivateKey)
 		case "get_attestation":
-			handlers.HandleGetAttestation(encoder, &attestation)
+			res, err = handlers.HandleGetAttestation(&attestation)
 		case "session_generate_table_hash":
-			handlers.HandleSessionGenerateTableHash(encoder, req.Payload)
+			res, err = handlers.HandleSessionGenerateTableHash(req.Payload)
 		case "session_init":
-			handlers.HandleSessionInit(encoder, req.Payload, nsmSession)
+			res, err = handlers.HandleSessionInit(req.Payload, nsmSession)
 		case "session_unwrap":
-			handlers.HandleSessionUnwrap(encoder, req.Payload, nsmSession, nsmPrivateKey)
+			res, err = handlers.HandleSessionUnwrap(req.Payload, nsmSession, nsmPrivateKey)
 		case "session_prepare_dek":
-			handlers.HandleSessionPrepareDEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
+			res, err = handlers.HandleSessionPrepareDEK(req.Payload, nsmSession, nsmPrivateKey)
 		case "session_prepare_iek":
-			handlers.HandleSessionPrepareIEK(encoder, req.Payload, nsmSession, nsmPrivateKey)
+			res, err = handlers.HandleSessionPrepareIEK(req.Payload, nsmSession, nsmPrivateKey)
 		case "decrypt":
-			handlers.HandleDecrypt(encoder, req.Payload, nsmPrivateKey)
+			res, err = handlers.HandleDecrypt(req.Payload, nsmPrivateKey)
 		default:
 			log.Printf("Unknown request type: %s", req.Type)
 			utils.SendError(encoder, fmt.Sprintf("Unknown request type: %s", req.Type))
 		}
+
+		if err != nil {
+			log.Printf("Error handling request: %v", err)
+			utils.SendError(encoder, fmt.Sprintf("Error handling request: %v", err))
+		}
+
+		utils.SendResponse(encoder, enclaveproto.Response[any]{
+			Success: true,
+			ID:      req.ID,
+			Data:    res,
+		})
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Printf("Error reading from connection: %v", err)
 		utils.SendError(encoder, fmt.Sprintf("Error reading from connection: %v", err))
 	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
 }
 
 func getEnvUint32(key string, defaultValue uint32) uint32 {

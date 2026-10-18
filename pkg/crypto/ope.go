@@ -113,12 +113,17 @@ func DenormalizeFloat32OPE(v int64) float32 {
 func NormalizeTimeOPE(t time.Time) (int64, error) {
 	unix := t.UTC().Unix()
 	if unix < 0 || unix > math.MaxUint32 {
-		return 0, fmt.Errorf("timestamp %v out of OPE range [0, 2^32-1]: use NormalizeTimeExtendedOPE", t)
+		// if the timestamp falls outside the range, use extended normalization
+		return NormalizeTimeExtendedOPE(t), nil
 	}
 	return unix, nil
 }
 
 func DenormalizeTimeOPE(v int64) time.Time {
+	if v < 0 || v > math.MaxUint32 {
+		// if the value falls outside the range, use extended denormalization
+		return DenormalizeTimeExtendedOPE(v)
+	}
 	return time.Unix(v, 0).UTC()
 }
 

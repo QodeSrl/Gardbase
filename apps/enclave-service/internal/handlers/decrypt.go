@@ -12,16 +12,14 @@ import (
 	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
 )
 
-func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *rsa.PrivateKey) {
+func HandleDecrypt(payload json.RawMessage, nsmPrivKey *rsa.PrivateKey) (res enclaveproto.DecryptResponse, err error) {
 	var req enclaveproto.DecryptRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
-		return
+		return res, fmt.Errorf("Invalid decrypt request: %v", err)
 	}
 
 	if len(req.ClientEphemeralPublicKey) != 32 {
-		utils.SendError(encoder, "Invalid client ephemeral key")
-		return
+		return res, fmt.Errorf("Invalid client ephemeral key length: %d", len(req.ClientEphemeralPublicKey))
 	}
 	var clientPubKey [32]byte
 	copy(clientPubKey[:], req.ClientEphemeralPublicKey)
@@ -29,33 +27,26 @@ func HandleDecrypt(encoder *json.Encoder, payload json.RawMessage, nsmPrivKey *r
 	// decrypt the ciphertext for recipient using NSM private key
 	decryptedOutput, err := utils.DecryptWithOpenSSL(req.Ciphertext, nsmPrivKey)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to decrypt ciphertext for recipient: %v", err))
-		return
+		return res, fmt.Errorf("Failed to decrypt ciphertext for recipient: %v", err)
 	}
 
 	// encrypt the decrypted DEK using NaCl box with client's ephemeral public key
 	enclavePubKey, enclavePrivKey, err := box.GenerateKey(rand.Reader)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to generate enclave key pair: %v", err))
-		return
+		return res, fmt.Errorf("Failed to generate enclave key pair: %v", err)
 	}
 	var nonce [24]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		utils.SendError(encoder, "Failed to generate nonce")
-		return
+		return res, fmt.Errorf("Failed to generate nonce: %v", err)
 	}
 	ciphertextBox := box.Seal(nonce[:], decryptedOutput, &nonce, &clientPubKey, enclavePrivKey)
 
-	resp := enclaveproto.Response[enclaveproto.DecryptResponse]{
-		Success: true,
-		Message: "Decryption successful",
-		Data: enclaveproto.DecryptResponse{
-			EnclavePubKey: enclavePubKey[:],
-			Ciphertext:    ciphertextBox,
-			Nonce:         nonce[:],
-			RequestNonce:  req.Nonce,
-		},
+	res = enclaveproto.DecryptResponse{
+		EnclavePubKey: enclavePubKey[:],
+		Ciphertext:    ciphertextBox,
+		Nonce:         nonce[:],
+		RequestNonce:  req.Nonce,
 	}
 
-	utils.SendResponse(encoder, resp)
+	return res, nil
 }

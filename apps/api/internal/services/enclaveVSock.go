@@ -4,26 +4,26 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/mdlayher/vsock"
 	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
-type VsockPool struct {
+type VsockMux struct {
+	wmu     *sync.Mutex
+	mu      *sync.Mutex
+	conn    net.Conn
+	enc     *json.Encoder
+	scanner *bufio.Scanner
+	pending map[string]chan json.RawMessage
 	cid     uint32
 	port    uint32
-	mu      sync.Mutex
-	idle    []*vsockConn
-	maxIdle int
-}
-
-type vsockConn struct {
-	conn    net.Conn
-	scanner *bufio.Scanner
-	encoder *json.Encoder
+	dead    bool
 }
 
 type Vsock struct {
@@ -31,17 +31,142 @@ type Vsock struct {
 	EnclaveCID uint32
 	// Enclave listening port
 	EnclavePort uint32
-	// Pool of vsock connections for reuse
-	pool VsockPool
+	// Mux for handling multiple requests over a single vsock connection
+	mux *VsockMux
 }
 
-func NewVsock(enclaveCID, enclavePort uint32) *Vsock {
-	v := &Vsock{
+func NewVsock(enclaveCID, enclavePort uint32) (*Vsock, error) {
+	mux, err := newVsockMux(enclaveCID, enclavePort)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create vsock mux: %v", err)
+	}
+	return &Vsock{
 		EnclaveCID:  enclaveCID,
 		EnclavePort: enclavePort,
+		mux:         mux,
+	}, nil
+}
+
+func newVsockMux(cid, port uint32) (*VsockMux, error) {
+	conn, err := vsock.Dial(cid, port, nil)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to connect to enclave vsock: %v", err)
 	}
-	v.pool = *NewVsockPool(enclaveCID, enclavePort, 10)
-	return v
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	m := &VsockMux{
+		conn:    conn,
+		enc:     json.NewEncoder(conn),
+		scanner: scanner,
+		pending: make(map[string]chan json.RawMessage),
+		cid:     cid,
+		port:    port,
+	}
+	go m.readLoop()
+	return m, nil
+}
+
+func (m *VsockMux) readLoop() {
+	for m.scanner.Scan() {
+		raw := make([]byte, len(m.scanner.Bytes()))
+		copy(raw, m.scanner.Bytes())
+
+		var header struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(raw, &header); err != nil || header.ID == "" {
+			continue
+		}
+
+		m.mu.Lock()
+		ch, ok := m.pending[header.ID]
+		if ok {
+			delete(m.pending, header.ID)
+		}
+		m.mu.Unlock()
+
+		if ok {
+			ch <- raw
+		}
+	}
+
+	if err := m.scanner.Err(); err != nil {
+		log.Printf("Error reading from vsock: %v", err)
+	}
+
+	// connection died
+	m.mu.Lock()
+	m.dead = true
+	for id, ch := range m.pending {
+		close(ch)
+		delete(m.pending, id)
+	}
+	m.mu.Unlock()
+}
+
+func (m *VsockMux) reconnect() error {
+	conn, err := vsock.Dial(m.cid, m.port, nil)
+	if err != nil {
+		return fmt.Errorf("Failed to reconnect to enclave vsock: %v", err)
+	}
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+	m.wmu.Lock()
+	m.mu.Lock()
+	m.conn = conn
+	m.enc = json.NewEncoder(conn)
+	m.scanner = scanner
+	m.dead = false
+	m.mu.Unlock()
+	m.wmu.Unlock()
+
+	go m.readLoop()
+	return nil
+}
+
+func (m *VsockMux) Send(req enclaveproto.Request, timeout time.Duration) (json.RawMessage, error) {
+	req.ID = uuid.New().String()
+	ch := make(chan json.RawMessage, 1)
+
+	m.mu.Lock()
+	if m.dead {
+		m.mu.Unlock()
+		if err := m.reconnect(); err != nil {
+			return nil, err
+		}
+		m.mu.Lock()
+	}
+	m.pending[req.ID] = ch
+	m.mu.Unlock()
+
+	m.wmu.Lock()
+	err := m.enc.Encode(req)
+	m.wmu.Unlock()
+
+	if err != nil {
+		m.mu.Lock()
+		delete(m.pending, req.ID)
+		m.mu.Unlock()
+		return nil, fmt.Errorf("Failed to send request to enclave: %v", err)
+	}
+
+	select {
+	case res, ok := <-ch:
+		if !ok {
+			return nil, fmt.Errorf("Connection to enclave closed")
+		}
+		return res, nil
+	case <-time.After(timeout):
+		m.mu.Lock()
+		delete(m.pending, req.ID)
+		m.mu.Unlock()
+		return nil, fmt.Errorf("Request to enclave timed out")
+	}
+}
+
+func (v *Vsock) SendToEnclave(req enclaveproto.Request, timeout time.Duration) (json.RawMessage, error) {
+	return v.mux.Send(req, timeout)
 }
 
 func (v *Vsock) RequestAttestationDocument() ([]byte, error) {
@@ -63,84 +188,4 @@ func (v *Vsock) RequestAttestationDocument() ([]byte, error) {
 		return nil, fmt.Errorf("Empty attestation document")
 	}
 	return res.Data.Attestation, nil
-}
-
-func (v *Vsock) SendToEnclave(req enclaveproto.Request, timeout time.Duration) (json.RawMessage, error) {
-	jsonReq, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to marshal request: %v", err)
-	}
-
-	c, err := v.pool.Get()
-	if err != nil {
-		return nil, err
-	}
-	c.conn.SetDeadline(time.Now().Add(timeout))
-	// send request
-	if _, err = c.conn.Write(append(jsonReq, '\n')); err != nil {
-		c.conn.Close()
-		return nil, fmt.Errorf("Failed to send request to enclave: %v", err)
-	}
-	// read response through scanner
-	if !c.scanner.Scan() {
-		c.conn.Close()
-		if err := c.scanner.Err(); err != nil {
-			return nil, fmt.Errorf("Failed to read response from enclave: %v", err)
-		}
-		return nil, fmt.Errorf("no response from enclave")
-	}
-
-	res := make([]byte, len(c.scanner.Bytes()))
-	copy(res, c.scanner.Bytes())
-
-	c.conn.SetDeadline(time.Time{}) // clear deadline
-	v.pool.Put(c)
-
-	return res, nil
-}
-
-func NewVsockPool(cid, port uint32, maxIdle int) *VsockPool {
-	return &VsockPool{
-		cid:     cid,
-		port:    port,
-		idle:    make([]*vsockConn, 0, maxIdle),
-		maxIdle: maxIdle,
-	}
-}
-
-func (p *VsockPool) Get() (*vsockConn, error) {
-	p.mu.Lock()
-
-	if len(p.idle) > 0 {
-		c := p.idle[len(p.idle)-1]
-		p.idle = p.idle[:len(p.idle)-1]
-		p.mu.Unlock() // release lock before returning
-		return c, nil
-	}
-	p.mu.Unlock() // release lock before dialing
-
-	conn, err := vsock.Dial(p.cid, p.port, nil)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to enclave vsock: %v", err)
-	}
-	return &vsockConn{
-		conn:    conn,
-		scanner: bufio.NewScanner(conn),
-		encoder: json.NewEncoder(conn),
-	}, nil
-}
-
-func (p *VsockPool) Put(c *vsockConn) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if len(p.idle) >= p.maxIdle {
-		c.conn.Close()
-		return
-	}
-	p.idle = append(p.idle, c)
-}
-
-func (p *VsockPool) Close(c *vsockConn) {
-	c.conn.Close()
 }

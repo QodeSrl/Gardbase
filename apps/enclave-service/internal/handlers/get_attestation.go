@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/qodesrl/gardbase/apps/enclave-service/internal/utils"
 	"github.com/qodesrl/gardbase/pkg/enclaveproto"
 )
 
-func HandleGetAttestation(encoder *json.Encoder, attestation *utils.Attestation) {
+func HandleGetAttestation(attestation *utils.Attestation) (*enclaveproto.GetAttestationResponse, error) {
 	attestation.Mu.RLock()
 	if len(attestation.Doc) == 0 {
 		attestation.Mu.RUnlock()
-		utils.SendError(encoder, "Attestation document not available")
-		return
+		return nil, fmt.Errorf("Attestation document not available")
 	}
 	att := append([]byte(nil), attestation.Doc...)
 	attestation.Mu.RUnlock()
@@ -23,8 +22,5 @@ func HandleGetAttestation(encoder *json.Encoder, attestation *utils.Attestation)
 	res := enclaveproto.GetAttestationResponse{
 		Attestation: att,
 	}
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.GetAttestationResponse]{
-		Success: true,
-		Data:    res,
-	})
+	return &res, nil
 }

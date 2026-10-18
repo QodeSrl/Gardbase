@@ -15,16 +15,14 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session) {
+func HandleSessionInit(payload json.RawMessage, nsmSession *nsm.Session) (res enclaveproto.SessionInitResponse, err error) {
 	var req enclaveproto.SessionInitRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid decrypt request: %v", err))
-		return
+		return res, fmt.Errorf("Invalid decrypt request: %v", err)
 	}
 
 	if len(req.ClientEphemeralPublicKey) != 32 {
-		utils.SendError(encoder, "Invalid client ephemeral key")
-		return
+		return res, fmt.Errorf("Invalid client ephemeral key length: %d", len(req.ClientEphemeralPublicKey))
 	}
 	var clientPubKey [32]byte
 	copy(clientPubKey[:], req.ClientEphemeralPublicKey)
@@ -32,23 +30,20 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	// generate enclave ephemeral keypair
 	var ephPriv, ephPub [32]byte
 	if _, err := rand.Read(ephPriv[:]); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to generate enclave ephemeral key: %v", err))
-		return
+		return res, fmt.Errorf("Failed to generate enclave ephemeral key: %v", err)
 	}
 	curve25519.ScalarBaseMult(&ephPub, &ephPriv)
 
 	// derive session key (shared secret, x25519 + hkdf)
 	sessKey, err := utils.DeriveSessionKey(ephPriv, req.ClientEphemeralPublicKey)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to derive session key: %v", err))
-		return
+		return res, fmt.Errorf("Failed to derive session key: %v", err)
 	}
 
 	// generate session ID
 	sid := make([]byte, 16)
 	if _, err := rand.Read(sid); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to generate session ID: %v", err))
-		return
+		return res, fmt.Errorf("Failed to generate session ID: %v", err)
 	}
 	sidB64 := base64.StdEncoding.EncodeToString(sid)
 
@@ -70,8 +65,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 		}
 		attestationRes, err := nsmSession.Send(&attestationReq)
 		if err != nil {
-			utils.SendError(encoder, fmt.Sprintf("Failed to get attestation document: %v", err))
-			return
+			return res, fmt.Errorf("Failed to get attestation document: %v", err)
 		}
 		if attestationRes.Attestation != nil && attestationRes.Attestation.Document != nil {
 			sessionAttDoc = attestationRes.Attestation.Document
@@ -80,7 +74,7 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 
 	defer utils.Zero(ephPriv[:])
 
-	res := enclaveproto.SessionInitResponse{
+	res = enclaveproto.SessionInitResponse{
 		SessionId:                 sidB64,
 		EnclaveEphemeralPublicKey: ephPub[:],
 		ExpiresAt:                 expiresAt.Format(time.RFC3339),
@@ -88,5 +82,5 @@ func HandleSessionInit(encoder *json.Encoder, payload json.RawMessage, nsmSessio
 	if len(sessionAttDoc) > 0 {
 		res.Attestation = sessionAttDoc
 	}
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionInitResponse]{Success: true, Data: res})
+	return res, nil
 }
