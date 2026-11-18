@@ -1,93 +1,76 @@
-import React from "react";
 import Logo from "../assets/logo.svg";
 import LogoWhite from "../assets/logo-white.svg";
-import { SiGithub } from "react-icons/si";
+import { LuArrowUpRight } from "react-icons/lu";
 import { site } from "@/lib/site";
 import { useTheme } from "@/lib/themeContext";
 
-const footerCols = [
+const groups = [
   {
-    name: "Product",
+    title: "Explore",
     links: [
-      { name: "Why Gardbase", href: "#why" },
-      { name: "Features", href: "#features" },
-      { name: "How it Works", href: "#how-it-works" },
-      { name: "Pricing", href: "#pricing" },
+      { label: "Architecture", href: "#how-it-works" },
+      { label: "Capabilities", href: "#features" },
+      { label: "Deployment", href: "#deploy" },
+      { label: "Questions", href: "#faq" },
     ],
   },
   {
-    name: "Open Source",
+    title: "Build",
     links: [
-      { name: "GitHub", href: site.repo, external: true },
-      { name: "Documentation", href: site.docs, external: true },
-      { name: `License (${site.license})`, href: site.licenseUrl, external: true },
-      { name: "Contributing", href: `${site.repo}#contributing`, external: true },
+      { label: "Documentation", href: site.docs },
+      { label: "API reference", href: site.apiDocs },
+      { label: "Security model", href: site.security },
+      { label: "GitHub issues", href: site.issues },
     ],
   },
   {
-    name: "Company",
+    title: "Project",
     links: [
-      { name: "Qode", href: site.companyUrl, external: true },
-      { name: "Contact", href: site.companyUrl, external: true },
+      { label: "Source code", href: site.repo },
+      { label: "Apache 2.0", href: site.licenseUrl },
+      { label: "Contributing", href: `${site.docs}#contributing` },
+      { label: "Qode", href: site.companyUrl },
     ],
   },
 ];
 
-const Footer: React.FC = () => {
+export default function Footer() {
   const { theme } = useTheme();
   return (
-    <footer className="border-t border-line bg-bg2 py-12">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-4">
-          <div className="sm:col-span-2 md:col-span-1">
-            <img
-              draggable={false}
-              src={theme === "dark" ? LogoWhite : Logo}
-              alt="Gardbase"
-              className="h-7"
-            />
-            <p className="mt-4 max-w-xs text-sm text-subtle">{site.tagline}</p>
-            <a
-              href={site.repo}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-flex items-center gap-2 rounded-lg border border-line bg-fg/5 px-3 py-2 text-sm text-muted transition-colors hover:border-fg/30 hover:bg-fg/10 hover:text-fg"
-            >
-              <SiGithub className="h-4 w-4" /> {site.repoLabel}
+    <footer className="site-footer">
+      <div className="container">
+        <div className="footer-layout">
+          <div className="footer-brand">
+            <a href="#top" aria-label="Gardbase home">
+              <img
+                src={theme === "dark" ? LogoWhite : Logo}
+                alt="Gardbase"
+                width="156"
+                height="32"
+              />
             </a>
+            <p>{site.tagline}</p>
+            <span className="mono">YOUR DATA. YOUR AWS ACCOUNT.</span>
           </div>
-
-          {footerCols.map(col => (
-            <div key={col.name}>
-              <h3 className="mb-4 text-sm font-semibold text-fg">{col.name}</h3>
-              <ul className="space-y-2.5 text-sm text-subtle">
-                {col.links.map(link => (
-                  <li key={link.name}>
-                    <a
-                      href={link.href}
-                      {...("external" in link && link.external
-                        ? { target: "_blank", rel: "noreferrer" }
-                        : {})}
-                      className="transition-colors hover:text-fg"
-                    >
-                      {link.name}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {groups.map(group => (
+            <nav key={group.title} aria-label={group.title}>
+              <h3>{group.title}</h3>
+              {group.links.map(link => (
+                <a key={link.label} href={link.href}>
+                  {link.label}
+                  {link.href.startsWith("https:") && <LuArrowUpRight />}
+                </a>
+              ))}
+            </nav>
           ))}
         </div>
-
-        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-line pt-6 text-center text-xs text-subtle sm:flex-row sm:text-left sm:text-sm">
-          <p>
-            &copy; {site.year} {site.company} · Gardbase. Released under the {site.license} license.
-          </p>
-          <p>Encrypted by design. Open by default.</p>
+        <div className="footer-bottom">
+          <span>
+            © {site.year} {site.company}. Gardbase is licensed under Apache 2.0.
+          </span>
+          <span>Encrypted by design. Open to inspection.</span>
         </div>
       </div>
     </footer>
   );
-};
-
-export default Footer;
+}

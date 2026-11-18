@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in Gardbase does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not use this form for security vulnerabilities**; follow [SECURITY.md](https://github.com/QodeSrl/Gardbase/blob/development/SECURITY.md) instead.
+        Never paste credentials, API keys, plaintext production data, or Terraform state.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - API (apps/api)
+        - Enclave service (apps/enclave-service)
+        - Crypto package (pkg/crypto)
+        - Infrastructure (Terraform / Docker)
+        - Landing page
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or branch, Go / Node versions, AWS region, instance type, and anything else relevant.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output, with secrets removed.
+      render: text

@@ -1,267 +1,166 @@
-<br>
+<div align="center">
 
-# Gardbase
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/src/assets/logo-white.svg">
+  <img alt="Gardbase" src="apps/landing/src/assets/logo.svg" width="260">
+</picture>
 
-Gardbase is a fully encrypted NoSQL DBaaS (Database-as-a-Service) built on AWS infrastructure that provides true zero-trust security. All data is encrypted client-side before leaving your application, while searchable encryption enables secure server-side indexing and queries. AWS Nitro Enclaves manage encryption keys in hardware-isolated environments, ensuring the backend never sees plaintext data. Think MongoDB Atlas meets end-to-end encryption! Ideal for healthcare, finance, and any application requiring verifiable data confidentiality.
+### Encrypted data infrastructure. Built in the open.
 
-## Features
+An open-source encrypted data layer for AWS: encrypt objects in your application,<br>
+store ciphertext in DynamoDB and S3, and keep key operations in attested Nitro Enclaves.
 
-- 🔒 Zero-Trust Encryption - All data encrypted client-side before transmission
-- 🔐 End-to-End Encryption - Server never sees plaintext data
-- 🛡️ AWS Nitro Enclaves - Cryptographic operations in isolated, attested environment
-- 📊 DynamoDB + S3 Storage - Scalable hybrid storage (inline for small objects, S3 for large)
-- 🔍 Encrypted Indexes - Search encrypted data using deterministic encryption
-- 🔄 Optimistic Locking - Version-based concurrency control prevents conflicts
-- 🚀 Type-Safe Generics - Fully typed SDK with Go 1.18+ generics
-- 📖 ORM-like API - Intuitive API inspired by Mongoose and GORM
+[![CI](https://github.com/QodeSrl/Gardbase/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/QodeSrl/Gardbase/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-3479ee)](LICENSE)
+[![Go 1.27](https://img.shields.io/badge/go-1.27-00ADD8?logo=go&logoColor=white)](go.work)
+[![AWS Nitro Enclaves](https://img.shields.io/badge/AWS-Nitro%20Enclaves-232F3E?logo=amazonwebservices&logoColor=white)](https://aws.amazon.com/ec2/nitro/nitro-enclaves/)
 
-## Getting Started
+[Quick start](#quick-start) · [Architecture](#architecture) · [Security model](#security-model) · [API reference](apps/api/README.md) · [Deployment](infrastructure/README.md) · [Contributing](CONTRIBUTING.md)
 
-### Prerequisites
+</div>
 
-- Go 1.20+
-- Docker
-- Terraform 1.5+
-- Node.js 22.14.0+
-- pnpm 10.13.1+
-- AWS CLI configured with an account that can create: VPC, Lambda, ECR, EC2, IAM, S3, DynamoDB tables, KMS keys, CloudWatch resources
+## Overview
 
-```bash
-aws configure
-aws sts get-caller-identity
-```
+Gardbase applications encrypt object contents locally. A Go REST API stores the ciphertext in DynamoDB and S3, and an AWS Nitro Enclave handles key operations through attested sessions.
 
-### Bootstrap Lambda S3 Bucket & ECR Repo
+The repository contains the API, enclave service, client crypto packages, landing page, and Terraform configuration. Build an integration with the REST endpoints and Go primitives; an ORM-style collection SDK is not included.
 
-A minimal Terraform workspace sets up:
+## What you can build with it
 
-- S3 bucket for Lambda code
-- ECR repository for API Docker images
+- **Encrypted objects:** AES-256-GCM object encryption in your application, using per-object data encryption keys (DEKs).
+- **Attested key sessions:** client verification of enclave attestations and session-sealed key material.
+- **Encrypted queries:** deterministic equality tokens and order-preserving range tokens, with explicit information-leakage tradeoffs.
+- **Two storage paths:** inline encrypted objects in DynamoDB and presigned S3 uploads for larger payloads.
+- **Object lifecycle:** versioned writes, pagination, soft deletion, and recovery.
+- **Tenant-scoped access:** API keys with `read`, `write`, and `crypto` permissions.
+- **Self-hosting:** Docker build targets and Terraform configuration for your AWS account.
 
-```bash
-cd infrastructure/bootstrap
-terraform init
-terraform plan -var="environment=dev"
-terraform apply -var="environment=dev"
-```
+## Quick start
 
-### Build & Push API Docker Image
+### Run the landing page
+
+The website runs independently of AWS and the Go services. Use Node.js **22.14.0 or newer** and the pnpm version in [`package.json`](package.json), currently **12.6.0**.
 
 ```bash
-nx run api:docker-build
-nx run api:docker-tag --aws_account_id=<aws-account-id> --aws_region=<aws-region>
-nx run api:docker-login --aws_account_id=<aws-account-id> --aws_region=<aws-region>
-nx run api:docker-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
-# Or
-nx run api:build-and-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+git clone --branch development https://github.com/QodeSrl/Gardbase.git
+cd Gardbase
+pnpm install --frozen-lockfile
+pnpm dev:landing
 ```
 
-### Build & Push Enclave Service Docker Image
+Open the local URL printed by Vite, normally `http://localhost:3000`.
 
 ```bash
-nx run enclave-service:docker-build
-nx run enclave-service:docker-tag --aws_account_id=<aws-account-id> --aws_region=<aws-region>
-nx run enclave-service:docker-login --aws_account_id=<aws-account-id> --aws_region=<aws-region>
-nx run enclave-service:docker-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
-# Or
-nx run enclave-service:build-and-push --aws_account_id=<aws-account-id> --aws_region=<aws-region>
+pnpm check:landing
+pnpm build:landing
+pnpm preview:landing
 ```
 
-### Deploy Full Infrastructure
+The production output is `dist/apps/landing`. The interactive encryption demo runs entirely in the browser and does not connect to an enclave or database. See the [landing page README](apps/landing/README.md) for development and accessibility details.
+
+### Work on the data services
+
+The Go modules use the toolchain version declared in [`go.work`](go.work), currently **1.27.1**. The running services also need AWS resources, an enclave-capable Linux host, and working vsock connectivity; starting them on a laptop is not a complete local database environment.
 
 ```bash
-cd infrastructure/main
-terraform init
-terraform apply -var="environment=dev"
+# From the repository root, with a compatible Go toolchain:
+go build -o dist/apps/api/main ./apps/api/cmd/server
+go build -o dist/apps/enclave-service/main ./apps/enclave-service/cmd/enclave
 ```
 
-## Components
+The crypto tests require an existing deployment and an adapted credential/verification setup; inspect [`kms_test.go`](pkg/crypto/kms_test.go) before running them. Building a service does not provision its AWS dependencies.
 
-### Storage
+Continue with the [API setup and routes](apps/api/README.md), [enclave service](apps/enclave-service/README.md), [crypto package](pkg/crypto/README.md), and [deployment guide](infrastructure/README.md).
 
-DynamoDB (Objects & Indexes):
+## Architecture
 
-- Lightweight encrypted binary data
-- Searchable fields encrypted with deterministic encryption
-- Enables exact-match queries on encrypted data
-- Sortable fields use order-preserving encryption
-
-S3 (Objects):
-
-- Each object encrypted with unique DEK
-- DEK wrapped with KMS key, stored as metadata
-- Large binary data (documents, files, blobs)
-- Envelope encryption provides key rotation flexibility
-
-### Apps
-
-#### Parent Application (API Server)
-
-Location `apps/api`
-<br>
-Runs on: EC2 host instance
-<br>
-Language: Go
-
-Purpose: Main API server for Gardbase.
-
-Responsibilities:
-
-- Manages user authentication and authorization
-- Handles file uploads from users
-- Manages AWS resources (S3, DynamoDB) for storing encrypted data and metadata
-- Acts as a proxy to communicate with the Enclave Service for sensitive data processing
-
-Key Features:
-
-- RESTful API endpoints for client interactions
-- Uses AWS SDK to interact with S3 and DynamoDB
-- vsock client to communicate securely with the Enclave Service
-- Does NOT have direct access to unencrypted data or encryption keys (zero-trust design)
-
-#### Enclave Service
-
-Location `apps/enclave-service`
-<br>
-Runs on: AWS Nitro Enclave (isolated environment on EC2)
-<br>
-Language: Go
-
-Purpose: Performs sensitive cryptographic operations in a hardware-isolated environment.
-
-Responsibilities:
-
-- Handles sessions with the client through ephemeral X25519 keypairs (ECDSA + HKDF key derivation)
-- Provides attestation documents (signed by AWS) to prove the enclave's identity and integrity
-- Decrypts Data Encryption Keys (DEKs) using AWS KMS within the enclave
-- Seals DEKs with session keys before returning to the API server
-- Zeros out sensitive data in memory after use to prevent leakage
-
-Key Features:
-
-- Uses AWS Nitro Enclaves SDK for secure operations
-- vsock server to communicate with the API server
-- NSM (Nitro Secure Module) for attestation, code measurements (PCRs) verifiable by clients
-- No network access, no persistent storage, memory isolation
-
-#### Lambdas
-
-### Packages
-
-#### Crypto
-
-Location `pkg/crypto`
-<br>
-Language: Go
-
-Purpose: Client-side cryptographic operations for secure data handling, enables applications to securely request DEK unwrapping with full attestation verification.
-
-Responsibilities:
-
-- Simplifies cryptographic operations for clients
-- Generates ephemeral X25519 keypairs
-- Initiates sessions with the enclave
-- Verifies attestation documents (critical for security):
-  - Validates certificate chain to AWS Root CA
-  - Verifies COSE signatures
-  - Checks PCR values match expected code measurements
-  - Validates nonce freshness
-  - Confirms public key binding
-- Unseals DEKs received from enclave
-
-#### Enclaveproto
-
-Location `pkg/enclaveproto`
-<br>
-Language: Go
-
-Purpose: Protocol definitions for parent-enclave communication.
-
-Contains:
-
-- Base Request and Response structures
-- Specific message types (`SessionInitRequest`, `SessionInitResponse`, `SessionGenerateDEKRequest`, `SessionGenerateDEKResponse`, etc.)
-
-#### API
-
-Location `pkg/api`
-<br>
-Language: Go
-
-Purpose: API request and response structures for the Parent Application.
-
-Contains:
-
-- Request and response types for API endpoints (e.g., `GenerateDEKRequest`, `GenerateDEKResponse`, `UnwrapDEKRequest`, `UnwrapDEKResponse`)
-
-#### Models
-
-Location `pkg/models`
-<br>
-Language: Go
-
-Purpose: Common data structures shared across components.
-
-Contains:
-
-- Database models (objects, indexes)
-
-## Security Model
-
-### Encryption Hierarchy
-
-Gardbase uses a 4-level key hierarchy:
-
-```
-Level 1: AWS KMS Key (per environment)
-           ↓ wraps
-Level 2: Tenant Master Key (per tenant, random 32 bytes)
-           ↓ encrypts
-Level 3: Data Encryption Keys (DEKs, per object, random 32 bytes)
-           ↓ encrypts
-Level 4: Your Data (encrypted with DEK using AES-256-GCM)
+```mermaid
+flowchart LR
+    App[Application: plaintext and object encryption]
+    API[Go API on EC2: auth and routing]
+    Store[DynamoDB and S3: encrypted objects and indexes]
+    Enclave[Nitro Enclave: isolated key operations]
+    KMS[AWS KMS: recipient-encrypted key material]
+    App -->|Ciphertext and index tokens| API
+    API --> Store
+    API <-->|vsock protocol| Enclave
+    API <-->|KMS requests and encrypted responses| KMS
 ```
 
-### Properties
+The API relays key material intended for the enclave. The enclave opens recipient-encrypted material and seals the required keys to the client session. The client can then encrypt or decrypt object contents locally. The enclave does not need a network connection to KMS; the parent API makes those requests.
 
-- Master Key stored encrypted (KMS-wrapped) on server
-- Master Key only decrypted inside AWS Nitro Enclave
-- DEKs generated fresh for each object
-- All encryption happens client-side or in enclave
-- Server never sees plaintext data or unencrypted keys
+A typical object workflow is:
 
-### Enclave Attestation
+1. Create a tenant and obtain its API key in a controlled deployment.
+2. Establish an enclave session and verify its attestation against the expected measurements.
+3. Resolve a table hash and obtain the required DEKs and index key through the session.
+4. Encrypt object contents and derive index tokens in the application.
+5. Store ciphertext through the inline or large-object API.
+6. Query by token, retrieve ciphertext, and decrypt in the application.
 
-Every cryptographic operation goes through a verified AWS Nitro Enclave:
+See [`pkg/api`](pkg/api) for request and response types. JSON `[]byte` fields use Go's standard base64 encoding.
 
-- Client requests enclave session
-- Enclave provides cryptographic attestation document
-- Client verifies attestation (proves code running in genuine enclave)
-- Encrypted channel established
-- Enclave performs key operations
-- Keys never leave enclave in plaintext
+## Repository map
 
-What this means:
+| Path                                                     | Responsibility                                                             |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [`apps/api`](apps/api/README.md)                         | HTTP routes, tenant authorization, storage, KMS, and enclave communication |
+| [`apps/enclave-service`](apps/enclave-service/README.md) | Nitro Secure Module, attestation, sessions, and isolated key operations    |
+| [`apps/landing`](apps/landing/README.md)                 | React and Vite website, with a standalone encryption demo                  |
+| [`pkg/crypto`](pkg/crypto/README.md)                     | Session client, attestation verification, and object/index primitives      |
+| [`pkg/api`](pkg/api)                                     | Go request and response types for the REST API                             |
+| [`pkg/enclaveproto`](pkg/enclaveproto)                   | Parent-to-enclave message types                                            |
+| [`pkg/models`](pkg/models)                               | Objects, indexes, tables, tenants, and API-key models                      |
+| [`infrastructure`](infrastructure/README.md)             | Bootstrap and main Terraform configurations                                |
 
-- Even Gardbase operators cannot access your keys
-- Compromised backend cannot decrypt data
-- Hardware-level isolation for sensitive operations
+## Security model
 
-### Index Token Security
+Gardbase separates object encryption, key operations, and storage. The intended object flow keeps plaintext contents in the integrating application and sends ciphertext to the storage API. That boundary depends on the client, enclave verification, KMS policies, deployment configuration, and the code paths you use.
 
-Searchable indexes use deterministic encryption:
+### Keys and sessions
 
-- Same value always produces same encrypted token
-- Enables equality queries on encrypted data
-- Index tokens generated in enclave, never exposed
-- Cannot reverse token back to original value
+- **AWS KMS keys** protect stored key material and produce recipient-encrypted material for the enclave.
+- **Tenant master keys** participate in wrapping object keys. Table salts and per-table index encryption keys support table identification and token generation.
+- **Object DEKs** encrypt contents with AES-256-GCM. Object keys are returned to clients sealed to an enclave session.
+- **Session keys** protect key exchange between the application and enclave. Plaintext DEKs exist in application memory when it encrypts or decrypts an object.
 
-**Trade-off**: Deterministic encryption reveals if two records have the same value for an indexed field. Don't index highly sensitive fields if this is a concern.
+The session client verifies the AWS certificate chain, COSE signature, nonce, and public-key binding. Configure a nonzero attestation age limit, enable `VerifyPCRs`, and supply the expected PCR measurements. A session with PCR checking disabled does not verify the expected enclave image. Read [`attestationVerification.go`](pkg/crypto/attestationVerification.go) and [`SessionConfig`](pkg/crypto/kms.go) when integrating.
+
+### What encryption does and does not hide
+
+| Mechanism                       | Purpose                  | Information still exposed                                                   |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
+| Probabilistic object encryption | Protect object contents  | Object sizes and operational metadata                                       |
+| Deterministic equality tokens   | Match indexed values     | Repeated values and query/access patterns                                   |
+| Order-preserving range tokens   | Compare indexed values   | Ordering, frequency, and distribution information; possible value inference |
+| Tenant/API authorization        | Limit allowed operations | Access control does not replace encryption or transport security            |
+
+Use range indexes only where that leakage is acceptable. Some OPE normalization functions also reduce precision, including `int64`, `float64`, and extended timestamps; review [`ope.go`](pkg/crypto/ope.go) for the selected type.
+
+Identifiers, index names, timestamps, traffic patterns, and storage metadata are not all hidden by object encryption. A compromised client or accessible plaintext key can expose data. The additional `/api/encryption/decrypt` route unwraps KMS material through the enclave and returns it sealed to a client public key; it is separate from local object decryption. Review transport security, tenant provisioning, recovery, and backup procedures before a production deployment. Open source and enclave attestation do not by themselves establish a security audit or regulatory compliance.
+
+## Development
+
+Run JavaScript commands from the repository root. The existing Nx targets also cover the Go applications:
+
+```bash
+pnpm exec nx build @gardbase/api
+pnpm exec nx build @gardbase/enclave-service
+pnpm exec nx test @gardbase/api
+```
+
+The module paths use lowercase `github.com/qodesrl/gardbase`. The workspace links local modules through `go.work`; Docker builds use the module replacement declarations with `GOWORK=off`.
 
 ## Contributing
 
-We welcome contributions! Please fork the repository and submit a pull request with your changes. For major changes, please open an issue first to discuss what you would like to change.
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the branch flow, local checks, and pull request expectations. Open an issue to discuss larger changes first.
+
+Never include AWS credentials, API keys, plaintext production data, or Terraform state in an issue or pull request.
+
+## Reporting a vulnerability
+
+Do not open a public issue for security problems. Follow [SECURITY.md](SECURITY.md) to report privately.
 
 ## License
 
-The project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+[Apache License 2.0](LICENSE). The software is open source; AWS resources and operating costs belong to the deployment owner.

@@ -26,7 +26,6 @@
       "plugin": "@nx/vite/plugin",
       "options": {
         "buildTargetName": "vite:build",
-        "testTargetName": "test",
         "serveTargetName": "serve",
         "devTargetName": "vite:dev",
         "previewTargetName": "vite:preview",
@@ -35,7 +34,14 @@
         "buildDepsTargetName": "build-deps",
         "watchDepsTargetName": "watch-deps"
       }
+    },
+    {
+      "plugin": "@nx/vitest",
+      "options": {
+        "testTargetName": "test"
+      }
     }
   ],
-  "nxCloudId": "687005ac402972053591c997"
+  "nxCloudId": "687005ac402972053591c997",
+  "analytics": true
 }

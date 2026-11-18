@@ -1,6 +1,6 @@
 module github.com/qodesrl/gardbase/pkg/crypto
 
-go 1.24.4
+go 1.27.1
 
 require github.com/fxamacker/cbor/v2 v2.9.0
 

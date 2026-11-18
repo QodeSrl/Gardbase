@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/QodeSrl/Gardbase/security/advisories/new
+    about: Report security problems privately. Please do not open a public issue.
+  - name: Read the documentation
+    url: https://github.com/QodeSrl/Gardbase/blob/development/README.md
+    about: Architecture, quick start, and the security model.

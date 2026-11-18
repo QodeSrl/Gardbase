@@ -1,12 +1,21 @@
+const repo = "https://github.com/QodeSrl/Gardbase";
+const source = `${repo}/blob/development`;
+
 export const site = {
   name: "Gardbase",
-  repo: "https://github.com/QodeSrl/Gardbase",
+  repo,
+  source,
   repoLabel: "QodeSrl/Gardbase",
-  docs: "https://github.com/QodeSrl/Gardbase#readme",
+  docs: `${source}/README.md`,
+  quickStart: `${source}/README.md#quick-start`,
+  security: `${source}/README.md#security-model`,
+  deployment: `${source}/infrastructure/README.md`,
+  apiDocs: `${source}/apps/api/README.md`,
+  issues: `${repo}/issues`,
   license: "Apache 2.0",
-  licenseUrl: "https://github.com/QodeSrl/Gardbase/blob/main/LICENSE",
+  licenseUrl: `${repo}/blob/main/LICENSE`,
   company: "Qode",
   companyUrl: "https://qodesrl.com/",
-  tagline: "The open-source zero-trust encrypted database.",
-  year: 2026,
+  tagline: "Encrypted data infrastructure. Built in the open.",
+  year: new Date().getFullYear(),
 };

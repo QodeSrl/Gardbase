@@ -87,7 +87,10 @@ func NewServer(config *Config, logger *zap.Logger) *Server {
 }
 
 func (s *Server) setupRoutes(s3Client *storage.S3Client, dynamoClient *storage.DynamoClient, kmsService *services.KMS) {
-	vsock := services.NewVsock(getEnvUint32("ENCLAVE_CID", 16), getEnvUint32("ENCLAVE_PORT", 8080))
+	vsock, err := services.NewVsock(getEnvUint32("ENCLAVE_CID", 16), getEnvUint32("ENCLAVE_PORT", 8080))
+	if err != nil {
+		s.logger.Fatal("Failed to create vsock", zap.Error(err))
+	}
 
 	api := s.router.Group("/api")
 
