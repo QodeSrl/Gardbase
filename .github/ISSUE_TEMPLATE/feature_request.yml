@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you would like it to work. Include API shapes or examples if you have them.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security considerations
+      description: Does this change what the server, storage, or enclave can learn? Consider index leakage, key handling, and tenant isolation.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

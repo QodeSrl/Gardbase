@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [development, test, main]
+  pull_request:
+    branches: [development, test, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go vet and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+      - name: Vet
+        run: go vet ./apps/api/... ./apps/enclave-service/... ./pkg/api/... ./pkg/crypto/... ./pkg/enclaveproto/... ./pkg/models/...
+      - name: Build
+        run: go build ./apps/api/... ./apps/enclave-service/... ./pkg/api/... ./pkg/crypto/... ./pkg/enclaveproto/... ./pkg/models/...
+
+  landing:
+    name: Landing page
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm check:landing
+      - name: Lint
+        run: pnpm --dir apps/landing exec eslint src
+      - name: Format
+        run: pnpm --dir apps/landing exec prettier --check src
+      - name: Build
+        run: pnpm build:landing

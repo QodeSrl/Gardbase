@@ -19,6 +19,8 @@ infrastructure/*/.terraform/
 infrastructure/*/*.tfstate
 infrastructure/*/*.tfstate.*
 infrastructure/*/terraform.tfvars
+*.tfstate
+*.tfstate.*
 
 # Editor directories and files
 .vscode/*
