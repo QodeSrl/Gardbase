@@ -1,85 +1,71 @@
-import React from "react";
-import {
-  LuLock,
-  LuShieldCheck,
-  LuSearch,
-  LuDatabase,
-  LuKeyRound,
-  LuGitBranch,
-} from "react-icons/lu";
+import { LuDatabase, LuGitBranch, LuKeyRound, LuSearch } from "react-icons/lu";
 
 const features = [
   {
-    icon: LuLock,
-    title: "Client-side encryption",
-    desc: "Every object is sealed with a unique AES-256-GCM data key before it leaves your app. The backend only ever stores ciphertext.",
-  },
-  {
-    icon: LuShieldCheck,
-    title: "Attested Nitro Enclaves",
-    desc: "Key operations run in hardware-isolated AWS Nitro Enclaves. Clients verify a signed attestation (PCRs, COSE, AWS root CA) before trusting them.",
-  },
-  {
+    n: "01",
     icon: LuSearch,
-    title: "Searchable encryption",
-    desc: "Query encrypted data directly. Deterministic tokens power equality lookups; order-preserving encryption enables sorting and ranges.",
+    title: "Query encrypted indexes",
+    text: "Equality lookups use deterministic tokens. Range queries use order-preserving tokens for fields where revealing order is acceptable.",
+    detail: "Equality · Ranges · Pagination",
   },
   {
-    icon: LuKeyRound,
-    title: "4-level key hierarchy",
-    desc: "KMS → tenant master key → per-object DEKs → your data. Envelope encryption means rotation without re-encrypting everything.",
-  },
-  {
+    n: "02",
     icon: LuDatabase,
-    title: "Hybrid DynamoDB + S3",
-    desc: "Small encrypted objects live inline in DynamoDB; large blobs go to S3 with wrapped DEKs in metadata. Storage scales without extra wiring.",
+    title: "One object model. Two storage paths.",
+    text: "Keep small encrypted objects inline in DynamoDB. Upload larger payloads directly to S3 using presigned URLs, then confirm their metadata through the API.",
+    detail: "DynamoDB · S3 · Presigned uploads",
   },
   {
+    n: "03",
+    icon: LuKeyRound,
+    title: "Keys with defined responsibilities",
+    text: "KMS, tenant master keys, per-table index keys, and per-object data keys separate storage access from cryptographic operations.",
+    detail: "Tenant isolation · Session-sealed keys",
+  },
+  {
+    n: "04",
     icon: LuGitBranch,
-    title: "Type-safe Go SDK",
-    desc: "An ORM-like API built on Go generics, inspired by Mongoose and GORM — plus optimistic locking for safe concurrent writes.",
+    title: "Build on explicit primitives",
+    text: "Use the REST API and shared Go types for versioned writes, soft deletion, recovery, and tenant-scoped read, write, and crypto permissions.",
+    detail: "REST endpoints · Go crypto packages",
   },
 ];
 
-const FeaturesSection: React.FC = () => {
+export default function FeaturesSection() {
   return (
-    <section id="features" className="relative py-20 sm:py-28">
-      <div
-        className="absolute left-[10%] top-1/3 -z-10 h-72 w-72 rounded-full bg-accent-3/10 blur-[120px]"
-        aria-hidden
-      />
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto mb-14 max-w-3xl text-center sm:mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest text-accent-2">
-            Capabilities
-          </span>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
-            Strong encryption, full database ergonomics
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
-            Zero-trust security usually means giving up querying, sorting, and developer experience.
-            Gardbase keeps all three.
-          </p>
+    <section id="features" className="section capabilities-section">
+      <div className="container">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">03 / The building blocks</p>
+            <h2>
+              Useful storage.
+              <br />
+              Deliberate encryption.
+            </h2>
+          </div>
+          <p>The pieces to build an encrypted data workflow on infrastructure you control.</p>
         </div>
-
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(f => (
-            <div
-              key={f.title}
-              className="glass group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/40"
-            >
-              <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-accent/25 to-accent-3/20 text-accent-2 ring-1 ring-fg/10">
-                <f.icon className="h-5 w-5" />
+        <div className="feature-grid">
+          {features.map(feature => (
+            <article key={feature.n} className="feature-card">
+              <div className="feature-card-top">
+                <span className="feature-icon">
+                  <feature.icon aria-hidden="true" />
+                </span>
+                <span className="feature-number">{feature.n}</span>
               </div>
-              <h3 className="mb-2 text-lg font-semibold text-fg">{f.title}</h3>
-              <p className="text-sm leading-relaxed text-muted">{f.desc}</p>
-            </div>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
+              <ul className="feature-tags" aria-label="Includes">
+                {feature.detail.split(" · ").map(tag => (
+                  <li key={tag}>{tag}</li>
+                ))}
+              </ul>
+            </article>
           ))}
         </div>
       </div>
     </section>
   );
-};
-
-export default FeaturesSection;
+}

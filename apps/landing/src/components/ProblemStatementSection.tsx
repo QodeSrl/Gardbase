@@ -1,82 +1,67 @@
-import React from "react";
-import { LuTriangleAlert, LuShieldCheck, LuArrowRight } from "react-icons/lu";
+import { LuArrowUpRight, LuCheck, LuMinus } from "react-icons/lu";
+import { site } from "@/lib/site";
 
-const traditional = [
-  "Stores your data in plaintext — one breach exposes everything",
-  "Operators, infra, and backups can all read sensitive records",
-  "Compliance bolted on as config you must get right, every time",
-  "Trust is a promise, not something you can verify",
+const rows = [
+  {
+    label: "Objects are encrypted",
+    atRest: "By the storage service",
+    gardbase: "In your application",
+  },
+  { label: "The database returns", atRest: "Readable records", gardbase: "Ciphertext" },
+  {
+    label: "Key operations run",
+    atRest: "Inside the storage provider",
+    gardbase: "In an attested Nitro Enclave",
+  },
 ];
 
-const gardbase = [
-  "Data is encrypted client-side — the server only holds ciphertext",
-  "Keys are unwrapped only inside attested AWS Nitro Enclaves",
-  "Searchable indexes work directly on encrypted data",
-  "Zero-trust architecture — and you can cryptographically verify it",
-];
-
-const ProblemStatementSection: React.FC = () => {
+export default function ProblemStatementSection() {
   return (
-    <section id="why" className="relative py-20 sm:py-28">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto mb-14 max-w-3xl text-center sm:mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest text-accent-2">
-            Why Gardbase
-          </span>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
-            Your database is your biggest blast radius
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
-            One leaked credential or one misconfigured bucket, and a traditional database hands over
-            everything in plaintext. Gardbase is built so there&apos;s nothing readable to take — and
-            the entire engine is open source for you to audit.
+    <section id="why" className="section intro-section">
+      <div className="intro-layout container">
+        <div className="intro-copy">
+          <p className="eyebrow">01 / The idea</p>
+          <h2>Make confidentiality part of the architecture.</h2>
+          <p>
+            Encryption at rest protects stored bytes. An application that needs readable records can
+            still give its database a path to plaintext.
           </p>
+          <p>
+            Gardbase moves object encryption into your application and key operations into an
+            isolated enclave. The API handles encrypted payloads and query tokens, while your
+            application controls when records become readable.
+          </p>
+          <a className="text-link" href={site.security}>
+            Read the security model <LuArrowUpRight />
+          </a>
         </div>
-
-        <div className="grid gap-6 md:grid-cols-2 lg:gap-8">
-          {/* Traditional */}
-          <div className="glass relative overflow-hidden rounded-2xl p-7 sm:p-8">
-            <div className="absolute right-6 top-6 h-24 w-24 rounded-full bg-red-500/10 blur-3xl" />
-            <div className="mb-5 inline-flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-500 dark:text-red-300">
-              <LuTriangleAlert className="h-4 w-4" />
-              Traditional databases
-            </div>
-            <ul className="space-y-3">
-              {traditional.map(item => (
-                <li key={item} className="flex items-start gap-3 text-sm text-muted sm:text-base">
-                  <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400/70" />
-                  {item}
-                </li>
-              ))}
-            </ul>
+        <div
+          className="compare"
+          role="table"
+          aria-label="Encryption at rest compared with Gardbase"
+        >
+          <div className="compare-head" role="row">
+            <span role="columnheader" />
+            <span role="columnheader">Encryption at rest</span>
+            <span role="columnheader" className="compare-ours">
+              With Gardbase
+            </span>
           </div>
-
-          {/* Gardbase */}
-          <div className="ring-glow relative overflow-hidden rounded-2xl border border-accent/30 bg-gradient-to-b from-accent/10 to-transparent p-7 sm:p-8">
-            <div className="absolute right-6 top-6 h-24 w-24 rounded-full bg-accent/20 blur-3xl" />
-            <div className="mb-5 inline-flex items-center gap-2 rounded-lg bg-accent/15 px-3 py-1.5 text-sm font-medium text-accent">
-              <LuShieldCheck className="h-4 w-4" />
-              The Gardbase way
+          {rows.map(row => (
+            <div className="compare-row" role="row" key={row.label}>
+              <span role="rowheader">{row.label}</span>
+              <span role="cell">
+                <LuMinus aria-hidden="true" />
+                {row.atRest}
+              </span>
+              <span role="cell" className="compare-ours">
+                <LuCheck aria-hidden="true" />
+                {row.gardbase}
+              </span>
             </div>
-            <ul className="space-y-3">
-              {gardbase.map(item => (
-                <li key={item} className="flex items-start gap-3 text-sm text-fg sm:text-base">
-                  <LuArrowRight className="mt-1 h-4 w-4 flex-shrink-0 text-accent-2" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
+          ))}
         </div>
-
-        <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-subtle sm:text-base">
-          Built for teams in <span className="text-fg">healthcare</span>,{" "}
-          <span className="text-fg">finance</span>, and anywhere data confidentiality has to be
-          provable — not just promised.
-        </p>
       </div>
     </section>
   );
-};
-
-export default ProblemStatementSection;
+}

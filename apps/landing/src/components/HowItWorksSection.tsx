@@ -1,89 +1,136 @@
-import React from "react";
-import { LuFingerprint, LuLockKeyhole, LuServer } from "react-icons/lu";
+import {
+  LuArrowRight,
+  LuArrowUpRight,
+  LuDatabase,
+  LuFingerprint,
+  LuLaptop,
+  LuLockKeyhole,
+  LuServer,
+} from "react-icons/lu";
+import { site } from "@/lib/site";
 
 const steps = [
   {
     n: "01",
-    icon: LuFingerprint,
-    title: "Attest the enclave",
-    text: "Your client opens a session and receives a signed attestation document. It verifies the AWS certificate chain, COSE signatures, and PCR code measurements — proving genuine Gardbase code is running before any trust is extended.",
+    title: "Verify the enclave",
+    text: "Establish a session and verify the signed attestation, expected code measurements, nonce, and public-key binding.",
   },
   {
     n: "02",
-    icon: LuLockKeyhole,
-    title: "Encrypt client-side",
-    text: "A fresh data encryption key is unwrapped inside the enclave and sealed to your session. Your app encrypts each object with AES-256-GCM locally. Plaintext and master keys never touch the server.",
+    title: "Encrypt in your app",
+    text: "Receive session-sealed key material and encrypt object contents locally with a per-object data encryption key.",
   },
   {
     n: "03",
-    icon: LuServer,
-    title: "Store & query encrypted",
-    text: "Ciphertext lands in DynamoDB or S3 with envelope-wrapped keys. Encrypted index tokens, generated in the enclave, let you run equality and range queries — without ever decrypting on the backend.",
+    title: "Store and query",
+    text: "Send ciphertext and index tokens to the API. Retrieve encrypted records, then decrypt them in your application.",
   },
 ];
 
-const hierarchy = [
-  { k: "AWS KMS Key", d: "per environment" },
-  { k: "Tenant Master Key", d: "decrypted only inside the enclave" },
-  { k: "Data Encryption Keys", d: "fresh, per object" },
-  { k: "Your Data", d: "AES-256-GCM ciphertext" },
-];
-
-const HowItWorksSection: React.FC = () => {
+export default function HowItWorksSection() {
   return (
-    <section id="how-it-works" className="relative py-20 sm:py-28">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto mb-14 max-w-3xl text-center sm:mb-16">
-          <span className="text-sm font-semibold uppercase tracking-widest text-accent-2">
-            How it works
-          </span>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-fg sm:text-4xl md:text-5xl">
-            Zero plaintext ever reaches the server
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-base text-muted sm:text-lg">
-            Three steps from your application to provably confidential storage.
-          </p>
-        </div>
-
-        <div className="relative grid gap-6 md:grid-cols-3 lg:gap-8">
-          <div
-            className="absolute left-0 right-0 top-[3.25rem] hidden h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent md:block"
-            aria-hidden
-          />
-          {steps.map(s => (
-            <div key={s.n} className="glass relative rounded-2xl p-7">
-              <div className="mb-5 flex items-center justify-between">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-3 text-white shadow-lg shadow-accent/30">
-                  <s.icon className="h-6 w-6" />
-                </div>
-                <span className="font-mono text-3xl font-bold text-fg/10">{s.n}</span>
-              </div>
-              <h3 className="mb-2 text-lg font-semibold text-fg sm:text-xl">{s.title}</h3>
-              <p className="text-sm leading-relaxed text-muted">{s.text}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Key hierarchy */}
-        <div className="glass mx-auto mt-12 max-w-3xl rounded-2xl p-6 sm:p-8">
-          <p className="mb-4 text-center text-sm font-medium uppercase tracking-widest text-subtle">
-            4-level key hierarchy
-          </p>
-          <div className="flex flex-col items-center gap-2 font-mono text-xs text-muted sm:text-sm">
-            {hierarchy.map((row, i) => (
-              <React.Fragment key={row.k}>
-                <div className="flex w-full max-w-md items-center justify-between rounded-lg border border-line bg-fg/5 px-4 py-2.5">
-                  <span className="font-semibold text-fg">{row.k}</span>
-                  <span className="text-subtle">{row.d}</span>
-                </div>
-                {i < hierarchy.length - 1 && <span className="text-accent-2">↓</span>}
-              </React.Fragment>
-            ))}
+    <section id="how-it-works" className="section architecture-section">
+      <div className="container">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">02 / THE ARCHITECTURE</p>
+            <h2>
+              Clear boundaries.
+              <br />
+              From client to storage.
+            </h2>
           </div>
+          <p>
+            Object contents and key operations follow separate paths. Each component has a specific
+            job.
+          </p>
+        </div>
+        <div
+          className="architecture-map"
+          aria-label="Architecture: the application sends ciphertext through the API to storage. The API relays key operations to an isolated Nitro Enclave backed by KMS."
+        >
+          <div className="architecture-flow">
+            <div className="architecture-node client-node">
+              <LuLaptop />
+              <span className="mono">YOUR APPLICATION</span>
+              <h3>Plaintext lives here.</h3>
+              <p>
+                Encrypt and decrypt objects.
+                <br />
+                Generate query tokens.
+              </p>
+              <span className="node-tag">Client trust boundary</span>
+            </div>
+            <div className="flow-connector">
+              <span>ciphertext + tokens</span>
+              <span className="flow-line" aria-hidden="true">
+                <LuArrowRight />
+              </span>
+            </div>
+            <div className="architecture-node">
+              <LuServer />
+              <span className="mono">GARDBASE API</span>
+              <h3>Route. Authorize. Store.</h3>
+              <p>
+                Tenant permissions.
+                <br />
+                Object and query endpoints.
+              </p>
+              <span className="node-tag">EC2 parent instance</span>
+            </div>
+            <div className="flow-connector">
+              <span>encrypted objects</span>
+              <span className="flow-line" aria-hidden="true">
+                <LuArrowRight />
+              </span>
+            </div>
+            <div className="architecture-node">
+              <LuDatabase />
+              <span className="mono">DYNAMODB + S3</span>
+              <h3>Ciphertext at rest.</h3>
+              <p>
+                Inline objects and indexes.
+                <br />
+                Large encrypted blobs.
+              </p>
+              <span className="node-tag">AWS storage</span>
+            </div>
+          </div>
+          <div className="enclave-connection">
+            <span className="mono">KEY OPERATIONS VIA VSOCK</span>
+            <span className="enclave-line" aria-hidden="true" />
+          </div>
+          <div className="enclave-node">
+            <div className="enclave-icon">
+              <LuFingerprint />
+            </div>
+            <div>
+              <span className="mono">AWS NITRO ENCLAVE</span>
+              <h3>Attested, isolated key operations</h3>
+              <p>KMS recipient encryption · session-sealed keys · no persistent storage</p>
+            </div>
+            <LuLockKeyhole className="enclave-lock" />
+          </div>
+        </div>
+        <ol className="steps">
+          {steps.map(step => (
+            <li key={step.n}>
+              <span className="step-number">{step.n}</span>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="architecture-note">
+          <span>
+            Encrypted indexes disclose patterns: equality tokens reveal repeated values, and range
+            indexes reveal order. Choose indexes to match your threat model.
+          </span>
+          <a href={site.security} className="text-link">
+            Review the tradeoffs <LuArrowUpRight />
+          </a>
         </div>
       </div>
     </section>
   );
-};
-
-export default HowItWorksSection;
+}

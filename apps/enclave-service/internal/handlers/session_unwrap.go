@@ -12,26 +12,23 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) {
+func HandleSessionUnwrap(payload json.RawMessage, nsmSession *nsm.Session, nsmPrivKey *rsa.PrivateKey) (res enclaveproto.SessionUnwrapResponse, err error) {
 	var req enclaveproto.SessionUnwrapRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Invalid session unwrap request: %v", err))
-		return
+		return res, fmt.Errorf("Invalid session unwrap request: %v", err)
 	}
 
 	sess, ok := session.GetSession(req.SessionId)
 	if !ok {
-		utils.SendError(encoder, "Invalid or expired session ID")
-		return
+		return res, fmt.Errorf("Invalid or expired session ID")
 	}
 
 	aead, err := chacha20poly1305.NewX(sess.Key)
 	if err != nil {
-		utils.SendError(encoder, fmt.Sprintf("Failed to create AEAD cipher: %v", err))
-		return
+		return res, fmt.Errorf("Failed to create AEAD cipher: %v", err)
 	}
 
-	results := make([]enclaveproto.SessionUnwrapItemResult, 0, len(req.Items))
+	results := make(enclaveproto.SessionUnwrapResponse, 0, len(req.Items))
 
 	for _, it := range req.Items {
 		objId := it.ObjectId
@@ -70,8 +67,5 @@ func HandleSessionUnwrap(encoder *json.Encoder, payload json.RawMessage, nsmSess
 		})
 	}
 
-	utils.SendResponse(encoder, enclaveproto.Response[enclaveproto.SessionUnwrapResponse]{
-		Success: true,
-		Data:    results,
-	})
+	return results, nil
 }

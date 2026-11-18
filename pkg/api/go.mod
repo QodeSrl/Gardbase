@@ -1,6 +1,6 @@
 module github.com/qodesrl/gardbase/pkg/api
 
-go 1.24.4
+go 1.27.1
 
 require github.com/qodesrl/gardbase/pkg/enclaveproto v0.1.1
 

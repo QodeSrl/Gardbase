@@ -5,21 +5,26 @@ import ProblemStatementSection from "@/components/ProblemStatementSection";
 import FeaturesSection from "@/components/FeaturesSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import OpenSourceSection from "@/components/OpenSourceSection";
-import PricingSection from "@/components/PricingSection";
+import DeploymentSection from "@/components/DeploymentSection";
 import CTASection from "@/components/CTASection";
+import FAQSection from "@/components/FAQSection";
 import Footer from "@/components/Footer";
 
 const MainPage: React.FC = () => {
   return (
-    <div className="min-h-screen bg-bg">
+    <div id="top">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <Header />
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <HeroSection />
         <ProblemStatementSection />
-        <FeaturesSection />
         <HowItWorksSection />
+        <FeaturesSection />
         <OpenSourceSection />
-        <PricingSection />
+        <DeploymentSection />
+        <FAQSection />
         <CTASection />
       </main>
       <Footer />

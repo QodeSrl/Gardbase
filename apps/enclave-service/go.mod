@@ -1,6 +1,6 @@
 module github.com/qodesrl/gardbase/apps/enclave-service
 
-go 1.24.4
+go 1.27.1
 
 require (
 	github.com/hf/nsm v0.0.0-20220930140112-cd181bd646b9
